@@ -1,8 +1,9 @@
 'use strict';
 
 const NanoDeviceSupport = (() => {
-  const families = { thermometer: ['health-thermometer', 'environmental-sensor'], locks: ['nuki-lock'], resmed: ['resmed-air11'], ge: ['ge-appliance'], samsung: ['samsung-tv'] };
+  const families = { thermometer: ['health-thermometer', 'environmental-sensor'], locks: ['nuki-lock'], resmed: ['resmed-air11'], ge: ['ge-appliance'], samsung: ['samsung-device', 'samsung-tv'] };
   function mount(container, kind, lab) {
+    container.classList.add('support-panel');
     const el = (tag, cls, text) => { const value = document.createElement(tag); if (cls) value.className = cls; if (text !== undefined) value.textContent = text; return value; };
     const body = el('div', 'support-module'), summary = el('div'), controls = el('div', 'inspector-shortcuts'), results = el('dl', 'metadata'), recipes = el('div', 'inspector-shortcuts');
     const status = el('p', 'vendor-note'); status.setAttribute('role', 'status');
@@ -30,7 +31,7 @@ const NanoDeviceSupport = (() => {
       const context = metadata(), matches = context.device ? NanoDeviceLibrary.match(context.device, context.state).filter(item => families[kind].includes(item.id)) : [];
       const next = JSON.stringify([context.device?.address, context.connected, context.characteristics, context.online, context.pending, running]);
       if (next === signature) return; signature = next;
-      summary.replaceChildren(el('h3', '', kind === 'locks' ? 'Lock metadata' : entries.map(item => item.title).join(' / ')), el('p', 'vendor-note', matches.length ? matches.map(item => `${item.confidence}: ${item.evidence}`).join(' ') : context.device ? 'No documented service signature matched this device. Inspect its services to collect evidence.' : 'Select a device from Discover.'));
+      summary.replaceChildren(el('h3', '', kind === 'locks' ? 'Lock metadata' : kind === 'samsung' ? 'Samsung device metadata' : entries.map(item => item.title).join(' / ')), el('p', 'vendor-note', matches.length ? matches.map(item => `${item.confidence}: ${item.evidence}`).join(' ') : context.device ? 'No documented service signature matched this device. Inspect its services to collect evidence.' : 'Select a device from Discover.'));
       read.disabled = !context.online || !context.device || context.device.connectable === false || context.pending || running;
       inspect.disabled = !context.device;
       results.replaceChildren();

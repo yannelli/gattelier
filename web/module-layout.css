@@ -1,0 +1,38 @@
+:root { --panel-inset: 24px; --section-gap: 18px; --control-gap: 10px; }
+input[type="checkbox"], input[type="radio"] { min-height: 0; padding: 0; }
+#module-content .panel-heading { padding-inline: var(--panel-inset); }
+#module-content :is(.pocket-body, .plaud-body, .lab-body, .dexcom-body) { display: grid; gap: var(--section-gap); padding: 0 var(--panel-inset) var(--panel-inset); }
+#module-content :is(.pocket-body, .plaud-body) > * + * { margin-top: 0; }
+#module-content .radiacode-body { padding-inline: var(--panel-inset); padding-bottom: var(--panel-inset); }
+#module-content .hint { padding: 0; background: none; border-radius: 0; }
+#module-content :is(.lab-status, .dexcom-fields) { margin: 0; }
+#module-content :is(.metadata, .lab-status, .plaud-status, .pocket-progress):empty { display: none; }
+#module-content :is(.pocket-controls, .plaud-controls, .radiacode-actions, .dexcom-actions) { gap: var(--control-gap); }
+.metadata-module.support-panel { padding: 0; }
+.support-module { padding: var(--panel-inset); gap: var(--section-gap); }
+.panel-heading + .support-module { padding-top: 0; }
+.support-module .inspector-shortcuts { margin: 0; }
+.support-module :is(.vendor-note, .inspector-shortcuts, .metadata):empty { display: none; }
+.support-module details h3 { margin: 18px 0 8px; font-size: 14px; }
+.support-module details p { margin: 10px 0; }
+.support-module details a { display: block; width: fit-content; margin-top: 8px; }
+.support-module details summary { cursor: pointer; color: var(--muted); }
+.support-module .metadata { margin: 0; padding: 16px 0; }
+details.credential-controls { display: block; width: 100%; }
+details.credential-controls > * + * { margin-top: 10px; }
+.dexcom-import textarea { min-height: 88px; padding: 10px 12px; color: var(--text); background: var(--surface-secondary); border: 1px solid var(--line); border-radius: var(--radius-small); }
+.dexcom-import > label { font-size: 12px; color: var(--muted); }
+#medical-panel .panel-heading { padding-bottom: var(--section-gap); }
+.pocket-file > div, .plaud-recording > div { min-width: 0; }
+.pocket-file .button, .plaud-recording .button { flex-shrink: 0; }
+@media (max-width: 850px) { :root { --panel-inset: 18px; } }
+@media (max-width: 600px) {
+  .dexcom-import textarea, .dexcom-connect input[type="password"] { font-size: 16px; }
+  .pocket-file, .plaud-recording { flex-wrap: wrap; }
+}
+
+.scan-offload-info { margin: 0 var(--panel-inset) 16px; padding: 16px; border: 1px solid var(--line); border-radius: var(--radius-small); }
+.scan-offload-info strong { font-size: 13px; }
+.scan-offload-info p { color: var(--muted); font-size: 12px; line-height: 1.6; margin-top: 6px; }
+
+.pocket-controls select { min-width: 160px; }

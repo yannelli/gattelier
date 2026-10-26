@@ -36,11 +36,11 @@ function harness(initial, options = {}) {
     }, ...options.hooks });
   return { calls };
 }
-test('global controller disconnects another device then connects the selected live id', async () => {
+test('global controller disconnects another device then connects its exact address', async () => {
   const { calls } = harness({ ble: { connected: true, address: other.address }, devices: [{ ...target, id: 19 }] });
   assert.equal(connection.connectedDevice().name, 'Smart bed');
   const result = await connection.ensure(target);
-  assert.deepEqual(calls, [{ action: 'disconnect', body: undefined }, { action: 'connect', body: { id: 19 } }]);
+  assert.deepEqual(calls, [{ action: 'disconnect', body: undefined }, { action: 'connect', body: { address: target.address, addressType: target.addressType } }]);
   assert.equal(result.ble.address, target.address);
   assert.equal(connection.connectedDevice().name, 'RadiaCode');
 });
@@ -112,4 +112,12 @@ test('active connection cancellation bypasses inFlight while unrelated actions r
   await assert.rejects(connection.ensure(other), /already running/);
   await connection.cancel(target); release(); await assert.rejects(operation, /cancelled/);
   assert.equal(calls[1].action, 'cancel-connect'); assert.equal(calls[1].body.address, target.address);
+});
+
+test('streamed devices remain connectable after the transient board cache evicts them', async () => {
+  const streamed = { ...target, streamLive: true, liveId: null };
+  assert.equal(connection.describe(streamed, context({}, [])).label, 'Connect');
+  const { calls } = harness({ ble: {}, devices: [] });
+  await connection.ensure(streamed);
+  assert.deepEqual(calls, [{ action: 'connect', body: { address: target.address, addressType: 0 } }]);
 });

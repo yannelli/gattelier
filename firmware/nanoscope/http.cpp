@@ -7,6 +7,7 @@
 #include "ble_security.h"
 #include "usb_hci.h"
 #include "collection.h"
+#include "scan_stream.h"
 #include <WebServer.h>
 #include <cJSON.h>
 #include <cmath>
@@ -148,6 +149,15 @@ void startHttp() {
   server.on("/api/state", HTTP_GET, [] {
     server.sendHeader("Cache-Control", "no-store");
     sendState(server);
+  });
+  server.on("/api/advertisements", HTTP_GET, [] {
+    if (!allowedHttpOrigin(server)) { sendError(403, "Open Gattelier directly to read discoveries."); return; }
+    const String cursor = server.arg("after"), boot = server.arg("bootId");
+    if (cursor.length() > 16 || boot.length() > 32) { sendError(400, "Invalid advertisement cursor."); return; }
+    for (size_t i = 0; i < cursor.length(); ++i) if (!isDigit(cursor[i])) { sendError(400, "Invalid advertisement cursor."); return; }
+    const uint64_t after = strtoull(cursor.c_str(), nullptr, 10);
+    if (after > 9007199254740991ULL) { sendError(400, "Invalid advertisement cursor."); return; }
+    sendAdvertisements(server, after, boot);
   });
   server.on("/api/scan", HTTP_POST, [] { submit(Action::Scan); });
   server.on("/api/stop-scan", HTTP_POST, [] { submit(Action::StopScan); });

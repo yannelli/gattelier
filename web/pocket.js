@@ -12,13 +12,15 @@ const NanoPocket = (() => {
     const key = el('input'); key.type = 'password'; key.maxLength = 16; key.autocomplete = 'off'; key.placeholder = '16-character session key'; key.setAttribute('aria-label', 'Pocket session key');
     const keyFile = el('input'); keyFile.type = 'file'; keyFile.accept = '.txt,.pklg'; keyFile.setAttribute('aria-label', 'Load Pocket key or PacketLogger capture');
     const unlock = el('button', 'button primary', 'Authenticate');
-    const credentialTools = el('details', 'credential-controls'); credentialTools.append(el('summary', '', 'Manage Pocket key'), key, keyFile);
+    const keyInputs = el('div', 'pocket-controls'); keyInputs.append(key, keyFile);
+    const credentialTools = el('details', 'credential-controls'); credentialTools.append(el('summary', '', 'Manage Pocket key'), keyInputs);
     auth.append(unlock, credentialTools);
     const help = el('p', 'vendor-note', 'Keys are saved in this browser for the selected Pocket address and excluded from traffic exports. Credential backups and capture help are in Settings.');
     const toolbar = el('div', 'pocket-controls');
     const directories = el('button', 'button secondary', 'List recording dates');
     const info = el('button', 'button secondary', 'Read device info');
     const dates = el('select'); dates.setAttribute('aria-label', 'Recording date');
+    const datePlaceholder = el('option', '', 'No dates loaded'); datePlaceholder.value = ''; dates.append(datePlaceholder);
     const list = el('button', 'button secondary', 'List recordings');
     toolbar.append(directories, dates, list, info);
     const files = el('div', 'pocket-files');
@@ -157,6 +159,7 @@ const NanoPocket = (() => {
       const count = Number(replies.find(message => message.startsWith('MCU&DIRS_SUM&')).slice(13));
       if (found.length !== count || found.some(date => !p.safeId(date))) throw new Error('The recording-date list is incomplete. Try again.');
       dates.replaceChildren(...found.sort().reverse().map(date => { const option = el('option', '', date); option.value = date; return option; }));
+      if (!found.length) { datePlaceholder.textContent = 'No recording dates'; dates.append(datePlaceholder); }
       status.textContent = `${found.length} recording dates found.`;
     }));
     list.addEventListener('click', () => perform(async () => {

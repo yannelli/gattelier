@@ -2,16 +2,20 @@
   "name": "gattelier",
   "private": true,
   "scripts": {
-    "build:crypto": "esbuild scripts/plaud-crypto-entry.js --bundle --platform=browser --format=iife --minify --legal-comments=inline --outfile=web/plaud-crypto.js",
+    "build:crypto": "npm run build:crypto:plaud && npm run build:crypto:dexcom",
     "build:web": "npm run build:crypto && node scripts/build-web.mjs",
     "test": "node --test tests/*.test.mjs",
     "build:cloud": "npm run build:web && node scripts/build-cloud.mjs",
     "dev:cloud": "wrangler dev",
     "deploy": "wrangler deploy",
-    "pretest": "npm run build:crypto"
+    "pretest": "npm run build:crypto",
+    "build:crypto:plaud": "esbuild scripts/plaud-crypto-entry.js --bundle --platform=browser --format=iife --minify --legal-comments=inline --outfile=web/plaud-crypto.js",
+    "build:crypto:dexcom": "esbuild scripts/dexcom-crypto-entry.js --bundle --platform=browser --format=iife --minify --legal-comments=inline --outfile=web/dexcom-crypto.js"
   },
   "dependencies": {
     "@noble/ciphers": "2.4.0",
+    "@noble/curves": "2.4.0",
+    "@noble/hashes": "2.4.0",
     "node-forge": "1.4.0"
   },
   "devDependencies": {

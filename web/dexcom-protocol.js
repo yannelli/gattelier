@@ -2,7 +2,7 @@
 
 const NanoDexcomProtocol = (() => {
   const suffix = '-849e-531c-c594-30f1f86a4ea5';
-  const SERVICE = `f8083532${suffix}`, CONTROL = `f8083534${suffix}`, BACKFILL = `f8083536${suffix}`;
+  const SERVICE = `f8083532${suffix}`, CONTROL = `f8083534${suffix}`, AUTH = `f8083535${suffix}`, BACKFILL = `f8083536${suffix}`, EXTRA = `f8083538${suffix}`;
   const SOURCE = 'https://github.com/NightscoutFoundation/xDrip/tree/c42cf55c6b972215654bc2a34ce563c87a7aa594/app/src/main/java/com/eveningoutpost/dexdrip';
   const labels = ['Unknown', 'Stopped', 'Warming up', 'Excess noise', 'Needs initial calibration', 'Needs second calibration', 'OK', 'Needs calibration', 'Confused calibration 1', 'Confused calibration 2', 'Needs more calibration', 'Sensor failed', 'Sensor failed 2', 'Unusual calibration', 'Insufficient calibration', 'Ended', 'Sensor failed 3', 'Transmitter problem', 'Sensor errors', 'Sensor failed 4', 'Sensor failed 5', 'Sensor failed 6', 'Sensor failed start', 'Sensor failed start 2', 'Sensor expired', 'Sensor failed 7', 'Sensor stopped 2', 'Sensor failed 8', 'Sensor failed 9', 'Sensor failed 10', 'Sensor failed 11'];
   const states = new Map(labels.map((label, index) => [index, label]));
@@ -79,6 +79,6 @@ const NanoDexcomProtocol = (() => {
     }
     return { add, snapshot };
   }
-  return { SERVICE, CONTROL, BACKFILL, SOURCE, bytes, hex, stateLabel, decode, characteristics, createStore };
+  return { SERVICE, CONTROL, AUTH, BACKFILL, EXTRA, SOURCE, bytes, hex, stateLabel, decode, characteristics, createStore };
 })();
 if (typeof module !== 'undefined') module.exports = NanoDexcomProtocol;

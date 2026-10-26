@@ -40,6 +40,16 @@ test('Sleep Number matches documented services and avoids name-only claims', () 
   assert.equal(profiles.identify({ services: ['ffffd1fd-388d-938b-344a-939d1f6efee0'] }).title, 'Sleep Number MCR');
   assert.equal(profiles.identify({ name: 'Sleep Number bed' }).category, 'other');
 });
+test('Samsung advertisements show company evidence without inventing a device type', () => {
+  const result = profiles.identify({ manufacturer: '750042040000' });
+  assert.equal(result.title, 'Samsung device'); assert.equal(result.category, 'vendor'); assert.equal(result.confidence, 'Manufacturer match');
+  assert.equal(fields(result)['Assigned company'], 'Samsung Electronics'); assert.match(result.limitations[0], /does not establish a TV/);
+  assert.equal(profiles.identify({ services: ['fd5a'] }).title, 'Samsung device');
+  assert.equal(profiles.identify({ name: 'Samsung synthetic speaker' }).confidence, 'Name candidate');
+  assert.equal(profiles.identify({ manufacturer: '0075' }).category, 'other');
+  assert.equal(profiles.identify({ manufacturer: '7500zz' }).category, 'other');
+  assert.equal(profiles.identify({ manufacturer: '750000', services: ['febc'] }).category, 'medical');
+});
 test('advertisement metadata rejects incomplete structures and decodes signed TX', () => {
   const result = profiles.advertisement('020106020ac503034c500409616263');
   assert.equal(fields(result)['Advertised TX power'], '-59 dBm');

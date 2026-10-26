@@ -168,3 +168,52 @@ test('historical imports use newest metadata, clamp future times and remain idem
   const before = store.exportData(); store.importData(first); store.importData(newer);
   assert.deepEqual(store.exportData(), before);
 });
+
+const streamBatch = (devices, extra = {}) => ({ bootId: 'board-boot-1', uptime: 100, oldestSeq: 1,
+  cursor: Math.max(0, ...devices.map(item => item.seq)), dropped: 0, cacheIds: [], capacity: 96, devices, ...extra });
+const streamed = (seq, extra = {}) => device({ seq, ms: 90000 + seq, ...extra });
+test('advertisement deltas preserve previous devices and clear only evicted board IDs', async () => {
+  const store = create({ storage: null }); await store.init();
+  store.ingestAdvertisements(streamBatch([streamed(1)], { cacheIds: [12] }), 1000000);
+  store.ingestAdvertisements(streamBatch([streamed(2, { id: 13, address: '02:00:00:00:00:02' })], { cacheIds: [13] }), 1000100);
+  const first = store.devices().find(item => item.key === key);
+  assert.equal(first.liveId, null); assert.equal(first.streamLive, true); assert.equal(first.addressType, 0);
+  assert.equal(store.devices().find(item => item.liveId === 13).streamLive, true);
+  store.ingest(board([], 101), 1001000); assert.ok(store.devices().every(item => item.streamLive));
+  assert.equal(store.status().stream.received, 2);
+});
+test('stream sequences count same-second observations once and preserve precise receive time', async () => {
+  const storage = memoryStorage(), store = create({ storage }); await store.init();
+  const batch = streamBatch([streamed(1), streamed(2, { rssi: -40 })]);
+  store.ingestAdvertisements(batch, 1000000); store.ingestAdvertisements(batch, 1005000);
+  const record = store.devices()[0]; assert.equal(record.observations, 2); assert.equal(record.firstSeenMs, 990001); assert.equal(record.lastSeenMs, 990002);
+  assert.equal(record.history.length, 2); assert.equal(record.rssi, -40); assert.equal(store.status().stream.received, 2);
+  await store.flush(); const saved = JSON.stringify(storage.value);
+  for (const field of ['streamLive', 'seq', 'liveId']) assert.equal(saved.includes(`"${field}"`), false);
+  const restored = create({ storage }); await restored.init(); assert.equal(restored.devices()[0].streamLive, undefined);
+});
+test('stream reports overwritten advertisements and reboots without deleting browser history', async () => {
+  const store = create({ storage: null }); await store.init();
+  store.ingestAdvertisements(streamBatch([streamed(4)], { oldestSeq: 4, dropped: 3, cacheIds: [12], cacheBytes: 2048, journalBytes: 12000, truncatedTotal: 2 }), 1000000);
+  assert.equal(store.status().stream.gaps, 3); assert.equal(store.status().stream.truncatedTotal, 2);
+  store.ingestAdvertisements(streamBatch([streamed(4)], { oldestSeq: 4, dropped: 3 }), 1000500); assert.equal(store.status().stream.gaps, 3);
+  store.ingestAdvertisements(streamBatch([streamed(1, { id: 1, address: '02:00:00:00:00:02', ms: 500, lastSeen: 0 })], { bootId: 'board-boot-2', uptime: 1, cacheIds: [1] }), 1001000);
+  assert.equal(store.status().stream.reboots, 1); assert.equal(store.devices().length, 2);
+  assert.equal(store.devices().find(item => item.key === key).streamLive, false); assert.equal(store.devices().find(item => item.liveId === 1).streamLive, true);
+  store.resetStream(); assert.ok(store.devices().every(item => !item.streamLive && item.liveId === null));
+});
+test('malformed stream records leave the cursor and history unchanged', async () => {
+  const store = create({ storage: null }); await store.init(); store.ingestAdvertisements(streamBatch([streamed(1)]), 1000000);
+  const before = store.exportData();
+  assert.throws(() => store.ingestAdvertisements(streamBatch([streamed(2, { address: 'bad' })])), /Invalid/);
+  assert.equal(store.status().stream.cursor, 1); assert.deepEqual(store.exportData(), before);
+});
+test('continuous 500ms stream batches do not postpone browser persistence', async context => {
+  context.mock.timers.enable({ apis: ['setTimeout'] });
+  const storage = memoryStorage(), store = create({ storage }); await store.init(); await store.flush();
+  const before = storage.writes;
+  store.ingestAdvertisements(streamBatch([streamed(1)]), 1000000);
+  context.mock.timers.tick(500); store.ingestAdvertisements(streamBatch([streamed(2)]), 1000500);
+  context.mock.timers.tick(200); await Promise.resolve(); await Promise.resolve();
+  assert.equal(storage.writes, before + 1); assert.equal(storage.value.records[0].observations, 2);
+});

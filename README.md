@@ -11,13 +11,13 @@ The board address is `http://nanoscope.local`. Existing NanoScope storage keys a
 
 ## What works
 
-- Continuous BLE scanning with browser history, filters, signal history, OUI lookup, and a company database
+- Continuous BLE discovery streamed into browser history, with bounded board RAM, filters, signal history, OUI lookup, and a company database
 - GATT service discovery, reads, writes, notifications, pairing prompts, packet capture, snapshots, and saved recipes
 - Contextual apps selected from discovered device metadata
 - Import and export of PLAUD and Pocket recorder credentials, plus authenticated recording access
 - RadiaCode identity, status, measurements, calibrated spectrum plots, live refresh, and confirmed dose reset
 - Sleep Number Fuzion and MCR readers with passing unit tests; a live link has not been verified
-- Captured Dexcom G7 glucose/history, serial/firmware, sensor states, and estimated timestamps; direct G7 authentication remains unimplemented
+- Experimental Dexcom G7 authentication with the applicator code, saved sessions, latest/history requests, serial/firmware, and sensor states; sensor interoperability awaits manual testing
 - Standard Bluetooth thermometer and environmental sensor recipes, plus BTHome energy, current, and CO2 decoding
 - Optional browser-cached supplemental metadata from `https://gattelier.ryanyannelli.com`
 - 743 standard UUID names, named descriptors and units, plus readable GATT feature flags, service-change ranges, connection parameters, and descriptor values
@@ -38,6 +38,8 @@ The board button controls its operating mode:
 - Hold for three seconds: start or stop collection. The LED shows a teal double pulse while collection is active.
 
 The separate blue LED flashes for BLE advertisements, GATT traffic, connection events, and USB HCI traffic. Settings > Activity LED provides a brightness slider, test flash, and off button; the board saves the chosen brightness. Sustained activity produces spaced flashes. The RGB LED continues to show the operating mode.
+
+Discovery offload streams advertisements to browser memory and optional IndexedDB storage. The board keeps a bounded transfer buffer and temporary device cache; missed updates and shortened advertisements appear in Settings > History & collection. Keep the app open to receive updates, or enable background collection. Discovery offload does not write scan history to board flash.
 
 Onboard collection stores up to 512 KiB of NDJSON. Active or passive scan mode, interval, window, and scheduled bursts are configurable and persist across restarts. Download the log from the Collection screen.
 
@@ -106,4 +108,4 @@ Open Settings in the hosted app and set the board connection URL to the private 
 
 Settings > Device metadata downloads `/metadata-v1.json` from `https://gattelier.ryanyannelli.com` by default. The Worker serves this public catalog alongside the app. Downloads contain UUID names and declarative value decoders; they contain no executable code. Device addresses, recordings, credentials, and health readings are excluded from metadata requests. Downloaded definitions stay in browser storage and can be disabled or removed.
 
-The repository does not have a license yet.
+The repository does not have a project-wide license yet. Attributed G7 certificate material and captured crypto fixtures are GPL-3.0-or-later; see [G7 source notices](DEXCOM-CRYPTO-NOTICE.md) and the [license text](licenses/GPL-3.0-or-later.txt).

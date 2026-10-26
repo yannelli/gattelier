@@ -12,7 +12,8 @@ const NanoScanStore = (() => {
       connectable: value.connectable === true, services: Array.isArray(value.services) ? value.services.filter(item => typeof item === 'string') : [],
       manufacturer: text(value.manufacturer), payloadHex: text(value.payloadHex),
       serviceData: Array.isArray(value.serviceData) ? value.serviceData.map(item => ({ uuid: text(item?.uuid), hex: text(item?.hex) })) : [],
-      advType: number(value.advType), txPower: Number.isFinite(value.txPower) ? value.txPower : null, remembered: value.remembered === true };
+      advType: number(value.advType), txPower: Number.isFinite(value.txPower) ? value.txPower : null, remembered: value.remembered === true,
+      payloadTruncated: value.payloadTruncated === true, payloadBytes: number(value.payloadBytes) };
   }
   function savedRecord(value) {
     const record = advertisement(value);
@@ -36,7 +37,8 @@ const NanoScanStore = (() => {
     const validHex = (hex, max) => typeof hex === 'string' && hex.length <= max * 2 && /^(?:[0-9a-f]{2})*$/i.test(hex);
     const validUUID = uuid => typeof uuid === 'string' && /^(?:0x)?(?:[0-9a-f]{4}|[0-9a-f]{8}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i.test(uuid);
     for (const [key, max] of [['manufacturer', 512], ['payloadHex', 1650]]) if (value[key] !== undefined && !validHex(value[key], max)) reject(key);
-    for (const key of ['connectable', 'favorite', 'remembered']) if (value[key] !== undefined && typeof value[key] !== 'boolean') reject(key);
+    for (const key of ['connectable', 'favorite', 'remembered', 'payloadTruncated']) if (value[key] !== undefined && typeof value[key] !== 'boolean') reject(key);
+    if (value.payloadBytes !== undefined && (!Number.isSafeInteger(value.payloadBytes) || value.payloadBytes < 0 || value.payloadBytes > 65535)) reject('payload byte count');
     for (const key of ['rssi', 'txPower']) {
       if (value[key] !== undefined && !(key === 'txPower' && value[key] === null) && (!Number.isFinite(value[key]) || value[key] < -127 || value[key] > 127)) reject(key);
     }
@@ -88,6 +90,7 @@ const NanoScanStore = (() => {
     const records = new Map(), preferences = { backgroundScan: false, persistent: true };
     let adapter = storage, available = false, error = '', evicted = 0, revision = 0, saved = 0, timer, initPromise;
     let previousUptime = null, boardStartedMs = null, writing = Promise.resolve();
+    let stream = { bootId: null, cursor: 0, received: 0, gaps: 0, reboots: 0, active: false, error: '' };
     try {
       const stored = JSON.parse(globalThis.localStorage?.getItem('nanoscope.scan.preferences') || '{}');
       for (const [key, value] of Object.entries(stored || {})) {
@@ -100,8 +103,7 @@ const NanoScanStore = (() => {
     }
     function changed() {
       revision++;
-      clearTimeout(timer);
-      if (available) { timer = setTimeout(() => { flush(); }, 700); timer.unref?.(); }
+      if (available && preferences.persistent !== false && timer == null) { timer = setTimeout(() => { timer = null; flush(); }, 700); timer.unref?.(); }
     }
     function trim() {
       const historical = [...records.values()].filter(record => record.liveId == null);
@@ -140,12 +142,13 @@ const NanoScanStore = (() => {
       })();
       return initPromise;
     }
-    function ingest(boardState, receivedAtMs = now()) {
+    function ingest(boardState, receivedAtMs = now(), incremental = false) {
       if (!boardState || !Array.isArray(boardState.devices)) { setOffline(); return; }
       const uptime = number(boardState.uptime), reboot = previousUptime !== null && uptime < previousUptime;
       if (boardStartedMs === null || reboot) boardStartedMs = receivedAtMs - uptime * 1000;
       previousUptime = uptime;
-      for (const record of records.values()) record.liveId = null;
+      if (reboot) for (const record of records.values()) record.streamLive = false;
+      if (!incremental) for (const record of records.values()) record.liveId = null;
       let dirty = false;
       for (const value of boardState.devices) {
         const advertised = advertisement(value);
@@ -154,23 +157,50 @@ const NanoScanStore = (() => {
         const seen = Number.isFinite(value.lastSeen) ? Math.max(0, Math.min(uptime, value.lastSeen)) : null;
         const at = seen === null ? receivedAtMs : Math.min(receivedAtMs, boardStartedMs + seen * 1000);
         const sameBoot = current && !reboot && Math.abs(current.boardStartedMs - boardStartedMs) < 2500;
-        const observed = !current || (seen !== null && (!sameBoot || current.boardSeenSeconds < seen));
+        const observed = incremental || !current || (seen !== null && (!sameBoot || current.boardSeenSeconds < seen));
         const fields = sameBoot && seen !== null && current.boardSeenSeconds > seen ? advertisement(current) : advertised;
         const record = { ...fields, firstSeenMs: current?.firstSeenMs ?? at, lastSeenMs: current?.lastSeenMs ?? at,
           observations: current?.observations ?? 0, history: current?.history || [], favorite: current?.favorite || false,
           label: current?.label || '', boardSeenSeconds: current?.boardSeenSeconds ?? -1, boardStartedMs: current?.boardStartedMs ?? boardStartedMs,
-          liveId: Number.isInteger(value.id) && value.id > 0 ? value.id : null };
+          liveId: Number.isInteger(value.id) && value.id > 0 ? value.id : incremental ? current?.liveId ?? null : null,
+          streamLive: incremental || current?.streamLive === true };
         if (observed) {
           record.observations++;
-          record.lastSeenMs = Math.max(record.lastSeenMs, at);
+          const preciseAt = incremental && Number.isFinite(value.ms) ? Math.min(receivedAtMs, boardStartedMs + value.ms) : at;
+          if (incremental && !current) record.firstSeenMs = preciseAt;
+          record.lastSeenMs = Math.max(record.lastSeenMs, preciseAt);
           record.boardSeenSeconds = seen ?? -1; record.boardStartedMs = boardStartedMs;
-          if (!record.history.some(item => item.at === at)) record.history = [...record.history, { at, rssi: record.rssi }].slice(-60);
+          if (!record.history.some(item => item.at === preciseAt)) record.history = [...record.history, { at: preciseAt, rssi: record.rssi }].slice(-60);
         }
         records.set(record.key, record);
         if (before !== JSON.stringify(savedRecord(record))) dirty = true;
       }
       const count = records.size; trim();
       if (dirty || count !== records.size) changed();
+    }
+    function ingestAdvertisements(batch, receivedAtMs = now()) {
+      const integer = value => Number.isSafeInteger(value) && value >= 0;
+      if (!plainObject(batch) || typeof batch.bootId !== 'string' || !batch.bootId || !Number.isFinite(batch.uptime) || batch.uptime < 0 || !integer(batch.cursor) || !integer(batch.oldestSeq) || !integer(batch.dropped) || !Array.isArray(batch.devices) || batch.devices.length > 4096 || !Array.isArray(batch.cacheIds) || !batch.cacheIds.every(id => integer(id) && id > 0)) throw new Error('Invalid advertisement stream batch.');
+      const ordered = batch.devices.slice().sort((a, b) => a.seq - b.seq);
+      for (const value of ordered) if (!plainObject(value) || !advertisement(value) || !integer(value.seq) || value.seq < 1 || value.seq > batch.cursor || !Number.isFinite(value.ms) || value.ms < 0 || value.ms > batch.uptime * 1000 + 1000) throw new Error('Invalid advertisement stream record.');
+      const reboot = stream.bootId !== null && stream.bootId !== batch.bootId;
+      if (reboot) { setOffline(); previousUptime = null; boardStartedMs = null; }
+      const before = reboot ? 0 : stream.cursor;
+      if (!reboot && stream.bootId === batch.bootId && batch.cursor < before) throw new Error('Advertisement stream cursor moved backwards.');
+      const seen = new Set(), fresh = ordered.filter(value => value.seq > before && !seen.has(value.seq) && seen.add(value.seq));
+      let expected = before + 1, missing = 0;
+      for (const value of fresh) { missing += Math.max(0, value.seq - expected); expected = value.seq + 1; }
+      missing += Math.max(0, batch.cursor - expected + 1);
+      const cache = new Set(batch.cacheIds);
+      for (const record of records.values()) if (record.liveId != null && !cache.has(record.liveId)) record.liveId = null;
+      ingest({ uptime: batch.uptime, devices: fresh.map(value => ({ ...value, id: cache.has(value.id) ? value.id : null })) }, receivedAtMs, true);
+      for (const value of fresh) {
+        const record = records.get(`${value.address.toLowerCase()}/${value.addressType}`);
+        if (record) { record.liveId = cache.has(value.id) ? value.id : null; record.streamLive = true; }
+      }
+      stream = { bootId: batch.bootId, cursor: batch.cursor, received: stream.received + fresh.length, gaps: stream.gaps + Math.max(missing, batch.cursor > before ? batch.dropped : 0), reboots: stream.reboots + Number(reboot), active: true, error: '',
+        capacity: batch.capacity, cacheCapacity: batch.cacheCapacity, cacheBytes: batch.cacheBytes, cacheLimitBytes: batch.cacheLimitBytes, journalBytes: batch.journalBytes, droppedTotal: batch.droppedTotal, truncatedTotal: batch.truncatedTotal };
+      return { received: fresh.length, dropped: Math.max(missing, batch.cursor > before ? batch.dropped : 0), reboot, cursor: stream.cursor };
     }
     function devices() { return [...records.values()].map(clone); }
     function annotate(key, values) {
@@ -193,7 +223,8 @@ const NanoScanStore = (() => {
     }
     function clearHistory() { records.clear(); evicted = 0; changed(); return flush(); }
     function setOffline() {
-      for (const record of records.values()) record.liveId = null;
+      for (const record of records.values()) { record.liveId = null; record.streamLive = false; }
+      stream.active = false;
       const count = records.size; trim(); if (count !== records.size) changed();
     }
     function exportData() { return { schemaVersion: 1, exportedAtMs: now(), evicted, records: [...records.values()].map(savedRecord) }; }
@@ -203,9 +234,9 @@ const NanoScanStore = (() => {
       for (const record of imported) {
         const current = merged.get(record.key);
         if (!current) { merged.set(record.key, { ...record, liveId: null }); continue; }
-        const latest = current.liveId != null || current.lastSeenMs >= record.lastSeenMs ? current : record;
+        const latest = current.liveId != null || current.streamLive || current.lastSeenMs >= record.lastSeenMs ? current : record;
         const history = new Map([...record.history, ...current.history].map(item => [item.at, { at: item.at, rssi: item.rssi }]));
-        merged.set(record.key, { ...savedRecord(latest), liveId: current.liveId ?? null,
+        merged.set(record.key, { ...savedRecord(latest), liveId: current.liveId ?? null, streamLive: current.streamLive === true,
           firstSeenMs: Math.min(current.firstSeenMs, record.firstSeenMs), lastSeenMs: Math.max(current.lastSeenMs, record.lastSeenMs),
           observations: Math.max(current.observations, record.observations, history.size),
           history: [...history.values()].sort((a, b) => a.at - b.at).slice(-60),
@@ -216,7 +247,7 @@ const NanoScanStore = (() => {
       return { imported: new Set(imported.map(record => record.key)).size, count: records.size };
     }
     function flush() {
-      clearTimeout(timer);
+      clearTimeout(timer); timer = null;
       writing = writing.then(async () => {
         if (!available) return false;
         while (saved < revision) {
@@ -228,8 +259,9 @@ const NanoScanStore = (() => {
       });
       return writing;
     }
-    function status() { return { persistent: preferences.persistent !== false && available, available, error, count: records.size, evicted }; }
-    const api = { init, ingest, devices, annotate, getPreference, setPreference, setPersistence, clearHistory, flush, status, exportData, importData, setOffline };
+    function resetStream() { setOffline(); stream = { bootId: null, cursor: 0, received: 0, gaps: 0, reboots: 0, active: false, error: '' }; previousUptime = null; boardStartedMs = null; }
+    function status() { return { persistent: preferences.persistent !== false && available, available, error, count: records.size, evicted, ...(stream.bootId !== null || stream.error ? { stream: { ...stream } } : {}) }; }
+    const api = { init, ingest, ingestAdvertisements, resetStream, streamError(message) { stream.error = text(message); stream.active = false; }, devices, annotate, getPreference, setPreference, setPersistence, clearHistory, flush, status, exportData, importData, setOffline };
     return api;
   }
   return { create };

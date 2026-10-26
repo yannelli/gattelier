@@ -5,6 +5,7 @@
 #include "usb_hci.h"
 #include "collection.h"
 #include "activity_led.h"
+#include "scan_stream.h"
 #include "connection_cancellation.h"
 #include <NimBLEDevice.h>
 #include <algorithm>
@@ -13,7 +14,6 @@
 
 static QueueHandle_t commands;
 static NimBLEClient* client;
-static uint32_t nextDeviceId = 1;
 static ConnectionCancellation connectionCancellation;
 static SemaphoreHandle_t cancellationMutex;
 static uint32_t lastCancellation = 0;
@@ -78,47 +78,12 @@ class ScanCallbacks : public NimBLEScanCallbacks {
     signalActivityLed();
     StateLock lock;
     if (!state.scanning) return;
-    String address = advertised->getAddress().toString().c_str();
-    auto it = std::find_if(state.devices.begin(), state.devices.end(), [&](const DeviceInfo& d) {
-      return d.address == address && d.addressType == advertised->getAddressType();
-    });
-    if (it == state.devices.end()) {
-      if (ESP.getFreeHeap() < 98304) {
-        state.error = "Device memory is low. New discoveries will appear as inactive devices expire.";
-        return;
-      }
-      state.devices.emplace_back();
-      it = state.devices.end() - 1;
-      it->id = nextDeviceId++;
+    recordAdvertisement(advertised);
+    const String address = advertised->getAddress().toString().c_str();
+    if (state.captureAddress == address) {
+      const auto& payload = advertised->getPayload();
+      recordTrace("advertisement", address, "", 0, payload.data(), payload.size(), "RSSI " + String(advertised->getRSSI()) + " dBm");
     }
-    it->address = address;
-    it->addressType = advertised->getAddressType();
-    if (advertised->haveName()) it->name = String(advertised->getName().c_str()).substring(0, 80);
-    it->rssi = advertised->getRSSI();
-    it->connectable = advertised->isConnectable();
-    it->lastSeen = millis() / 1000;
-    it->advType = advertised->getAdvType();
-    it->hasTxPower = advertised->haveTXPower();
-    it->txPower = it->hasTxPower ? advertised->getTXPower() : 0;
-    const auto& payload = advertised->getPayload();
-    it->payloadHex = hexBytes(payload.data(), payload.size());
-    it->serviceData.clear();
-    for (uint8_t i = 0; i < advertised->getServiceDataCount(); ++i) {
-      auto bytes = advertised->getServiceData(i);
-      it->serviceData.push_back({advertised->getServiceDataUUID(i).toString().c_str(),
-        hexBytes(reinterpret_cast<const uint8_t*>(bytes.data()), bytes.size())});
-    }
-    if (advertised->haveManufacturerData()) {
-      auto bytes = advertised->getManufacturerData();
-      it->manufacturer = hexBytes(reinterpret_cast<const uint8_t*>(bytes.data()), std::min(bytes.size(), size_t(128)));
-    }
-    if (advertised->haveServiceUUID()) {
-      it->services.clear();
-      for (uint8_t i = 0; i < std::min(advertised->getServiceUUIDCount(), uint8_t(8)); ++i) {
-        it->services.emplace_back(advertised->getServiceUUID(i).toString().c_str());
-      }
-    }
-    if (state.captureAddress == address) recordTrace("advertisement", address, "", 0, payload.data(), payload.size(), "RSSI " + String(it->rssi) + " dBm");
   }
 };
 
@@ -178,8 +143,10 @@ static void maintainScan() {
     shouldScan = (collecting ? plan.enabled : state.scanEnabled) && !state.connected && !state.busy;
     if (state.scanning) {
       uint32_t now = millis() / 1000;
-      auto expired = [now](const DeviceInfo& device) { return !device.remembered && now - device.lastSeen > 120; };
-      state.devices.erase(std::remove_if(state.devices.begin(), state.devices.end(), expired), state.devices.end());
+      for (size_t i = 0; i < state.devices.size();) {
+        if (now - state.devices[i].lastSeen > 120) eraseScanCache(i);
+        else ++i;
+      }
       if (ESP.getFreeHeap() > 110592 && state.error.startsWith("Device memory is low")) state.error = "";
     }
   }
@@ -195,10 +162,11 @@ static void connectDevice(const Command& command) {
   DeviceInfo device;
   {
     StateLock lock;
-    for (const auto& candidate : state.devices) if (candidate.id == command.argument) device = candidate;
+    for (const auto& candidate : state.devices) if (candidate.address == reinterpret_cast<const char*>(command.data) && candidate.addressType == command.mode) device = candidate;
     device.address = reinterpret_cast<const char*>(command.data); device.addressType = command.mode;
     state.address = device.address;
     state.services.clear();
+    clearScanCache();
   }
   bool recorderOnly = command.length == 1 || std::find(device.services.begin(), device.services.end(), String("0x504c")) != device.services.end();
   if (connectionCancellation.requested(command.connectionAttempt)) return;
@@ -266,6 +234,7 @@ static void bleWorker(void*) {
         }
       }
     }
+    if (client->getConnHandle() == BLE_HS_CONN_HANDLE_NONE) client->deleteServices();
     {
       StateLock lock;
       state.connected = client->getConnHandle() != BLE_HS_CONN_HANDLE_NONE;
@@ -295,10 +264,11 @@ bool queueCommand(Command command, String& error) {
   if ((command.action == Action::Scan || command.action == Action::StopScan) && state.connected) { error = "Scanning is paused while connected."; return false; }
   if (command.action == Action::Connect) {
     if (state.connected) { error = "Disconnect the current device first."; return false; }
-    auto device = std::find_if(state.devices.begin(), state.devices.end(), [&](const DeviceInfo& d) { return d.id == command.argument; });
+    auto device = std::find_if(state.devices.begin(), state.devices.end(), [&](const DeviceInfo& d) { return command.argument ? d.id == command.argument : d.address == reinterpret_cast<const char*>(command.data) && d.addressType == command.mode; });
     if (command.argument && (device == state.devices.end() || !device->connectable)) { error = "Select a connectable device from the latest scan."; return false; }
     if (!command.argument && strlen(reinterpret_cast<const char*>(command.data)) != 17) { error = "A known Bluetooth address is required."; return false; }
     if (command.argument) { memcpy(command.data, device->address.c_str(), 18); command.mode = device->addressType; }
+    if (device != state.devices.end() && std::find(device->services.begin(), device->services.end(), String("0x504c")) != device->services.end()) command.length = 1;
     state.address = reinterpret_cast<const char*>(command.data);
     state.addressType = command.mode;
     connectionTimedOut.store(false);
@@ -331,6 +301,7 @@ bool queueCommand(Command command, String& error) {
 }
 
 void startBle() {
+  startScanStream();
   connectionCancellation.seed(esp_random());
   cancellationMutex = xSemaphoreCreateMutex();
   if (!cancellationMutex) abort();
@@ -342,6 +313,7 @@ void startBle() {
   scan->setInterval(100);
   scan->setWindow(45);
   scan->setMaxResults(0);
+  scan->setScanResponseTimeout(10);
   client = NimBLEDevice::createClient();
   if (!client) abort();
   client->setClientCallbacks(&clientCallbacks, false);

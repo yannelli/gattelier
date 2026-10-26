@@ -8,7 +8,7 @@ const address = 'aa:bb:cc:dd:ee:ff';
 const connected = services => ({ ble: { connected: true, address }, services });
 
 test('catalog includes the requested device families and actionable source links', () => {
-  assert.deepEqual(library.entries.map(entry => entry.id), ['sleep-fuzion', 'sleep-mcr', 'health-thermometer', 'environmental-sensor', 'nuki-lock', 'resmed-air11', 'ge-appliance', 'samsung-tv', 'radiacode']);
+  assert.deepEqual(library.entries.map(entry => entry.id), ['sleep-fuzion', 'sleep-mcr', 'health-thermometer', 'environmental-sensor', 'nuki-lock', 'resmed-air11', 'ge-appliance', 'samsung-tv', 'samsung-device', 'radiacode']);
   for (const entry of library.entries) {
     assert.ok(entry.authentication && entry.limitations && entry.capabilities.length);
     assert.ok(entry.sources.every(source => source.title && /^https:\/\//.test(source.url)));
@@ -42,8 +42,22 @@ test('ResMed and appliance names remain candidates and manufacturer IDs do not i
     assert.equal(match.confidence, 'Name candidate');
     assert.equal(match.confirmed, false);
   }
-  assert.deepEqual(library.match({ name: 'Samsung headphones', manufacturer: '750001' }), []);
-  assert.deepEqual(library.match({ name: 'Someone named a thing ResMed', manufacturer: '750001' }), []);
+  assert.deepEqual(library.match({ name: 'Samsung headphones', manufacturer: '750001' }).map(entry => entry.id), ['samsung-device']);
+  assert.equal(library.match({ name: 'Someone named a thing ResMed', manufacturer: '750001' }).some(entry => entry.id === 'resmed-air11'), false);
+});
+
+test('anonymous Samsung company data and assigned services match without a TV claim', () => {
+  const entry = library.match({ manufacturer: '750042040000' })[0];
+  assert.equal(entry.id, 'samsung-device'); assert.equal(entry.confidence, 'Manufacturer match');
+  assert.equal(entry.modelConfirmed, false); assert.equal(entry.confirmed, false);
+  for (const manufacturer of ['75', '0075', '7500zz', '750']) assert.deepEqual(library.match({ manufacturer }), []);
+  for (const service of library.get('samsung-device').services) {
+    const match = library.match({ services: [`0000${service}-0000-1000-8000-00805f9b34fb`] });
+    assert.deepEqual(match.map(item => item.id), ['samsung-device']); assert.equal(match[0].confidence, 'Service match'); assert.equal(match[0].modelConfirmed, false);
+  }
+  const named = library.match({ name: 'Samsung synthetic speaker' });
+  assert.equal(named[0].confidence, 'Name candidate'); assert.equal(named[0].confirmed, false);
+  assert.equal(library.match({ name: '[TV] Samsung Synthetic' }).some(item => item.id === 'samsung-tv'), true);
 });
 
 test('RadiaCode requires its documented characteristic pair on this connection', () => {

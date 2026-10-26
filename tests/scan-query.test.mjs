@@ -48,3 +48,10 @@ test('missing live IDs cannot become live matches and absent optional metadata i
   assert.deepEqual(select([historical], { signal: -90 }), []);
   assert.deepEqual(select([historical], { lastSeen: 60 }, context), []);
 });
+
+test('streamed discoveries remain visible after their board cache IDs are evicted', () => {
+  const streamed = { ...devices[1], liveId: null, streamLive: true };
+  assert.deepEqual(select([streamed], { source: 'live' }), [streamed]);
+  assert.deepEqual(select([streamed], { source: 'history' }), []);
+  assert.deepEqual(select([{ ...streamed, streamLive: false }], { source: 'live' }), []);
+});

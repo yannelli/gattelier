@@ -92,6 +92,14 @@ const NanoProfiles = (() => {
     if (recorder) { Object.assign(result, { category: 'recorder', title: recorder.product, confidence: 'Protocol match', evidence: [recorder.summary], fields: [], sources: [], limitations: ['Open the matching app for authenticated file access.'] }); }
     const sensors = typeof NanoSensorProfiles !== 'undefined' ? NanoSensorProfiles : typeof module !== 'undefined' ? require('./sensor-profiles.js') : null;
     const sensor = sensors?.identify(device); if (sensor && result.category === 'other') return sensor;
+    if (result.category === 'other') {
+      const library = typeof NanoDeviceLibrary !== 'undefined' ? NanoDeviceLibrary : typeof module !== 'undefined' ? require('./device-library.js') : null;
+      const samsung = library?.match(device).find(entry => entry.id === 'samsung-device');
+      if (samsung) {
+        Object.assign(result, { category: 'vendor', title: samsung.title, confidence: samsung.confidence, evidence: [samsung.evidence], sources: samsung.sources, limitations: [samsung.limitations] });
+        field(samsung.confidence === 'Name candidate' ? 'Manufacturer candidate' : 'Assigned company', 'Samsung Electronics'); field('Advertised services', services.join(', ') || 'None');
+      }
+    }
     if (result.category === 'other') { result.evidence.push('No supported device profile matched.'); field('Advertised services', services.join(', ') || 'None'); }
     return result;
   }
@@ -103,6 +111,7 @@ const NanoProfiles = (() => {
       { category: 'sleep', title: 'Sleep Number', description: 'Fuzion and MCR identification; paired Fuzion queries.' },
       { category: 'sensor', title: 'Environmental sensors', description: 'BTHome v2 and Ruuvi measurements from broadcasts.' },
       { category: 'recorder', title: 'Recorders', description: 'PLAUD and Pocket protocol identification.' },
+      { category: 'vendor', title: 'Samsung devices', description: 'Manufacturer and service evidence without assuming a TV or other model.' },
       { category: 'other', title: 'BLE metadata', description: 'Advertising structures and unclassified devices.' }
     ];
   }

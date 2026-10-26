@@ -15,8 +15,9 @@ const NanoScanQuery = (() => {
       if ((filters.connectable === true || filters.connectable === 'yes' || filters.connectable === 'connectable') && !device.connectable) return false;
       if ((filters.connectable === 'no' || filters.connectable === 'broadcast') && device.connectable) return false;
       if ((filters.favorites === true || filters.favorites === 'favorites') && !device.favorite) return false;
-      if (filters.source === 'live' && device.liveId == null) return false;
-      if ((filters.source === 'history' || filters.source === 'historical') && device.liveId != null) return false;
+      const live = device.liveId != null || device.streamLive === true;
+      if (filters.source === 'live' && !live) return false;
+      if ((filters.source === 'history' || filters.source === 'historical') && live) return false;
       if (filters.kind && filters.kind !== 'all' && context.profile?.(device)?.category !== filters.kind) return false;
       if (!query) return true;
       const vendor = context.identifyVendor?.(device);

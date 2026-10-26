@@ -37,7 +37,8 @@ const NanoPackets = (() => {
   const direction = kind => kind === 'write' || kind === 'write-result' ? 'TX' : ['read', 'notification', 'indication'].includes(kind) ? 'RX' : 'EVENT';
   const isRx = event => !event.request && (event.protocolDirection || direction(event.kind)) === 'RX' && event.success !== false;
   function redact(event) {
-    return sensitive(event.hex || '', event.uuid) ? { ...event, hex: '', message: 'Authentication payload redacted', redacted: true } : { ...event };
+    const dexcomAuthWrite = (event.protocolDirection || direction(event.kind)) === 'TX' && /^f808353[58]-849e-531c-c594-30f1f86a4ea5$/i.test(event.uuid || '');
+    return sensitive(event.hex || '', event.uuid) || dexcomAuthWrite ? { ...event, hex: '', message: 'Authentication payload redacted', redacted: true } : { ...event };
   }
   function createCapture(limit = 10000) {
     let events = [], bootId = null, nextSeq = 0;

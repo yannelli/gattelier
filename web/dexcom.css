@@ -2,11 +2,40 @@
 .dexcom-body > p { margin: 0; }
 .dexcom-actions { display: flex; flex-wrap: wrap; gap: 10px; }
 .dexcom-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 16px; margin: 0 0 24px; }
-.dexcom-fields dt { color: var(--text-muted, #8e99aa); font-size: .85rem; }
+.dexcom-fields dt { color: var(--muted); font-size: .85rem; }
 .dexcom-fields dd { margin: 5px 0 0; overflow-wrap: anywhere; }
 .dexcom-history { width: 100%; border-collapse: collapse; font-size: .85rem; }
-.dexcom-history th, .dexcom-history td { padding: 10px; text-align: left; white-space: nowrap; border-bottom: 1px solid var(--border, #263044); }
+.dexcom-history th, .dexcom-history td { padding: 10px; text-align: left; white-space: nowrap; border-bottom: 1px solid var(--line); }
 .dexcom-import { display: grid; gap: 12px; }
 .dexcom-import[open] > :not(summary) { margin-top: 12px; }
 .dexcom-import label { display: grid; gap: 6px; }
 .dexcom-import textarea { width: 100%; font-family: monospace; resize: vertical; }
+.dexcom-connect { display: grid; gap: 14px; padding: 18px; background: var(--surface-secondary); border: 1px solid var(--line); border-radius: var(--radius-small); }
+.dexcom-connect > label:first-child { display: grid; gap: 8px; max-width: 320px; }
+.dexcom-check { display: flex; align-items: center; gap: 10px; font-size: .9rem; }
+.dexcom-check input { width: 18px; height: 18px; margin: 0; flex: 0 0 18px; }
+.dexcom-results { display: grid; gap: 20px; }
+.dexcom-reading { padding: 20px; border-radius: var(--radius-small); background: var(--surface-secondary); border: 1px solid var(--line); }
+.dexcom-glucose { display: flex; align-items: baseline; gap: 12px; margin: 8px 0; }
+.dexcom-glucose strong { font-size: clamp(2.5rem, 8vw, 4rem); font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1.1; }
+.dexcom-reading p { margin: 6px 0 0; }
+.dexcom-history-heading { display: flex; align-items: baseline; flex-wrap: wrap; gap: 12px; }
+.dexcom-history-heading h3 { margin: 0; }
+.dexcom-history-window { display: flex; align-items: center; gap: 8px; font-size: .85rem; }
+.dexcom-history-window select { min-width: 110px; }
+.dexcom-actions { align-items: center; }
+@media (max-width: 600px) {
+  .dexcom-body { padding: 16px; }
+  .dexcom-connect { padding: 14px; }
+  .dexcom-actions > .button { flex: 1 1 auto; }
+  .dexcom-history-window { flex: 1 1 100%; }
+  .dexcom-history-window select { flex: 1; }
+}
+
+.dexcom-options { border-top: 1px solid var(--line); padding-top: 12px; }
+.dexcom-options summary { color: var(--muted); cursor: pointer; font-size: .9rem; }
+.dexcom-options .dexcom-check { margin-top: 14px; }
+
+#medical-panel { padding: 0; }
+#medical-panel .hint { padding: 0; background: none; border-radius: 0; }
+#medical-panel .panel-heading { padding-bottom: 0; }

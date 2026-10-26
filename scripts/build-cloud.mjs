@@ -7,6 +7,11 @@ const assets = ['index.html', 'app.bundle.js', 'app.bundle.css', 'vendors.json',
   'manifest.webmanifest', 'icons/nanoscope-180.png', 'icons/nanoscope-192.png', 'icons/nanoscope-512.png'];
 const hash = createHash('sha256');
 await mkdir(`${root}dist/icons`, { recursive: true });
+await mkdir(`${root}dist/licenses`, { recursive: true });
+for (const name of ['DEXCOM-CRYPTO-NOTICE.md', 'licenses/GPL-3.0-or-later.txt']) {
+  const content = await readFile(`${root}${name}`); hash.update(name).update(content);
+  await writeFile(`${root}dist/${name}`, content);
+}
 for (const name of assets) {
   let content = await readFile(`${root}web/${name}`);
   if (name === 'index.html') content = Buffer.from(content.toString().replace('</head>', '  <meta name="nanoscope-hosted" content="true">\n</head>'));

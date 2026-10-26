@@ -22,3 +22,4 @@ dist/
 web/app.bundle.js
 web/app.bundle.css
 web/plaud-crypto.js
+web/dexcom-crypto.js

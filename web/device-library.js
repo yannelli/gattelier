@@ -10,6 +10,8 @@ const NanoDeviceLibrary = (() => {
     resmed: { title: 'Air11 Bluetooth protocol implementation', url: 'https://github.com/m-kozlowski/airbreak-plus/blob/master/docs/as11/bluetooth_protocol.md' },
     ge: { title: 'GE Appliances SDK', url: 'https://github.com/GEMakers/gea-sdk' },
     samsung: { title: 'Samsung TV local API implementation', url: 'https://github.com/xchwarze/samsung-tv-ws-api' },
+    samsungCompany: { title: 'Bluetooth SIG company identifiers', url: 'https://bitbucket.org/bluetooth-SIG/public/src/e7f76d7c5e2edced4872a352ff4a300610ac8212/assigned_numbers/company_identifiers/company_identifiers.yaml' },
+    samsungServices: { title: 'Bluetooth SIG member service UUIDs', url: 'https://bitbucket.org/bluetooth-SIG/public/src/e7f76d7c5e2edced4872a352ff4a300610ac8212/assigned_numbers/uuids/member_uuids.yaml' },
     radiacode: { title: 'RadiaCode protocol implementation', url: 'https://github.com/cdump/radiacode/blob/master/src/radiacode/radiacode.py' },
     radiacodeBle: { title: 'RadiaCode BLE transport', url: 'https://github.com/cdump/radiacode/blob/master/src/radiacode/transports/bluetooth.py' }
   };
@@ -87,6 +89,15 @@ const NanoDeviceLibrary = (() => {
       capabilities: [read('identity', 'Device information at /api/v2/', 'external-transport')], recipes: ['device-manufacturer', 'device-model'], sources: [sources.samsung]
     },
     {
+      id: 'samsung-device', title: 'Samsung device', category: 'vendor', transport: 'BLE', status: 'Manufacturer metadata', companies: [0x0075],
+      services: ['fddb', 'fd7e', 'fd6c', 'fd69', 'fd5a', 'fd59', 'fd4b', 'fd1d', 'fc91'], names: ['^Samsung(?:\\b|[ _-])', '^\\[TV\\]\\s*Samsung\\b'],
+      description: 'Recognize Samsung Electronics manufacturer data, assigned services, and candidate broadcast names.',
+      models: 'Company and service assignments identify Samsung Electronics metadata. Device type and model require further evidence.',
+      authentication: 'Security and application authentication depend on the device and its discovered services.',
+      limitations: 'A Samsung match does not establish a TV, phone, earbuds, owner, or supported control protocol.',
+      capabilities: [read('identity', 'Exposed identity metadata', 'recipe')], recipes: ['device-manufacturer', 'device-model'], sources: [sources.samsungCompany, sources.samsungServices]
+    },
+    {
       id: 'radiacode', title: 'RadiaCode', category: 'sensor', transport: 'BLE', status: 'Spectrum and measurements', module: 'radiacode', services: ['e63215e5-7003-49d8-96b0-b024798fb901'],
       characteristics: ['e63215e6-7003-49d8-96b0-b024798fb901', 'e63215e7-7003-49d8-96b0-b024798fb901'],
       description: 'The documented BLE protocol supports firmware, serial number, buffered measurements, and spectrum queries.',
@@ -106,12 +117,15 @@ const NanoDeviceLibrary = (() => {
     const gatt = sameDevice ? state.services || [] : [];
     const services = new Set([...(device.services || []).map(item => uuid(typeof item === 'string' ? item : item.uuid)), ...gatt.map(item => uuid(item.uuid))]);
     const characteristics = new Set(gatt.flatMap(service => (service.characteristics || []).map(item => uuid(item.uuid))));
+    const manufacturer = typeof device.manufacturer === 'string' && /^(?:[\da-f]{2}){2,}$/i.test(device.manufacturer) ? device.manufacturer : '';
+    const company = manufacturer ? parseInt(manufacturer.slice(0, 2), 16) | parseInt(manufacturer.slice(2, 4), 16) << 8 : null;
     return entries.flatMap(entry => {
       const service = entry.services.find(value => services.has(uuid(value)));
       const signature = entry.characteristics?.length && entry.characteristics.every(value => characteristics.has(uuid(value)));
       const name = entry.names?.some(pattern => new RegExp(pattern, 'i').test(device.name || ''));
-      if (!service && !signature && !name) return [];
-      return [{ ...clone(entry), confidence: signature ? 'GATT signature' : service ? 'Service match' : 'Name candidate', confirmed: Boolean(signature || service), evidence: signature ? 'Documented characteristic UUIDs discovered on this device.' : service ? `Service ${service} is present.` : `Broadcast name: ${device.name}`, modelConfirmed: false }];
+      const manufacturerMatch = entry.companies?.includes(company);
+      if (!service && !signature && !manufacturerMatch && !name) return [];
+      return [{ ...clone(entry), confidence: signature ? 'GATT signature' : service ? 'Service match' : manufacturerMatch ? 'Manufacturer match' : 'Name candidate', confirmed: Boolean(signature || service), evidence: signature ? 'Documented characteristic UUIDs discovered on this device.' : service ? `Service ${service} is present.` : manufacturerMatch ? `Manufacturer company 0x${company.toString(16).padStart(4, '0')} is assigned to Samsung Electronics Co. Ltd.` : `Broadcast name: ${device.name}`, modelConfirmed: false }];
     });
   }
   return { entries, sources: freeze(sources), get: id => { const entry = entries.find(item => item.id === id); return entry ? clone(entry) : null; }, match, uuid };

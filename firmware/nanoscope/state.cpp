@@ -3,6 +3,7 @@
 #include "ble_security.h"
 #include "usb_hci.h"
 #include "collection.h"
+#include "scan_stream.h"
 #include <WiFi.h>
 #include <cJSON.h>
 #include <WebServer.h>
@@ -65,9 +66,12 @@ void sendState(WebServer& server) {
     cJSON_AddNumberToObject(ble, "mtu", state.mtu);
     cJSON_AddNumberToObject(ble, "addressType", state.addressType);
     cJSON_AddNumberToObject(ble, "connectionAttempt", state.connectionAttempt);
+    addScanStreamState(ble);
     cJSON_AddBoolToObject(root, "scanCompleted", state.scanCompleted);
-    deviceIds.reserve(state.devices.size());
-    for (const auto& device : state.devices) deviceIds.push_back(device.id);
+    if (server.arg("devices") != "0") {
+      deviceIds.reserve(state.devices.size());
+      for (const auto& device : state.devices) deviceIds.push_back(device.id);
+    }
     serviceCount = state.services.size();
   }
   String header = jsonText(root);
@@ -93,28 +97,7 @@ void sendState(WebServer& server) {
         if (it == state.devices.end()) continue;
         device = *it;
       }
-      auto item = cJSON_CreateObject();
-      cJSON_AddNumberToObject(item, "id", device.id);
-      addText(item, "address", device.address);
-      addText(item, "name", device.name);
-      cJSON_AddNumberToObject(item, "addressType", device.addressType);
-      cJSON_AddNumberToObject(item, "rssi", device.rssi);
-      cJSON_AddBoolToObject(item, "connectable", device.connectable);
-      cJSON_AddBoolToObject(item, "remembered", device.remembered);
-      cJSON_AddNumberToObject(item, "lastSeen", device.lastSeen);
-      addText(item, "manufacturer", device.manufacturer);
-      addText(item, "payloadHex", device.payloadHex);
-      cJSON_AddNumberToObject(item, "advType", device.advType);
-      if (device.hasTxPower) cJSON_AddNumberToObject(item, "txPower", device.txPower);
-      else cJSON_AddNullToObject(item, "txPower");
-      addStrings(item, "services", device.services);
-      auto data = cJSON_AddArrayToObject(item, "serviceData");
-      for (const auto& serviceData : device.serviceData) {
-        auto entry = cJSON_CreateObject();
-        addText(entry, "uuid", serviceData.uuid);
-        addText(entry, "hex", serviceData.hex);
-        cJSON_AddItemToArray(data, entry);
-      }
+      auto item = scanDeviceJson(device);
       if (!first) send(",");
       send(jsonText(item));
       first = false;

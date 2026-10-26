@@ -39,7 +39,7 @@ let state = { wifi: {}, ble: {}, devices: [], services: [] };
 let online = false, pending = false, selected = '', notice = '', transportError = '', pollPromise, timer, ticking = false;
 let listSignature = '', detailSignature = '';
 let vendorDatabase = null, vendorStatus = 'loading';
-let scanStore, browserUI;
+let scanStore, scanStream, browserUI, stateController, apiGeneration = 0;
 const browseDevices = () => scanStore ? scanStore.devices() : state.devices;
 const selectedDevice = () => browseDevices().find(item => deviceKey(item) === selected);
 function selectDevice(device) {
@@ -145,30 +145,47 @@ function render() {
 }
 async function request(path, options = {}) {
   const controller = new AbortController();
+  const cancel = () => controller.abort();
+  options.signal?.addEventListener('abort', cancel, { once: true });
+  if (options.signal?.aborted) controller.abort();
   const timeout = setTimeout(() => controller.abort(), 10000);
   try {
     const response = await NanoAPI.fetch(path, { ...options, signal: controller.signal });
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || `Request failed (${response.status}).`);
     return data;
-  } finally { clearTimeout(timeout); }
+  } finally { clearTimeout(timeout); options.signal?.removeEventListener('abort', cancel); }
 }
 function poll() {
   if (pollPromise) return pollPromise;
+  const generation = apiGeneration;
+  const pollingController = stateController = new AbortController();
   pollPromise = (async () => {
     try {
-      state = await request('state'); online = true;
+      const next = await request('state?devices=0', { signal: pollingController.signal });
+      if (generation !== apiGeneration) return;
+      state = next; online = true;
       scanStore?.ingest(state);
+      if (state.ble.advertisementStream) {
+        await scanStream.poll();
+        if (generation !== apiGeneration) return;
+        if (scanStream.status().supported === false) {
+          const full = await request('state', { signal: pollingController.signal });
+          if (generation !== apiGeneration) return;
+          state = full; scanStore?.ingest(state);
+        }
+      }
       transportError = '';
       if (!selected && state.ble.connected) {
-        const device = state.devices.find(item => item.address === state.ble.address);
+        const device = browseDevices().find(item => item.address === state.ble.address);
         if (device) selected = deviceKey(device);
       }
     } catch (error) {
+      if (generation !== apiGeneration) return;
       online = false;
       scanStore?.setOffline();
       transportError = error.name === 'AbortError' ? 'The board took too long to respond. Check its power and Wi-Fi connection.' : 'Cannot reach the board. Check its power and connect to the same Wi-Fi network.';
-    } finally { NanoPWA.reportConnection(online); render(); }
+    } finally { if (generation === apiGeneration) { NanoPWA.reportConnection(online); render(); } }
   })().finally(() => { pollPromise = null; });
   return pollPromise;
 }
@@ -187,8 +204,10 @@ async function tick() {
   clearTimeout(timer);
   if ((document.hidden && !scanStore?.getPreference('backgroundScan', false)) || ticking) return;
   ticking = true;
+  const generation = apiGeneration;
   try { await poll(); } finally { ticking = false; }
-  const delay = NanoPWA.pollDelay({ background: scanStore?.getPreference('backgroundScan', false) });
+  if (generation !== apiGeneration) return;
+  const delay = !document.hidden && state.ble.scanning && state.ble.advertisementStream ? 500 : NanoPWA.pollDelay({ background: scanStore?.getPreference('backgroundScan', false) });
   if (delay !== null) timer = setTimeout(tick, delay);
 }
 async function loadVendors() {
@@ -217,17 +236,19 @@ async function loadVendors() {
 async function boot() {
   NanoTheme.init();
   scanStore = NanoScanStore.create(); await scanStore.init();
+  scanStream = NanoScanStream.create(scanStore);
   selected = scanStore.getPreference('selectedDevice', '');
   browserUI = NanoBrowserUI.mount(scanStore, { change: () => { listSignature = ''; detailSignature = ''; render(); tick(); }, getSelected: selectedDevice, getState: () => state });
   NanoWorkspace.init({ getPreference: (key, fallback) => scanStore.getPreference(key, fallback), setPreference: (key, value) => scanStore.setPreference(key, value), onChange: render });
   document.addEventListener('nanoscope:state', event => { state = event.detail; scanStore.ingest(state); online = true; render(); });
   document.addEventListener('nanoscope:busy', event => { pending = event.detail; render(); });
   globalThis.addEventListener('nanoscope:api-change', () => {
+    apiGeneration++; stateController?.abort(); scanStream.reset();
     clearTimeout(timer);
     state = { wifi: {}, ble: {}, devices: [], services: [] };
     online = false; pending = false; transportError = NanoAPI.configured() ? 'Checking the new board endpoint.' : 'Set the private board endpoint in Settings.';
     scanStore?.setOffline(); NanoLab.update(state, false); render();
-    tick();
+    Promise.resolve(pollPromise).finally(tick);
   });
   NanoLab.init();
   NanoCredentials.init();

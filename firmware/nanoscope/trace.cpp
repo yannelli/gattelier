@@ -43,6 +43,10 @@ void recordTrace(const String& kind, const String& address, const String& uuid,
              (uuid == "0x2bb1" || uuid == "00002bb1-0000-1000-8000-00805f9b34fb")) {
     event.message = "PLAUD authentication signature sent (redacted)";
     event.redacted = true;
+  } else if (data && kind == "write" &&
+             (uuid == "f8083535-849e-531c-c594-30f1f86a4ea5" || uuid == "f8083538-849e-531c-c594-30f1f86a4ea5")) {
+    event.message = "Dexcom authentication payload sent (redacted)";
+    event.redacted = true;
   } else if (data) {
     event.hex = hexBytes(data, std::min(length, size_t(512)));
   }

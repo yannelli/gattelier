@@ -24,7 +24,7 @@ const NanoConnection = (() => {
   }
   function describe(device, context = snapshot()) {
     const ble = context.state.ble || {}, connected = Boolean(device && ble.connected && address(device) === String(ble.address).toLowerCase());
-    const live = (context.state.devices || []).find(item => same(item, device));
+    const live = (context.state.devices || []).find(item => same(item, device)) || (device?.streamLive ? device : null);
     const result = { connected, live, enabled: false, label: connected ? 'Disconnect' : 'Connect', status: connected ? 'Connected' : 'Disconnected', reason: '' };
     if (!device) return { ...result, status: 'No device selected', reason: 'Select a device in Discover.' };
     if (!context.online) return { ...result, status: 'Board offline', reason: 'Reconnect to Gattelier to check the connection.' };
@@ -56,7 +56,7 @@ const NanoConnection = (() => {
       const current = snapshot().state;
       if (current.ble.connected) throw new Error('The current device did not disconnect.');
       const live = (current.devices || []).find(item => same(item, device));
-      const body = live ? { id: live.id } : { address: address(device), addressType: device.addressType };
+      const body = { address: address(device), addressType: device.addressType };
       if (!live && hooks.recorder?.(device)?.product.includes('PLAUD')) body.scope = 'plaud';
       currentAttempt.posted = true;
       const result = await hooks.action('connect', body);

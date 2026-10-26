@@ -152,3 +152,18 @@ test('PLAUD signature writes are redacted only on the command characteristic', (
   assert.equal(capture.snapshot().events[0].hex, '');
   assert.equal(capture.snapshot().events[0].redacted, true);
 });
+
+test('G7 auth and extra-data TX are redacted while protocol RX remains available', () => {
+  const capture = packets.createCapture();
+  const auth = 'f8083535-849e-531c-c594-30f1f86a4ea5', extra = 'f8083538-849e-531c-c594-30f1f86a4ea5';
+  capture.ingest(batch([
+    event(1, { kind: 'write', uuid: auth, hex: '02abcdef' }),
+    event(2, { kind: 'write', uuid: extra, hex: 'deadbeef' }),
+    event(3, { kind: 'indication', uuid: auth, hex: '03abcdef' }),
+    event(4, { kind: 'notification', uuid: extra, hex: '01234567' })
+  ]));
+  const saved = capture.snapshot();
+  assert.equal(saved.events[0].hex, ''); assert.equal(saved.events[1].hex, '');
+  assert.equal(saved.events[2].hex, '03abcdef'); assert.equal(saved.events[3].hex, '01234567');
+  assert.ok(!packets.csv(saved).includes('deadbeef'));
+});

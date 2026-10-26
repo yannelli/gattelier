@@ -18,7 +18,7 @@ jobs:
       - run: npm test
       - name: Check firmware utilities
         run: |
-          for source in tests/activity_led.test.cpp tests/trace_retention.test.cpp tests/connection_cancellation.test.cpp; do
+          for source in tests/activity_led.test.cpp tests/trace_retention.test.cpp tests/connection_cancellation.test.cpp tests/scan_retention.test.cpp; do
             c++ -std=c++17 -Wall -Wextra -Werror "$source" -o /tmp/firmware-test
             /tmp/firmware-test
           done
