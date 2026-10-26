@@ -1,0 +1,13 @@
+.usb-body { padding: 0 20px 20px; }
+.usb-body p { line-height: 1.5; }
+.usb-counters { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin: 20px 0; }
+.usb-counters dt { color: var(--muted); font-size: 12px; }
+.usb-counters dd { margin: 4px 0 0; font-variant-numeric: tabular-nums; }
+.usb-help { margin-top: 20px; }
+.usb-help summary { cursor: pointer; font-weight: 600; }
+.usb-help pre { padding: 12px; overflow-x: auto; border-radius: 10px; background: var(--surface-secondary); }
+.usb-message { color: var(--muted); font-size: 13px; }
+@media (max-width: 600px) {
+  .usb-body { padding: 0 16px 16px; }
+  .usb-counters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}

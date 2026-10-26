@@ -1,0 +1,30 @@
+#include <Arduino.h>
+#include "board_network.h"
+#include "state.h"
+#include "trace.h"
+#include "ble_security.h"
+#include "usb_hci.h"
+#include "collection.h"
+
+void setup() {
+  Serial.begin(115200);
+  initUsbMode();
+  stateMutex = xSemaphoreCreateMutex();
+  if (!stateMutex) abort();
+  startTrace();
+  startCollection(!usbHciMode());
+  if (!usbHciMode()) Serial.println("\nNanoScope booting");
+  startNetwork();
+  if (usbHciMode()) { state.scanEnabled = false; state.operation = "usb-hci"; startUsbHci(); }
+  else startBle();
+  startHttp();
+}
+
+void loop() {
+  handleHttp();
+  updateNetwork();
+  updateUsbHci();
+  if (!usbHciMode()) updateSecurity();
+  if (!usbHciMode()) updateCollection();
+  delay(2);
+}

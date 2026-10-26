@@ -1,0 +1,22 @@
+{
+  "name": "gattelier",
+  "private": true,
+  "scripts": {
+    "build:crypto": "esbuild scripts/plaud-crypto-entry.js --bundle --platform=browser --format=iife --minify --legal-comments=inline --outfile=web/plaud-crypto.js",
+    "build:web": "npm run build:crypto && node scripts/build-web.mjs",
+    "test": "node --test tests/*.test.mjs",
+    "build:cloud": "npm run build:web && node scripts/build-cloud.mjs",
+    "dev:cloud": "npm run build:cloud && wrangler dev",
+    "deploy": "npm run build:cloud && wrangler deploy",
+    "pretest": "npm run build:crypto"
+  },
+  "dependencies": {
+    "@noble/ciphers": "2.4.0",
+    "node-forge": "1.4.0"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2",
+    "wrangler": "4.152.0"
+  },
+  "description": "BLE inspection and capture on the M5Stack NanoC6"
+}

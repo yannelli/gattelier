@@ -1,0 +1,17 @@
+.traffic-analysis { display:flex; flex-wrap:wrap; gap:10px; align-items:end; margin:16px 0; }
+.traffic-analysis label { display:grid; gap:5px; min-width:130px; flex:1; color:var(--muted); font-size:11px; }
+.traffic-analysis input,.traffic-analysis select { padding:10px 12px; min-height:44px; width:100%; }
+.traffic-analysis p { flex-basis:100%; }
+.packet-differences { margin:16px 0; padding:14px; border:1px solid var(--line); border-radius:10px; max-height:280px; overflow:auto; }
+.packet-differences summary { cursor:pointer; font-size:12px; margin-bottom:10px; }
+#recipe-editor { display:block; width:100%; min-height:250px; resize:vertical; margin:14px 0; padding:16px; color:var(--text); background:var(--surface-secondary); border:1px solid var(--line); border-radius:12px; font:12px/1.6 var(--mono); }
+#recipes-panel select { min-height:44px; max-width:100%; }
+.guide-code { background:var(--surface-secondary); padding:16px; border-radius:10px; line-height:1.8; margin:14px 0; }
+.guide-steps { padding-left:20px; font-size:13px; line-height:1.8; }
+.guide-steps li { margin-bottom:8px; }
+.guide-references { display:flex; flex-wrap:wrap; gap:12px; padding:10px 0; }
+.guide-references a { color:var(--accent); font-size:12px; }
+#view-workbench .view-heading { flex-wrap:wrap; }
+#view-workbench .subnav { max-width:100%; overflow-x:auto; }
+#view-workbench .subnav button { font-size:12px; padding:8px 12px; }
+@media(max-width:700px) { #view-workbench .subnav { width:100%; } #view-workbench .subnav button { padding:8px 10px; font-size:11px; } }

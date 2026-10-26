@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#f5f5f7">
+  <title>Gattelier</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/app.bundle.css">
+  <script src="/app.bundle.js" defer></script>
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="apple-touch-icon" href="/icons/nanoscope-180.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+</head>
+<body>
+  <a class="skip-link" href="#main-content">Skip to workspace</a>
+  <header class="topbar">
+    <div class="brand"><span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M7 7l10 10-5 4V3l5 4L7 17"/></svg></span><span>Gattelier</span></div>
+    <div id="header-device" aria-label="Bluetooth connection"></div>
+    <button id="scan" class="button primary" type="button" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M5.6 5.6a9 9 0 000 12.8m12.8-12.8a9 9 0 010 12.8M8.4 8.4a5.1 5.1 0 000 7.2m7.2-7.2a5.1 5.1 0 010 7.2"/></svg><span id="scan-label">Start scanning</span></button>
+    <button id="theme-mode" class="theme-control" type="button" aria-label="Switch to dark appearance" title="Switch to dark appearance"><svg class="theme-icon-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.4 1.4m11.2 11.2L19 19M5 19l1.4-1.4M17.6 6.4L19 5"/></svg><svg class="theme-icon-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20.5 13A8.5 8.5 0 0 1 11 3.5 8.5 8.5 0 1 0 20.5 13"/></svg></button>
+  </header>
+  <main id="main-content" tabindex="-1">
+    <h1 id="page-title" class="sr-only">Gattelier</h1>
+    <nav class="workspace-navigation" aria-label="Workspace">
+      <div class="workspace-tabs" role="tablist" aria-label="Workspace views">
+        <button id="tab-discover" type="button" role="tab" aria-selected="true" aria-controls="view-discover" data-view="discover"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4"/><path d="M12 12l6-6"/><circle cx="12" cy="12" r=".7"/></svg><span>Discover</span></button>
+        <button id="tab-apps" type="button" role="tab" aria-selected="false" aria-controls="view-apps" data-view="apps" tabindex="-1"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/></svg><span>Apps</span></button>
+        <button id="tab-workbench" type="button" role="tab" aria-selected="false" aria-controls="view-workbench" data-view="workbench" tabindex="-1"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="M7 9l3 3-3 3m6 0h4"/></svg><span>Workbench</span></button>
+        <button id="tab-insights" type="button" role="tab" aria-selected="false" aria-controls="view-insights" data-view="insights" tabindex="-1"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 19V9m7 10V4m7 15v-7"/></svg><span>Insights</span></button>
+        <button id="tab-settings" type="button" role="tab" aria-selected="false" aria-controls="view-settings" data-view="settings" tabindex="-1"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h8m4 0h4M4 17h3m4 0h9"/><circle cx="14" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></svg><span>Settings</span></button>
+      </div>
+      <div class="network"><span id="network-dot" class="dot"></span><span id="network">Connecting to board</span></div>
+    </nav>
+    <div id="notice" class="notice" role="alert" hidden><span id="notice-text"></span><button id="retry" class="button quiet" type="button">Retry</button></div>
+    <section id="view-discover" class="workspace-view" role="tabpanel" aria-labelledby="tab-discover" tabindex="0">
+      <div class="workspace">
+        <section class="panel discovery" aria-labelledby="nearby-title">
+          <div class="panel-heading"><div><h2 id="nearby-title">Devices <span id="count" class="count">0</span></h2><p id="scan-status" role="status">Waiting for board</p></div><span id="scan-indicator" class="activity" hidden aria-hidden="true"></span></div>
+          <div class="search-wrap"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M16 16l5 5"/></svg><input id="search" type="search" placeholder="Name, address or vendor" aria-label="Search devices by name, address or vendor" autocomplete="off" spellcheck="false"></div>
+          <div class="discovery-options">
+            <label>Source<select id="filter-source"><option value="live">Live devices</option><option value="all">Browser history</option><option value="history">Previously seen only</option></select></label>
+            <label>Sort by<select id="sort"><option value="strength">Strongest signal</option><option value="recent">Recently seen</option><option value="name">Name</option><option value="first">First seen</option><option value="observations">Most observations</option></select></label>
+          </div>
+          <details class="device-filters">
+            <summary><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h8m4 0h4M4 17h3m4 0h9"/><circle cx="14" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></svg><span>Filters</span><span class="disclosure-chevron" aria-hidden="true">⌄</span></summary>
+            <div class="filter-grid">
+              <label>Signal<select id="filter-signal"><option value="all">Any signal</option><option value="-50">At least -50 dBm</option><option value="-65">At least -65 dBm</option><option value="-80">At least -80 dBm</option><option value="-95">At least -95 dBm</option></select></label>
+              <label>Last seen<select id="filter-last-seen"><option value="all">Any time</option><option value="15">Last 15 seconds</option><option value="60">Last minute</option><option value="300">Last 5 minutes</option><option value="3600">Last hour</option></select></label>
+              <label>Device kind<select id="filter-kind"><option value="all">All kinds</option><option value="tracker">Trackers</option><option value="medical">Medical</option><option value="sleep">Sleep</option><option value="recorder">Recorders</option><option value="beacon">Beacons</option><option value="sensor">Sensors</option><option value="other">Other</option></select></label>
+              <label>Connection<select id="filter-connectable"><option value="all">Any availability</option><option value="yes">Connectable</option><option value="no">Broadcast only</option></select></label>
+              <label class="filter-check"><input id="filter-favorites" type="checkbox">Favorites only</label>
+              <button id="reset-filters" class="button quiet" type="button">Reset filters</button>
+            </div>
+          </details>
+          <p id="history-status" class="history-status" role="status">Waiting for device history</p>
+          <div id="devices" class="devices" tabindex="-1"><div class="empty compact"><span class="empty-symbol" aria-hidden="true">◎</span><h3>Listening starts here.</h3><p>Nearby advertising devices appear as your board discovers them.</p></div></div>
+          <div class="panel-foot"><span id="list-summary">No devices yet</span><span id="vendor-status" role="status">Loading vendor database…</span></div>
+        </section>
+        <section class="panel inspector" aria-labelledby="inspector-title">
+          <div class="panel-heading"><div><h2 id="inspector-title">Device inspector</h2><p>Advertisement &amp; GATT services</p></div><span id="connection-badge" class="badge">No device selected</span></div>
+          <div id="inspector"><div class="empty inspector-empty"><span class="inspect-symbol" aria-hidden="true"><svg viewBox="0 0 48 48"><rect x="13" y="5" width="22" height="38" rx="6"/><path d="M20 10h8M22 37h4M20 19l8 10-4 4V15l4 4-8 10"/></svg></span><h3>Select a device.</h3><p>Inspect its advertisement, connect to its services, and explore the data it shares.</p></div></div>
+        </section>
+      </div>
+    </section>
+    <section id="view-insights" class="workspace-view" role="tabpanel" aria-labelledby="tab-insights" tabindex="0" hidden>
+      <div class="view-heading"><div><h2>Device insights</h2><p>Patterns in the devices your board has observed.</p></div></div>
+      <div id="insights-content" class="insights-content"><div class="panel empty view-empty"><span class="empty-symbol" aria-hidden="true">◴</span><h3>Your observations, in context.</h3><p>Discover nearby devices to build a picture of activity, signal strength, and device kinds.</p></div></div>
+    </section>
+    <section id="view-device" class="workspace-view" role="region" aria-label="Device page" tabindex="0" hidden>
+      <button id="device-back" class="button quiet back-button" type="button"><span aria-hidden="true">&larr;</span> Devices</button>
+      <div id="device-content"></div>
+    </section>
+    <section id="view-apps" class="workspace-view" role="tabpanel" aria-labelledby="tab-apps" tabindex="0" hidden>
+      <div id="apps-heading" class="view-heading"><div><h2>Apps &amp; modules</h2><p>Tools matched to your devices, with access to the full app catalog.</p></div></div>
+      <div id="apps-catalog" class="apps-catalog"></div>
+      <div id="module-content" hidden>
+        <button id="apps-back" class="button quiet back-button" type="button"><span aria-hidden="true">&larr;</span> All apps</button>
+        <div class="view-heading"><div><h2 id="module-title">App</h2><p id="recorder-context">Choose a matching device from Discover or the app catalog.</p></div></div>
+        <div id="module-connection" class="module-connection"></div>
+        <section id="plaud-panel" class="panel lab-panel" aria-label="PLAUD app" hidden></section>
+        <section id="pocket-panel" class="panel lab-panel" aria-label="Pocket app" hidden></section>
+        <section id="sleep-panel" class="panel lab-panel" aria-label="Sleep Number app" hidden></section>
+        <section id="radiacode-panel" class="panel lab-panel" aria-label="RadiaCode app" hidden></section>
+      </div>
+    </section>
+    <section id="view-workbench" class="workspace-view" role="tabpanel" aria-labelledby="tab-workbench" tabindex="0" hidden>
+      <div class="view-heading"><div><h2>Workbench</h2><p>Send commands, inspect packets, and export captures.</p></div><div class="subnav" role="tablist" aria-label="Workbench tool">
+        <button id="tool-command" type="button" role="tab" aria-selected="true" aria-controls="command-panel" data-tool="command">Commands</button>
+        <button id="tool-traffic" type="button" role="tab" aria-selected="false" aria-controls="traffic-panel" data-tool="traffic" tabindex="-1">Traffic</button>
+        <button id="tool-snapshots" type="button" role="tab" aria-selected="false" aria-controls="snapshots-panel" data-tool="snapshots" tabindex="-1">Snapshots</button>
+        <button id="tool-recipes" type="button" role="tab" aria-selected="false" aria-controls="recipes-panel" data-tool="recipes" tabindex="-1">Recipes</button>
+        <button id="tool-guide" type="button" role="tab" aria-selected="false" aria-controls="guide-panel" data-tool="guide" tabindex="-1">Guide</button>
+      </div></div>
+      <section id="command-panel" class="panel lab-panel" role="tabpanel" aria-labelledby="tool-command" tabindex="0"></section>
+      <section id="traffic-panel" class="panel lab-panel" role="tabpanel" aria-labelledby="tool-traffic" tabindex="0" hidden></section>
+      <section id="snapshots-panel" class="panel lab-panel" role="tabpanel" aria-labelledby="tool-snapshots" tabindex="0" hidden></section>
+      <section id="recipes-panel" class="panel lab-panel" role="tabpanel" aria-labelledby="tool-recipes" tabindex="0" hidden></section>
+      <section id="guide-panel" class="panel lab-panel" role="tabpanel" aria-labelledby="tool-guide" tabindex="0" hidden></section>
+    </section>
+    <section id="view-settings" class="workspace-view" role="tabpanel" aria-labelledby="tab-settings" tabindex="0" hidden>
+      <div class="view-heading"><div><h2>Workspace settings</h2><p>Control what this browser remembers and collects.</p></div></div>
+      <div class="settings-layout">
+        <section id="api-panel" class="panel" aria-label="Board connection"></section>
+        <section id="network-panel" class="panel" aria-label="Wi-Fi and hotspot settings"></section>
+        <section id="credentials-panel" class="panel" aria-label="Saved credentials"></section>
+        <section id="usb-panel" class="panel" aria-label="USB controller"></section>
+        <section id="pwa-panel" class="panel" aria-label="Offline app"></section>
+        <section id="collection-panel" class="panel" aria-label="Onboard collection"></section>
+        <section class="panel settings-card" aria-labelledby="history-settings-title">
+          <div class="panel-heading"><div><h2 id="history-settings-title">History &amp; collection</h2><p id="storage-status" role="status">Checking browser storage…</p></div></div>
+          <label class="setting-row" for="persist-history"><span><strong>Remember device history</strong><small>Keep observations and favorites in this browser between visits.</small></span><input id="persist-history" class="setting-switch" type="checkbox" role="switch"></label>
+          <label class="setting-row" for="background-scan"><span><strong>Collect in the background</strong><small>Continue polling the board while another browser tab or app is active.</small></span><input id="background-scan" class="setting-switch" type="checkbox" role="switch"></label>
+          <label class="setting-row"><span><strong>Import discovery history</strong><small>Merge a discovery export with this browser.</small></span><input id="import-history" type="file" accept=".json,application/json" aria-label="Import discovery history"></label>
+          <p id="history-import-status" class="vendor-note" role="status"></p>
+          <div class="settings-actions"><button id="export-history" class="button secondary" type="button">Export history</button><button id="clear-history" class="button destructive" type="button">Clear saved history</button></div>
+        </section>
+        <aside class="panel settings-explainer" aria-labelledby="collection-title">
+          <span class="settings-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="14" rx="3"/><path d="M8 9h8m-8 4h5"/></svg></span>
+          <h2 id="collection-title">Your board scans. This tab collects.</h2>
+          <p>The NanoC6 scans Bluetooth devices. API scan collection keeps history, matching, sorting, and signal analysis in this browser. Use Source to switch between live devices and browser history.</p>
+          <p>All live devices are retained. Browser history retains up to 10,000 older addresses and reports evictions. Address changes remain separate observations.</p>
+          <p>Keep the page open to collect data. Browsers reduce background polling; keep this tab visible for high-rate captures.</p>
+          <p>Storage belongs to this browser and address. Use nanoscope.local consistently; export and import history when switching to the hotspot address or another browser.</p>
+          <p>Recorder credentials are saved separately in browser local storage. Use Saved credentials to back up or restore recorder access.</p>
+        </aside>
+      </div>
+    </section>
+    <footer><span>NanoC6 <span aria-hidden="true">·</span> Local Bluetooth workspace</span><span id="board-status">Waiting for board</span></footer>
+  </main>
+</body>
+</html>

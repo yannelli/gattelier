@@ -1,0 +1,25 @@
+{
+  "id": "/",
+  "name": "Gattelier",
+  "short_name": "Gattelier",
+  "description": "Inspect Bluetooth devices and save captures with an M5Stack NanoC6.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f5f5f7",
+  "theme_color": "#f5f5f7",
+  "icons": [
+    {
+      "src": "/icons/nanoscope-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/nanoscope-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

@@ -1,0 +1,46 @@
+.radiacode-body { padding: 0 24px 24px; }
+.radiacode-device { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 2px 0 20px; }
+.radiacode-device > div { min-width: 0; }
+.radiacode-device h3 { font-size: 19px; font-weight: 600; letter-spacing: -.4px; overflow-wrap: anywhere; }
+.radiacode-device p { margin-top: 4px; color: var(--muted); font-size: 11px; }
+.radiacode-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.radiacode-actions .button { min-height: 40px; padding: 9px 14px; font-size: 12px; border-radius: 9px; }
+.radiacode-actions .secondary { background: transparent; color: var(--muted); border: 1px solid var(--line); }
+.radiacode-actions .secondary:hover:enabled { color: var(--text); background: var(--surface-secondary); }
+.radiacode-status { display: flex; align-items: baseline; gap: 7px; margin: 12px 0 0; font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+.radiacode-status::before { content: ''; display: block; flex: 0 0 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.radiacode-status[data-state="success"] { color: var(--success); }
+.radiacode-status[data-state="error"] { color: var(--warning-text); }
+.radiacode-status[data-state="reading"] { color: var(--accent); }
+.radiacode-empty { margin-top: 24px; padding: 28px 20px; text-align: center; border: 1px dashed var(--line); border-radius: 12px; }
+.radiacode-empty h3 { font-size: 14px; font-weight: 600; }
+.radiacode-empty p { max-width: 340px; margin: 7px auto 0; color: var(--muted); font-size: 12px; line-height: 1.7; }
+.radiacode-results { display: grid; gap: 24px; margin-top: 24px; }
+.radiacode-result-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.radiacode-result-heading h3 { font-size: 13px; font-weight: 600; }
+.radiacode-result-heading time { color: var(--muted); font-size: 10px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.radiacode-fields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 0; }
+.radiacode-field { min-width: 0; padding: 14px 16px; border: 1px solid var(--line); border-radius: 11px; }
+.radiacode-field dt { font-size: 11px; margin-bottom: 7px; }
+.radiacode-field dd { font-size: 14px; font-weight: 550; font-variant-numeric: tabular-nums; }
+.radiacode-result-measurements .radiacode-field { background: var(--surface-secondary); border-color: transparent; }
+.radiacode-result-measurements dd { display: flex; flex-wrap: wrap; align-items: baseline; gap: 5px; font-size: clamp(21px, 2.7vw, 30px); line-height: 1.25; font-weight: 600; letter-spacing: -.5px; }
+.radiacode-unit { color: var(--muted); font-size: 12px; font-weight: 400; letter-spacing: 0; }
+.radiacode-result-status .radiacode-fields { grid-template-columns: minmax(0, 1fr); }
+.radiacode-note { margin-top: 10px; color: var(--muted); font-size: 11px; line-height: 1.6; }
+.radiacode-help { margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--line); font-size: 11px; color: var(--muted); }
+.radiacode-help summary { width: fit-content; cursor: pointer; font-size: 12px; }
+.radiacode-help p { max-width: 640px; margin: 10px 0 8px; line-height: 1.7; }
+.radiacode-help a { color: var(--accent); }
+@media (max-width: 680px) {
+  .radiacode-body { padding: 0 18px 18px; }
+  .radiacode-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
+  .radiacode-field { padding: 12px; }
+  .radiacode-result-identity .radiacode-fields { grid-template-columns: minmax(0, 1fr); }
+  .radiacode-actions .button { min-height: 44px; }
+  .radiacode-device { align-items: flex-start; }
+}
+@media (max-width: 380px) {
+  .radiacode-actions .primary { width: 100%; }
+  .radiacode-actions .secondary { flex: 1; }
+}

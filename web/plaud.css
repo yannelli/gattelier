@@ -1,0 +1,20 @@
+.plaud-body { padding: 0 24px 24px; }
+.plaud-body > * + * { margin-top: 14px; }
+.plaud-file-label { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; color: var(--muted); font-size: 11px; }
+.plaud-file-label input { width: min(100%, 420px); padding: 10px 12px; font-size: 12px; }
+.plaud-credentials { font: 11px/1.7 var(--mono); overflow-wrap: anywhere; color: var(--muted); }
+.plaud-controls { display: flex; flex-wrap: wrap; gap: 10px; }
+.plaud-status { font-size: 12px; line-height: 1.7; color: var(--muted); overflow-wrap: anywhere; }
+.plaud-status.error { color: var(--warning-text); }
+.plaud-recording { display: flex; justify-content: space-between; align-items: center; gap: 14px; padding: 14px 0; border-top: 1px solid var(--line); }
+.plaud-recording strong { font-size: 13px; font-weight: 600; }
+.plaud-recording small { display: block; color: var(--muted); font-size: 11px; margin-top: 4px; }
+.plaud-progress { font: 11px/1.7 var(--mono); color: var(--muted); overflow-wrap: anywhere; }
+.plaud-body progress { display: block; width: 100%; height: 8px; accent-color: var(--accent); border: 0; border-radius: 8px; overflow: hidden; background: var(--surface-secondary); }
+.plaud-body progress::-webkit-progress-bar { background: var(--surface-secondary); }
+.plaud-body progress::-webkit-progress-value { background: var(--accent); }
+@media (max-width: 680px) {
+  .plaud-body { padding: 0 18px 18px; }
+  .plaud-controls .button { flex: 1; }
+  .plaud-file-label input { width: 100%; }
+}

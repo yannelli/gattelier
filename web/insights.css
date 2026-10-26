@@ -1,0 +1,23 @@
+.device-personal,.inspector-shortcuts { display:flex; gap:8px; margin:0 0 18px; flex-wrap:wrap; }
+.device-personal input { padding:10px 12px; flex:1; min-width:130px; }
+.raw-details { border-top:1px solid var(--line); padding:14px 0; }
+.raw-details summary { cursor:pointer; color:var(--muted); font-weight:600; }
+.insights-intro,.insights-device { margin-bottom:20px; }
+.insights-intro h2,.insights-device h2 { margin-bottom:6px; }
+.profile-catalog { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; margin-bottom:28px; }
+.profile-tool { appearance:none; text-align:left; border:1px solid var(--line); border-radius:var(--radius-small); background:var(--surface); color:var(--text); padding:18px; display:flex; flex-direction:column; gap:7px; font:inherit; }
+.profile-tool:hover { border-color:var(--accent); background:var(--accent-soft); }
+.profile-tool strong { font-size:15px; }
+.profile-tool>span:last-child { font-size:12px; color:var(--muted); }
+.profile-tool .eyebrow { font-size:9px; margin:0; }
+.profile-card,.signal-card,.tracker-list { padding:20px; border:1px solid var(--line); border-radius:var(--radius-small); background:var(--surface); margin-bottom:16px; }
+.profile-card h3,.signal-card h3,.tracker-list h3 { font-size:15px; margin:0 0 8px; }
+.profile-card .metadata { margin-top:14px; padding:14px 0; }
+.profile-evidence { margin:12px 0; padding-left:18px; color:var(--muted); font-size:12px; }
+.profile-sources { display:flex; gap:12px; flex-wrap:wrap; margin-top:12px; }
+.profile-sources a { color:var(--accent); font-size:11px; text-decoration:none; }
+.signal-card svg { display:block; width:100%; height:140px; stroke:var(--accent); stroke-width:2; margin:14px 0; }
+.signal-summary { color:var(--muted); font:11px var(--mono); }
+.tracker-row { display:block; width:100%; text-align:left; color:var(--text); background:var(--surface-secondary); padding:12px; border:0; border-radius:8px; margin:8px 0; font:12px var(--font); overflow-wrap:anywhere; }
+@media(max-width:700px) { .profile-catalog { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+@media(max-width:420px) { .profile-catalog { grid-template-columns:1fr; } .profile-card,.signal-card { padding:16px; } }

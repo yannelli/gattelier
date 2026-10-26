@@ -1,0 +1,53 @@
+.lab-panel { margin-top: 22px; }
+.lab-body { padding: 0 24px 24px; }
+.lab-body label { display: flex; flex-direction: column; gap: 6px; color: var(--muted); font-size: 11px; min-width: 0; }
+.lab-body input, .lab-body select, .lab-body textarea { color: var(--text); background: var(--surface-secondary); border: 1px solid var(--line); border-radius: 9px; min-height: 44px; width: 100%; padding: 10px 12px; font: 12px/1.5 var(--font); }
+.lab-body select { text-overflow: ellipsis; }
+.lab-body textarea { font-family: var(--mono); resize: vertical; }
+.lab-body select:disabled { opacity: .55; }
+.console-grid, .traffic-filters { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
+.lab-body .payload-label { margin: 18px 0 6px; }
+.console-footer { display: flex; justify-content: space-between; gap: 16px; align-items: center; margin-top: 10px; }
+.history-row { display: flex; align-items: end; gap: 12px; margin-top: 18px; }
+.history-row label { flex: 1; }
+.lab-status { color: var(--muted); font-size: 11px; line-height: 1.7; margin: 14px 0; overflow-wrap: anywhere; }
+.lab-status.error { color: var(--warning-text); }
+.lab-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.lab-actions .button { font-size: 11px; padding: 8px 12px; }
+.descriptor-list, .advertisement-raw { margin-top: 10px; }
+.descriptor-list summary, .advertisement-raw summary { cursor: pointer; min-height: 44px; padding: 12px 0; color: var(--muted); font-size: 11px; }
+.descriptor-list p { padding: 7px 0; }
+.advertisement-tools { padding: 14px 0 0; border-top: 1px solid var(--line); }
+.advertisement-raw pre { padding: 12px; border-radius: 8px; background: var(--surface-secondary); overflow-wrap: anywhere; }
+.table-scroll { overflow: auto; max-width: 100%; border: 1px solid var(--line); border-radius: 10px; }
+.traffic-scroll { max-height: 460px; }
+.traffic-table, .byte-table { width: 100%; border-collapse: collapse; font-size: 11px; text-align: left; }
+.traffic-table thead { position: sticky; top: 0; background: var(--surface-secondary); z-index: 1; }
+.traffic-table th, .byte-table th { color: var(--muted); font-size: 10px; font-weight: 550; padding: 11px 10px; white-space: nowrap; }
+.traffic-table td, .byte-table td { padding: 6px 10px; border-top: 1px solid var(--line); vertical-align: middle; }
+.traffic-table tr.selected { background: var(--accent-soft); }
+.traffic-table tr.packet-warning { color: var(--warning-text); }
+.packet-select { min-height: 44px; border: 0; background: transparent; color: var(--accent); padding: 8px 0; font: 11px var(--mono); cursor: pointer; }
+.packet-direction { font: 10px var(--mono); }
+.packet-payload, .packet-ascii { font: 10px var(--mono); max-width: 330px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.packet-ascii { max-width: 160px; }
+#traffic-count { margin-top: 8px; }
+.traffic-exports { display: flex; flex-wrap: wrap; align-items: end; gap: 10px; margin: 20px 0 10px; }
+.traffic-exports label { flex: 1; min-width: 220px; }
+.traffic-exports .button { font-size: 11px; }
+.decoder-heading { display: flex; align-items: center; justify-content: space-between; gap: 18px; border-top: 1px solid var(--line); margin-top: 24px; padding: 20px 0 14px; }
+.decoder-heading h3 { font-size: 13px; font-weight: 600; overflow-wrap: anywhere; }
+.decoder-heading label { width: 105px; flex-shrink: 0; }
+.byte-table .mono { white-space: pre; font-size: 11px; }
+.decode-values { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; padding: 16px; border-radius: 10px; background: var(--surface-secondary); }
+.decode-values dt { font-size: 10px; }
+.decode-values dd { overflow-wrap: anywhere; }
+@media (max-width: 680px) {
+  .lab-body { padding: 0 18px 18px; }
+  .console-grid, .traffic-filters { grid-template-columns: minmax(0, 1fr); }
+  .console-footer, .history-row { align-items: stretch; flex-direction: column; }
+  .lab-body input, .lab-body select, .lab-body textarea { font-size: 16px; }
+  .traffic-exports label { flex-basis: 100%; }
+  .traffic-exports .button { flex: 1; }
+  .decode-values { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}

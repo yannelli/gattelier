@@ -1,0 +1,11 @@
+.pocket-body { padding: 0 24px 24px; }
+.pocket-body > * + * { margin-top: 14px; }
+.pocket-controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.pocket-controls input { padding: 10px 12px; width: min(100%, 290px); }
+.pocket-controls input[type="file"] { font-size: 11px; width: 260px; }
+.pocket-controls select { min-height: 44px; max-width: 100%; padding: 8px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-secondary); color: var(--text); }
+.pocket-file { display: flex; gap: 12px; align-items: center; justify-content: space-between; border-top: 1px solid var(--line); padding: 12px 0; }
+.pocket-file strong { font: 12px var(--mono); overflow-wrap: anywhere; }
+.pocket-file small { display: block; color: var(--muted); margin-top: 5px; }
+.pocket-progress { font: 12px var(--mono); color: var(--muted); }
+@media (max-width: 680px) { .pocket-body { padding: 0 18px 18px; } .pocket-controls { align-items: stretch; } }

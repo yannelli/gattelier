@@ -1,0 +1,79 @@
+'use strict';
+
+const NanoConnection = (() => {
+  const address = device => String(device?.address || '').toLowerCase();
+  const same = (a, b) => address(a) === address(b) && a?.addressType === b?.addressType;
+  const name = device => device?.label || device?.name || device?.address || 'Device';
+  let hooks, inFlight = false;
+  function snapshot() {
+    return { state: hooks.state(), selected: hooks.selected(), online: hooks.online(), pending: hooks.pending() || inFlight };
+  }
+  function connectedDevice(context = snapshot()) {
+    if (!context.state.ble.connected) return null;
+    const target = context.state.ble.address?.toLowerCase();
+    return (hooks?.devices() || context.state.devices || []).find(item => address(item) === target)
+      || (address(context.selected) === target ? context.selected : null) || { address: target, name: target };
+  }
+  function describe(device, context = snapshot()) {
+    const ble = context.state.ble || {}, connected = Boolean(device && ble.connected && address(device) === String(ble.address).toLowerCase());
+    const live = (context.state.devices || []).find(item => same(item, device));
+    const result = { connected, live, enabled: false, label: connected ? 'Disconnect' : 'Connect', status: connected ? 'Connected' : 'Disconnected', reason: '' };
+    if (!device) return { ...result, status: 'No device selected', reason: 'Select a device in Discover.' };
+    if (!context.online) return { ...result, status: 'Board offline', reason: 'Reconnect to Gattelier to check the connection.' };
+    if (context.state.usb?.mode === 'hci') return { ...result, status: 'USB controller mode', reason: 'Restore Bluetooth workbench mode in Settings to connect from this page.' };
+    if (context.pending || ble.busy) return { ...result, status: connected ? 'Connected' : 'Working', reason: `${ble.operation || 'Bluetooth operation'} in progress…` };
+    if (connected) return { ...result, enabled: true, reason: context.state.security?.active ? 'Pairing needs attention in Security.' : 'Services and apps use this connection.' };
+    if ((live || device).connectable === false) return { ...result, status: 'Broadcast only', reason: 'This advertisement does not accept a BLE connection.' };
+    if (!/^(?:[0-9a-f]{2}:){5}[0-9a-f]{2}$/.test(address(device)) || !Number.isInteger(device.addressType) || device.addressType < 0 || device.addressType > 3) return { ...result, reason: 'This record has no usable Bluetooth address type.' };
+    if (ble.connected) return { ...result, enabled: true, label: 'Switch and connect', status: 'Another device connected', reason: `Disconnects ${name(connectedDevice(context))} and connects this device.` };
+    return { ...result, enabled: true, label: live ? 'Connect' : 'Try known address', status: live ? 'Available' : 'Saved device', reason: live ? 'Ready to connect.' : 'Not in the current scan. Try its saved address; private addresses can change.' };
+  }
+  async function ensure(device) {
+    if (inFlight) throw new Error('A connection change is already running.');
+    inFlight = true; hooks.changed();
+    try {
+      await hooks.refresh();
+      const context = { ...snapshot(), pending: hooks.pending() }, status = describe(device, context);
+      if (status.connected && context.online && !context.pending && !context.state.ble.busy) return context.state;
+      if (!status.enabled) throw new Error(status.reason);
+      hooks.select(device); hooks.changed();
+      if (context.state.ble.connected) await hooks.action('disconnect');
+      const current = snapshot().state;
+      if (current.ble.connected) throw new Error('The current device did not disconnect.');
+      const live = (current.devices || []).find(item => same(item, device));
+      const body = live ? { id: live.id } : { address: address(device), addressType: device.addressType };
+      if (!live && hooks.recorder?.(device)?.product.includes('PLAUD')) body.scope = 'plaud';
+      const result = await hooks.action('connect', body);
+      if (!result.ble.connected || String(result.ble.address).toLowerCase() !== address(device)) throw new Error(result.ble.error || 'The device did not establish a connection. Try again.');
+      return result;
+    } finally { inFlight = false; hooks.changed(); }
+  }
+  async function disconnect() {
+    if (inFlight) throw new Error('A connection change is already running.');
+    inFlight = true; hooks.changed();
+    try {
+      await hooks.refresh();
+      const context = { ...snapshot(), pending: hooks.pending() }, status = describe(connectedDevice(context), context);
+      if (!status.connected) throw new Error('No device is connected.');
+      if (!status.enabled) throw new Error(status.reason);
+      return await hooks.action('disconnect');
+    }
+    finally { inFlight = false; hooks.changed(); }
+  }
+  async function perform(device) {
+    hooks.notice('');
+    try { if (describe(device).connected) await disconnect(); else await ensure(device); }
+    catch (error) { hooks.notice(error.message); }
+    finally { hooks.changed(); }
+  }
+  function controls(device, focus = 'connection') {
+    const status = describe(device), root = document.createElement('div'); root.className = 'connection-controls';
+    const info = document.createElement('div'), label = document.createElement('strong'), reason = document.createElement('p');
+    label.textContent = status.status; reason.textContent = status.reason; reason.className = 'hint'; info.append(label, reason);
+    const action = document.createElement('button'); action.type = 'button'; action.className = `button ${status.connected ? 'secondary' : 'primary'}`;
+    action.textContent = status.label; action.disabled = !status.enabled; action.title = status.reason; action.dataset.focus = focus;
+    action.addEventListener('click', () => perform(device)); root.append(info, action); return root;
+  }
+  return { init(options) { hooks = options; }, snapshot, describe, connectedDevice, ensure, disconnect, perform, controls };
+})();
+if (typeof module !== 'undefined') module.exports = NanoConnection;
