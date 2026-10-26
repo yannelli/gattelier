@@ -203,7 +203,7 @@ test('stream reports overwritten advertisements and reboots without deleting bro
   store.resetStream(); assert.ok(store.devices().every(item => !item.streamLive && item.liveId === null));
 });
 test('malformed stream records leave the cursor and history unchanged', async () => {
-  const store = create({ storage: null }); await store.init(); store.ingestAdvertisements(streamBatch([streamed(1)]), 1000000);
+  const store = create({ storage: null, now: () => 1000000 }); await store.init(); store.ingestAdvertisements(streamBatch([streamed(1)]), 1000000);
   const before = store.exportData();
   assert.throws(() => store.ingestAdvertisements(streamBatch([streamed(2, { address: 'bad' })])), /Invalid/);
   assert.equal(store.status().stream.cursor, 1); assert.deepEqual(store.exportData(), before);
