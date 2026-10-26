@@ -97,6 +97,32 @@ static void submit(Action action, const char* argument = nullptr) {
   cJSON_Delete(json);
   String error;
   if (!queueCommand(command, error)) { sendError(409, error); return; }
+  if (action == Action::Connect) {
+    String accepted;
+    { StateLock lock; accepted = "{\"ok\":true,\"connectionAttempt\":" + String(state.connectionAttempt) + ",\"address\":\"" + state.address + "\",\"addressType\":" + String(state.addressType) + "}"; }
+    server.send(202, "application/json", accepted);
+  } else server.send(202, "application/json", "{\"ok\":true}");
+}
+
+static void cancelConnectRequest() {
+  server.sendHeader("Cache-Control", "no-store");
+  if (!allowedHttpOrigin(server)) { sendError(403, "Open Gattelier directly to control this board."); return; }
+  if (!server.header("Content-Type").startsWith("application/json")) { sendError(415, "Expected application/json."); return; }
+  const String body = server.arg("plain");
+  if (body.length() > 160) { sendError(413, "Request is too large."); return; }
+  auto json = cJSON_Parse(body.c_str());
+  auto address = cJSON_GetObjectItemCaseSensitive(json, "address");
+  auto type = cJSON_GetObjectItemCaseSensitive(json, "addressType");
+  auto attempt = cJSON_GetObjectItemCaseSensitive(json, "connectionAttempt");
+  bool valid = cJSON_IsObject(json) && cJSON_IsString(address) && strlen(address->valuestring) == 17 && cJSON_IsNumber(type) &&
+    type->valuedouble >= 0 && type->valuedouble <= 3 && std::floor(type->valuedouble) == type->valuedouble && cJSON_IsNumber(attempt) &&
+    attempt->valuedouble >= 1 && attempt->valuedouble <= 4294967295.0 && std::floor(attempt->valuedouble) == attempt->valuedouble;
+  for (size_t i = 0; valid && i < 17; ++i) valid = i % 3 == 2 ? address->valuestring[i] == ':' : isxdigit(address->valuestring[i]);
+  if (!valid) { cJSON_Delete(json); sendError(400, "Provide the connection attempt, address and addressType."); return; }
+  String error;
+  const bool accepted = cancelConnection(address->valuestring, uint8_t(type->valueint), uint32_t(attempt->valuedouble), error);
+  cJSON_Delete(json);
+  if (!accepted) { sendError(409, error); return; }
   server.send(202, "application/json", "{\"ok\":true}");
 }
 
@@ -126,6 +152,7 @@ void startHttp() {
   server.on("/api/scan", HTTP_POST, [] { submit(Action::Scan); });
   server.on("/api/stop-scan", HTTP_POST, [] { submit(Action::StopScan); });
   server.on("/api/connect", HTTP_POST, [] { submit(Action::Connect, "id"); });
+  server.on("/api/cancel-connect", HTTP_POST, cancelConnectRequest);
   server.on("/api/disconnect", HTTP_POST, [] { submit(Action::Disconnect); });
   server.on("/api/read", HTTP_POST, [] { submit(Action::Read, "handle"); });
   server.on("/api/write", HTTP_POST, [] { submit(Action::Write, "handle"); });
@@ -156,4 +183,4 @@ void startHttp() {
   server.begin();
 }
 
-void handleHttp() { server.handleClient(); }
+void handleHttp() { server.handleClient(); updateConnectionCancellation(); }

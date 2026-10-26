@@ -2,6 +2,7 @@
 #include "trace.h"
 
 static bool discoveryReady(NimBLEClient* client, String& error) {
+  if (connectionCancellationRequested()) { error = "Connection cancelled."; return false; }
   if (!client->isConnected()) {
     error = "Device disconnected during GATT discovery.";
     return false;
@@ -40,6 +41,7 @@ void discoverGatt(NimBLEClient* client, bool recorderOnly) {
   if (discoveryReady(client, error)) {
     recordTrace("discovery-progress", address, "", 0, nullptr, 0, recorderOnly ? "Discovering PLAUD service 0x1910" : "Discovering all services");
     if (recorderOnly && !client->getService(NimBLEUUID(uint16_t(0x1910)))) error = "PLAUD recorder service 0x1910 was not found.";
+    if (!discoveryReady(client, error)) return;
     const auto& services = client->getServices(!recorderOnly);
     for (auto service : services) {
       if (!discoveryReady(client, error)) break;

@@ -31,7 +31,7 @@ const NanoDevicePage = (() => {
     NanoPairing.update(state, online, device); renderHeader();
     if (NanoWorkspace.view() !== 'device') return;
     if (lastDevice !== selected) { lastDevice = selected; showTab('overview'); }
-    const next = JSON.stringify([device, connected, state.services, state.ble, online, NanoConnection.snapshot().pending]);
+    const next = JSON.stringify([device, connected, state.services, state.ble, online, NanoConnection.snapshot().pending, NanoMetadata.status()]);
     if (next === signature) return; signature = next;
     $('device-page-title').textContent = device?.label || device?.name || 'Device';
     replacePreservingFocus($('device-summary'), buildDeviceDetail(device, true));
@@ -44,7 +44,7 @@ const NanoDevicePage = (() => {
     $('device-signal').replaceChildren(...(device ? [NanoInsights.signalChart(device)] : []));
   }
   function renderHeader() {
-    const device = NanoConnection.connectedDevice() || selectedDevice(), status = NanoConnection.describe(device);
+    const device = NanoConnection.pendingDevice() || NanoConnection.connectedDevice() || selectedDevice(), status = NanoConnection.describe(device);
     const next = JSON.stringify([device?.address, device?.name, device?.label, status.status, status.reason, status.enabled, status.label, state.security?.status]);
     if (next === headerSignature) return; headerSignature = next;
     const menu = node('details', 'header-connection'); menu.open = Boolean($('header-device').querySelector('details')?.open);

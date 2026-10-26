@@ -20,6 +20,7 @@ The board address is `http://nanoscope.local`. Existing NanoScope storage keys a
 - Captured Dexcom G7 glucose/history, serial/firmware, sensor states, and estimated timestamps; direct G7 authentication remains unimplemented
 - Standard Bluetooth thermometer and environmental sensor recipes, plus BTHome energy, current, and CO2 decoding
 - Optional browser-cached supplemental metadata from `https://gattelier.ryanyannelli.com`
+- 743 standard UUID names, named descriptors and units, plus readable GATT feature flags, service-change ranges, connection parameters, and descriptor values
 - Metadata and investigation helpers for locks, ResMed devices, GE appliances, and Samsung TVs
 
 Gattelier does not include full TV or GE appliance control. [Device expansion research](docs/device-expansion.md) lists the next supported protocol paths and their source repositories.

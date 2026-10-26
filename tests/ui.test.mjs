@@ -45,6 +45,9 @@ test('standard UUID labels do not mislabel vendor UUIDs with matching prefixes',
   assert.equal(uuidName('0x2a00', 'Characteristic'), 'Device Name');
   assert.equal(uuidName('0000180F-0000-1000-8000-00805F9B34FB', 'Custom service'), 'Battery Service');
   assert.equal(uuidName('0000180f-1234-5678-8000-00805f9b34fb', 'Custom service'), 'Custom service');
+  assert.equal(uuidName('2bb1', 'Characteristic', '1910'), 'PLAUD commands');
+  assert.equal(uuidName('0x2bb0', 'Characteristic', '00001910-0000-1000-8000-00805f9b34fb'), 'PLAUD responses');
+  assert.equal(uuidName('2bb1', 'Characteristic', '1801'), 'Characteristic');
 });
 
 test('firmware operation states display their current progress', () => {

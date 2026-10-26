@@ -5,13 +5,73 @@
 #include "usb_hci.h"
 #include "collection.h"
 #include "activity_led.h"
+#include "connection_cancellation.h"
 #include <NimBLEDevice.h>
 #include <algorithm>
 #include <freertos/queue.h>
+#include <esp_random.h>
 
 static QueueHandle_t commands;
 static NimBLEClient* client;
 static uint32_t nextDeviceId = 1;
+static ConnectionCancellation connectionCancellation;
+static SemaphoreHandle_t cancellationMutex;
+static uint32_t lastCancellation = 0;
+static std::atomic<int> connectionOutcome{0};
+static std::atomic<uint32_t> startedAttempt{0};
+static std::atomic<bool> deferredCancellation{false}, connectionTimedOut{false};
+
+bool connectionCancellationRequested() { return connectionCancellation.requested(connectionCancellation.active()); }
+
+static void interruptConnection() {
+  if (client->getConnHandle() != BLE_HS_CONN_HANDLE_NONE) client->disconnect();
+  else client->cancelConnect();
+  lastCancellation = millis();
+}
+
+static bool connectionTornDown(uint32_t attempt) {
+  return startedAttempt.load() != attempt || (connectionOutcome.load() != 0 && client->getConnHandle() == BLE_HS_CONN_HANDLE_NONE);
+}
+
+static void finishCancellation(uint32_t attempt) {
+  {
+    StateLock lock;
+    state.connected = false;
+    state.services.clear();
+    state.error = connectionTimedOut.load() ? "Connection timed out." : "Connection cancelled.";
+    state.busy = false;
+    state.operation = "idle";
+  }
+  connectionCancellation.finish(attempt);
+  deferredCancellation.store(false);
+}
+
+bool cancelConnection(const String& address, uint8_t addressType, uint32_t attempt, String& error) {
+  if (!cancellationMutex) { error = "Bluetooth workbench is unavailable."; return false; }
+  if (xSemaphoreTake(cancellationMutex, 0) != pdTRUE) { error = "Connection cleanup is in progress. Check board status."; return false; }
+  bool accepted = false;
+  {
+    StateLock lock;
+    if (state.busy && state.connectionAttempt == attempt && state.address.equalsIgnoreCase(address) && state.addressType == addressType &&
+        (state.operation == "connecting" || state.operation == "discovering" || state.operation == "cancelling") && connectionCancellation.request(attempt)) {
+      state.operation = "cancelling";
+      accepted = true;
+    } else error = "This connection attempt is no longer active.";
+  }
+  if (accepted) interruptConnection();
+  xSemaphoreGive(cancellationMutex);
+  return accepted;
+}
+
+void updateConnectionCancellation() {
+  if (!cancellationMutex || !connectionCancellationRequested() || uint32_t(millis() - lastCancellation) < 25) return;
+  if (xSemaphoreTake(cancellationMutex, 0) != pdTRUE) return;
+  if (connectionCancellationRequested()) {
+    if (deferredCancellation.load() && connectionTornDown(connectionCancellation.active())) finishCancellation(connectionCancellation.active());
+    else interruptConnection();
+  }
+  xSemaphoreGive(cancellationMutex);
+}
 
 class ScanCallbacks : public NimBLEScanCallbacks {
   void onResult(const NimBLEAdvertisedDevice* advertised) override {
@@ -63,7 +123,8 @@ class ScanCallbacks : public NimBLEScanCallbacks {
 };
 
 class ClientCallbacks : public NimBLEClientCallbacks {
-  void onConnect(NimBLEClient* peer) override { auto info = peer->getConnInfo(); securityConnected(info); }
+  void onConnect(NimBLEClient* peer) override { auto info = peer->getConnInfo(); securityConnected(info); connectionOutcome.store(1); }
+  void onConnectFail(NimBLEClient*, int) override { connectionOutcome.store(-1); }
   void onPassKeyEntry(NimBLEConnInfo& info) override { securityPasskeyInput(info); }
   void onConfirmPasskey(NimBLEConnInfo& info, uint32_t pin) override { securityNumericComparison(info, pin); }
   uint32_t onPassKeyDisplay(NimBLEConnInfo& info) override { return securityPasskeyDisplay(info); }
@@ -74,12 +135,13 @@ class ClientCallbacks : public NimBLEClientCallbacks {
     recordTrace("mtu", peer->getPeerAddress().toString().c_str(), "", 0, nullptr, 0, "Negotiated MTU " + String(mtu));
   }
   void onDisconnect(NimBLEClient*, int reason) override {
+    connectionOutcome.store(-1);
     securityDisconnected();
     StateLock lock;
     recordTrace("disconnect", state.address, "", 0, nullptr, 0, "BLE reason " + String(reason));
     state.connected = false;
     state.services.clear();
-    if (state.operation != "disconnecting") state.error = "Device disconnected (BLE code " + String(reason) + ").";
+    if (state.operation != "disconnecting" && state.operation != "cancelling") state.error = "Device disconnected (BLE code " + String(reason) + ").";
   }
 };
 
@@ -128,31 +190,47 @@ static void maintainScan() {
 }
 
 static void connectDevice(const Command& command) {
+  if (connectionCancellation.requested(command.connectionAttempt)) return;
   scanDevices(false);
   DeviceInfo device;
   {
     StateLock lock;
     for (const auto& candidate : state.devices) if (candidate.id == command.argument) device = candidate;
-    if (!command.argument) { device.address = reinterpret_cast<const char*>(command.data); device.addressType = command.mode; }
+    device.address = reinterpret_cast<const char*>(command.data); device.addressType = command.mode;
     state.address = device.address;
     state.services.clear();
   }
   bool recorderOnly = command.length == 1 || std::find(device.services.begin(), device.services.end(), String("0x504c")) != device.services.end();
-  if (device.address.length() != 17 || !client->connect(NimBLEAddress(device.address.c_str(), device.addressType), true, false, false)) {
+  if (connectionCancellation.requested(command.connectionAttempt)) return;
+  connectionOutcome.store(0);
+  connectionTimedOut.store(false);
+  startedAttempt.store(command.connectionAttempt);
+  const bool started = device.address.length() == 17 && client->connect(NimBLEAddress(device.address.c_str(), device.addressType), true, true, false);
+  if (!started) connectionOutcome.store(-1);
+  const uint32_t began = millis();
+  while (started && connectionOutcome.load() == 0 && !connectionCancellation.requested(command.connectionAttempt) && uint32_t(millis() - began) < 35000) vTaskDelay(pdMS_TO_TICKS(10));
+  if (started && connectionOutcome.load() == 0 && !connectionCancellation.requested(command.connectionAttempt)) {
+    connectionTimedOut.store(true);
+    connectionCancellation.request(command.connectionAttempt);
+    StateLock lock; state.operation = "cancelling";
+  }
+  if (connectionCancellation.requested(command.connectionAttempt)) return;
+  if (!started || connectionOutcome.load() != 1 || !client->isConnected()) {
     StateLock lock;
     state.error = "Connection failed (BLE code " + String(client->getLastError()) + "). Retry using this device's known address.";
     return;
   }
+  if (connectionCancellation.requested(command.connectionAttempt)) return;
   {
     StateLock lock;
     state.connected = true;
     for (auto& candidate : state.devices) if (candidate.address == device.address && candidate.addressType == device.addressType) candidate.remembered = true;
-    state.operation = "discovering";
+    if (!connectionCancellation.requested(command.connectionAttempt)) state.operation = "discovering";
     state.discoveryScope = recorderOnly ? "PLAUD recorder service 0x1910" : "all services";
   }
   recordTrace("connect", device.address, "", 0, nullptr, 0, "Connected");
   discoverGatt(client, recorderOnly);
-  if (client->isConnected()) client->exchangeMTU();
+  if (client->isConnected() && !connectionCancellation.requested(command.connectionAttempt)) client->exchangeMTU();
 }
 
 static void bleWorker(void*) {
@@ -172,17 +250,35 @@ static void bleWorker(void*) {
       case Action::Subscribe: executeGatt(client, command); break;
       case Action::Disconnect:
         if (client->isConnected()) client->disconnect();
-        for (int i = 0; i < 100 && client->isConnected(); ++i) vTaskDelay(pdMS_TO_TICKS(50));
+        for (int i = 0; i < 100 && client->getConnHandle() != BLE_HS_CONN_HANDLE_NONE; ++i) vTaskDelay(pdMS_TO_TICKS(50));
         break;
+    }
+    if (command.action == Action::Connect) {
+      xSemaphoreTake(cancellationMutex, portMAX_DELAY);
+      if (connectionCancellation.requested(command.connectionAttempt)) {
+        if (!connectionTornDown(command.connectionAttempt)) interruptConnection();
+        for (int i = 0; i < 500 && !connectionTornDown(command.connectionAttempt); ++i) vTaskDelay(pdMS_TO_TICKS(10));
+        if (!connectionTornDown(command.connectionAttempt)) {
+          deferredCancellation.store(true);
+          { StateLock lock; state.operation = "cancelling"; state.services.clear(); state.error = "Waiting for Bluetooth connection cancellation."; }
+          xSemaphoreGive(cancellationMutex);
+          continue;
+        }
+      }
     }
     {
       StateLock lock;
-      state.connected = client->isConnected();
+      state.connected = client->getConnHandle() != BLE_HS_CONN_HANDLE_NONE;
       if (!state.connected) state.services.clear();
       if (command.action == Action::Disconnect && state.connected) state.error = "Disconnect did not complete. Try again.";
+      if (command.action == Action::Connect && connectionCancellation.requested(command.connectionAttempt)) {
+        state.services.clear();
+        state.error = connectionTimedOut.load() ? "Connection timed out." : "Connection cancelled.";
+      }
       state.busy = false;
       state.operation = "idle";
     }
+    if (command.action == Action::Connect) { connectionCancellation.finish(command.connectionAttempt); xSemaphoreGive(cancellationMutex); }
     maintainScan();
   }
 }
@@ -202,6 +298,13 @@ bool queueCommand(Command command, String& error) {
     auto device = std::find_if(state.devices.begin(), state.devices.end(), [&](const DeviceInfo& d) { return d.id == command.argument; });
     if (command.argument && (device == state.devices.end() || !device->connectable)) { error = "Select a connectable device from the latest scan."; return false; }
     if (!command.argument && strlen(reinterpret_cast<const char*>(command.data)) != 17) { error = "A known Bluetooth address is required."; return false; }
+    if (command.argument) { memcpy(command.data, device->address.c_str(), 18); command.mode = device->addressType; }
+    state.address = reinterpret_cast<const char*>(command.data);
+    state.addressType = command.mode;
+    connectionTimedOut.store(false);
+    startedAttempt.store(0);
+    deferredCancellation.store(false);
+    command.connectionAttempt = state.connectionAttempt = connectionCancellation.begin();
   }
   if ((command.action == Action::Disconnect || command.action == Action::Read) && !state.connected) {
     error = "No device is connected."; return false;
@@ -222,11 +325,15 @@ bool queueCommand(Command command, String& error) {
   if (xQueueSend(commands, &command, 0) == pdTRUE) return true;
   state.busy = false;
   state.operation = "idle";
+  if (command.action == Action::Connect) connectionCancellation.finish(command.connectionAttempt);
   error = "BLE worker is unavailable.";
   return false;
 }
 
 void startBle() {
+  connectionCancellation.seed(esp_random());
+  cancellationMutex = xSemaphoreCreateMutex();
+  if (!cancellationMutex) abort();
   NimBLEDevice::init("NanoScope");
   NimBLEDevice::setMTU(247);
   auto scan = NimBLEDevice::getScan();

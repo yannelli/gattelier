@@ -83,7 +83,10 @@ const NanoConsole = (() => {
     if (controls.childElementCount) section.append(controls);
     if (characteristic.descriptors?.length) {
       const details = el('details', 'descriptor-list'); details.dataset.persist = `descriptors-${characteristic.handle}`; details.append(el('summary', '', `Descriptors · ${characteristic.descriptors.length}`));
-      for (const descriptor of characteristic.descriptors) details.append(el('p', 'mono', `${descriptor.handle} · ${descriptor.uuid}`));
+      for (const descriptor of characteristic.descriptors) {
+        const name = typeof NanoMetadata !== 'undefined' ? NanoMetadata.lookup(descriptor.uuid)?.name : '';
+        details.append(el('p', '', name || 'Unknown descriptor'), el('p', 'mono', `${descriptor.handle} · ${descriptor.uuid}`));
+      }
       section.append(details);
     }
     return section;

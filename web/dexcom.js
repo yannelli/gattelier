@@ -69,7 +69,7 @@ const NanoDexcom = (() => {
     const actions = el('div', 'dexcom-actions'), listen = el('button', 'button secondary', 'Capture received packets'), stop = el('button', 'button quiet', 'Stop capture'), clear = el('button', 'button quiet', 'Clear readings');
     for (const button of [listen, stop, clear]) { button.type = 'button'; actions.append(button); }
     const client = createClient(lab, { ...options, onChange: render });
-    const info = el('p', 'hint', 'Direct sensor authentication is unavailable. The four-digit applicator code needs the G7 application authentication protocol. Capture listens to existing traffic; it does not subscribe, request glucose, or change the sensor.');
+    const info = el('p', 'hint', 'Direct G7 pairing, live readings, and history requests are not implemented yet. This module decodes received or pasted packets from an authenticated session. Exact stop and expiry times are not available from the supported packets.');
     const details = el('details', 'dexcom-import'); details.append(el('summary', '', 'Decode a captured packet'));
     const uuidLabel = el('label', '', 'Characteristic'), uuid = el('select');
     for (const [value, label] of [[p.CONTROL, 'G7 control (3534)'], [p.BACKFILL, 'G7 backfill (3536)']]) { const option = el('option', '', label); option.value = value; uuid.append(option); } uuidLabel.append(uuid);

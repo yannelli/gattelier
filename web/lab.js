@@ -4,6 +4,7 @@ const NanoLab = (() => {
   let latest = { ble: {}, services: [], devices: [] }, online = false, initialized = false, acting = false, fast = false;
   let eventsTimer, eventsInFlight = false, capture = NanoPackets.createCapture();
   let background = false, eventFailures = 0;
+  let connectionAction = null;
   const eventListeners = new Set(), stateListeners = new Set();
   const sleep = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds));
   async function request(path, options = {}, timeout = 10000) {
@@ -28,12 +29,20 @@ const NanoLab = (() => {
   }
   async function action(path, body = {}) {
     if (!online) throw new Error('The board is unavailable.');
+    if (path === 'cancel-connect') return cancelConnect(body);
     if (acting || latest.ble.busy) throw new Error('Wait for the current BLE operation to finish.');
+    let connecting;
+    if (path === 'connect') {
+      const target = body.address ? body : latest.devices?.find(device => device.id === body.id);
+      let resolve, reject; const accepted = new Promise((yes, no) => { resolve = yes; reject = no; }); accepted.catch(() => {});
+      connecting = connectionAction = { address: String(target?.address || '').toLowerCase(), addressType: target?.addressType, accepted, resolve, reject, cancellation: null };
+    }
     acting = true; NanoConsole.update(latest, online);
     document.dispatchEvent(new CustomEvent('nanoscope:busy', { detail: true }));
     try {
       const deadline = Date.now() + 45000;
       const result = await request(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      connecting?.resolve(result.body);
       while (Date.now() < deadline) {
         const { body: state } = await request('state', {}, Math.min(10000, deadline - Date.now()));
         update(state, true);
@@ -47,10 +56,34 @@ const NanoLab = (() => {
         await sleep(120);
       }
       throw new Error('BLE operation timed out after 45 seconds. Check board status before sending another command.');
-    } finally {
+    } catch (error) { connecting?.reject(error); throw error; }
+    finally {
+      if (connecting && connectionAction === connecting) connectionAction = null;
       acting = false; NanoConsole.update(latest, online);
       document.dispatchEvent(new CustomEvent('nanoscope:busy', { detail: false }));
     }
+  }
+  async function cancelConnect(body) {
+    const target = String(body.address || '').toLowerCase();
+    if (!/^(?:[0-9a-f]{2}:){5}[0-9a-f]{2}$/.test(target) || !Number.isInteger(body.addressType) || body.addressType < 0 || body.addressType > 3) throw new Error('Choose the device whose connection is in progress.');
+    const connecting = connectionAction && connectionAction.address === target && connectionAction.addressType === body.addressType ? connectionAction : null;
+    if (connecting?.cancellation) return connecting.cancellation;
+    const operation = async () => {
+      const scope = connecting ? await connecting.accepted : body;
+      const attempt = scope.connectionAttempt;
+      if (!Number.isInteger(attempt) || attempt < 1 || attempt > 0xffffffff || connecting && (String(scope.address).toLowerCase() !== target || scope.addressType !== body.addressType) || body.connectionAttempt !== undefined && body.connectionAttempt !== attempt) throw new Error('This connection attempt is no longer active.');
+      if (!connecting) {
+        const ble = latest.ble;
+        if (!ble.busy || !['connecting', 'discovering', 'cancelling'].includes(ble.operation) || String(ble.address).toLowerCase() !== target || ble.addressType !== body.addressType || ble.connectionAttempt !== attempt) throw new Error('This connection attempt is no longer active.');
+      }
+      await request('cancel-connect', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ address: target, addressType: body.addressType, connectionAttempt: attempt }) });
+      const { body: state } = await request('state'); update(state, true);
+      document.dispatchEvent(new CustomEvent('nanoscope:state', { detail: state }));
+      return state;
+    };
+    const promise = operation();
+    if (connecting) connecting.cancellation = promise;
+    try { return await promise; } finally { if (connecting?.cancellation === promise) connecting.cancellation = null; }
   }
   async function pollEvents() {
     clearTimeout(eventsTimer);

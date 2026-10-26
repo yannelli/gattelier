@@ -18,7 +18,7 @@ function lastSeenLabel(device, uptime) {
   return age < 3 ? 'Seen just now' : age < 60 ? `Seen ${age}s ago` : `Seen ${Math.floor(age / 60)}m ago`;
 }
 const names = {
-  '1910': 'PLAUD recorder', '2bb1': 'PLAUD commands', '2bb0': 'PLAUD responses',
+  '1910': 'PLAUD recorder',
   '001120a0-2233-4455-6677-889912345678': 'Pocket recorder',
   '001120a2-2233-4455-6677-889912345678': 'Pocket commands',
   '001120a3-2233-4455-6677-889912345678': 'Pocket responses',
@@ -29,9 +29,10 @@ const names = {
   '2a24': 'Model Number', '2a25': 'Serial Number', '2a26': 'Firmware Revision',
   '2a27': 'Hardware Revision', '2a28': 'Software Revision', '2a29': 'Manufacturer Name'
 };
-function uuidName(uuid, fallback) {
+function uuidName(uuid, fallback, serviceUuid = '') {
   const normalized = String(uuid).toLowerCase().replace(/^0x/, '');
   const short = /^0000[0-9a-f]{4}-0000-1000-8000-00805f9b34fb$/.test(normalized) ? normalized.slice(4, 8) : normalized;
+  if (/^(?:0x)?1910$|^00001910-0000-1000-8000-00805f9b34fb$/i.test(serviceUuid) && ['2bb0', '2bb1'].includes(short)) return short === '2bb1' ? 'PLAUD commands' : 'PLAUD responses';
   return names[short] || (typeof NanoMetadata !== 'undefined' ? NanoMetadata.lookup(short)?.name : '') || fallback;
 }
 let state = { wifi: {}, ble: {}, devices: [], services: [] };

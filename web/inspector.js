@@ -1,15 +1,17 @@
 'use strict';
 
-function renderCharacteristic(characteristic) {
+function renderCharacteristic(characteristic, serviceUuid = '') {
   const section = node('div', 'characteristic');
   const top = node('div', 'characteristic-top');
   const title = node('div');
-  title.append(node('p', 'characteristic-name', uuidName(characteristic.uuid, `Characteristic · ${characteristic.handle}`)), node('span', 'uuid', characteristic.uuid));
+  title.append(node('p', 'characteristic-name', uuidName(characteristic.uuid, `Characteristic · ${characteristic.handle}`, serviceUuid)), node('span', 'uuid', characteristic.uuid));
   top.append(title);
   if (characteristic.properties.includes('read')) top.append(button('Read', 'secondary', () => mutate('read', { handle: characteristic.handle }), !canRead(state, characteristic, online, pending), `read-${characteristic.handle}`));
   const properties = node('div', 'properties');
   for (const property of characteristic.properties) properties.append(node('span', 'badge', property));
   section.append(top, properties);
+  const definition = NanoMetadata.lookup(characteristic.uuid);
+  if (definition?.description && !/^(?:0x)?1910$/i.test(serviceUuid)) section.append(node('p', 'hint', definition.description));
   if (characteristic.valueHex !== null && characteristic.valueHex !== undefined) {
     const value = node('div', 'value');
     value.append(node('p', 'value-label', 'Hex'), node('p', 'mono', characteristic.valueHex || '(empty value)'));
@@ -17,6 +19,7 @@ function renderCharacteristic(characteristic) {
     section.append(value);
     const decoded = NanoGattValues.decode(characteristic.uuid, characteristic.valueHex);
     if (decoded.length) { const fields = node('dl', 'metadata'); for (const field of decoded) fields.append(metadata(field.label, String(field.value))); section.append(fields); }
+    else if (characteristic.valueHex) section.append(node('p', 'hint', 'No matching value decoder. Raw bytes remain available; supplemental definitions are in Settings > Device metadata.'));
   }
   if (characteristic.readError) section.append(node('p', 'error', characteristic.readError));
   section.append(NanoConsole.characteristicActions(characteristic));
@@ -89,7 +92,10 @@ function appendDeviceServices(detail, connected) {
       const section = node('section', 'service');
       const heading = node('h4', 'service-title', uuidName(service.uuid, 'Custom service'));
       heading.append(node('span', 'uuid', service.uuid)); section.append(heading);
-      for (const characteristic of service.characteristics) section.append(renderCharacteristic(characteristic));
+      const definition = NanoMetadata.lookup(service.uuid);
+      if (definition?.description) section.append(node('p', 'hint', definition.description));
+      else if (!definition && uuidName(service.uuid, '') === '') section.append(node('p', 'hint', 'Vendor-defined service. Access properties are discovered; command and packet meanings are not yet decoded.'));
+      for (const characteristic of service.characteristics) section.append(renderCharacteristic(characteristic, service.uuid));
       if (!service.characteristics.length) section.append(node('p', 'hint', 'No characteristics found.'));
       detail.append(section);
     }

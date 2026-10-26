@@ -31,14 +31,14 @@
 .theme-icon-sun, :root[data-theme="dark"] .theme-icon-moon { display: none; }
 :root[data-theme="dark"] .theme-icon-sun { display: block; }
 #header-device { flex: 1; min-width: 0; display: flex; justify-content: flex-end; }
-.header-connection { position: relative; width: min(100%, 310px); }
-.header-connection > summary { display: flex; align-items: center; gap: 8px; min-height: 40px; padding: 5px 11px; border: 1px solid var(--line); border-radius: 10px; cursor: pointer; list-style: none; }
+.header-connection { position: relative; width: min(100%, 310px); min-width: 0; max-width: 100%; }
+.header-connection > summary { display: flex; flex-wrap: nowrap; align-items: center; gap: 8px; min-width: 0; min-height: 40px; padding: 5px 11px; border: 1px solid var(--line); border-radius: 10px; cursor: pointer; list-style: none; }
 .header-connection > summary::-webkit-details-marker { display: none; }
 .header-connection > summary::after { content: ''; width: 16px; height: 16px; margin-left: auto; flex-shrink: 0; background: var(--select-arrow) center / 16px no-repeat; }
 .header-connection[open] > summary::after { transform: rotate(180deg); }
 .header-connection > summary > span { min-width: 0; }
-.header-device-name { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; font-weight: 600; }
-.header-device-state { display: block; color: var(--muted); font-size: 10px; }
+.header-device-name { display: block; flex: 1 1 0%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; font-weight: 600; }
+.header-device-state { display: block; flex: 0 0 auto; white-space: nowrap; color: var(--muted); font-size: 10px; }
 .header-device-menu { position: absolute; top: calc(100% + 7px); right: 0; display: grid; gap: 4px; width: 300px; max-width: calc(100vw - 32px); padding: 8px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 12px 40px #00000024; z-index: 30; }
 .header-device-menu > .button { justify-content: flex-start; width: 100%; font-size: 12px; min-height: 40px; padding: 9px 11px; background: transparent; color: var(--text); border-radius: 7px; }
 .header-device-menu > .button:hover:enabled { background: var(--surface-secondary); }
@@ -73,8 +73,6 @@ select option { color: var(--text); background-color: var(--surface); }
   #header-device { grid-column: 1 / -1; grid-row: 2; justify-content: stretch; }
   .header-connection { width: 100%; }
   .header-connection > summary { min-height: 38px; padding: 4px 10px; }
-  .header-device-name { display: inline; }
-  .header-device-state { display: inline; margin-left: 8px; }
   .header-device-menu { width: 100%; }
   main { padding-top: 10px; }
   .workspace-navigation { top: var(--toolbar-height); margin-top: -3px; margin-bottom: 14px; padding-top: 3px; }
@@ -86,5 +84,4 @@ select option { color: var(--text); background-color: var(--surface); }
 @media (max-width: 380px) {
   .workspace-tabs svg { display: none; }
   .topbar > .button svg { display: none; }
-  .header-device-state { display: block; margin-left: 0; }
 }

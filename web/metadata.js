@@ -15,6 +15,10 @@ const NanoMetadata = (() => {
       if (source.protocol !== 'https:' || source.username || source.password) throw new Error('Metadata sources must use HTTPS.');
       seen.add(id);
       const result = { uuid: id, name: entry.name, source: source.href };
+      if (entry.description !== undefined) {
+        if (typeof entry.description !== 'string' || !entry.description.length || entry.description.length > 480 || /[\u0000-\u001f]/.test(entry.description)) throw new Error('Invalid metadata description.');
+        result.description = entry.description;
+      }
       if (entry.decode) {
         const d = entry.decode;
         if (!['enum', 'uint', 'int'].includes(d.type) || ![1, 2, 4].includes(d.bytes) || !text(d.label)) throw new Error('Unsupported metadata decoder.');

@@ -80,3 +80,53 @@ test('presentation descriptor decodes signed exponent and little-endian UUID and
   const sources = values.sources(); sources[0].title = 'changed';
   assert.notEqual(values.sources()[0].title, 'changed');
 });
+
+test('GATT client and server feature flags retain unknown bits without assigning meanings', () => {
+  assert.deepEqual(values.decode('2b29', '05'), [
+    { label: 'Robust caching', value: 'Supported' }, { label: 'Enhanced ATT bearer', value: 'Not supported' },
+    { label: 'Multiple handle value notifications', value: 'Supported' }
+  ]);
+  assert.equal(value('2b3a', '01'), 'Supported');
+  assert.equal(value('2b3a', '00'), 'Not supported');
+  assert.deepEqual(values.decode('2b3a', '0201').at(-1), { label: 'Unassigned feature bits', value: '1, 8' });
+  assert.deepEqual(values.decode('2b29', ''), []);
+  assert.deepEqual(values.decode('f0002b29-0451-4000-b000-000000000000', '07'), []);
+});
+
+test('Service Changed and database hash decode exact validated payloads', () => {
+  assert.equal(value('2a05', '0100ffff'), '0x0001 to 0xFFFF');
+  assert.equal(value('2a05', '10002000'), '0x0010 to 0x0020');
+  for (const hex of ['0000ffff', '20001000', '0100ff', '0100ffff00']) assert.deepEqual(values.decode('2a05', hex), []);
+  assert.equal(value('2b2a', '0123456789abcdef'.repeat(2)), '0123456789abcdef'.repeat(2));
+  assert.deepEqual(values.decode('2b2a', '01'), []);
+});
+
+test('preferred connection parameters translate intervals and preserve unspecified values', () => {
+  assert.deepEqual(values.decode('2a04', '06000c000000c800'), [
+    { label: 'Minimum connection interval', value: '7.5 ms' }, { label: 'Maximum connection interval', value: '15 ms' },
+    { label: 'Peripheral latency', value: '0 connection events' }, { label: 'Supervision timeout', value: '2000 ms' }
+  ]);
+  assert.equal(value('2a04', 'ffffffff0000c800'), 'No preference');
+  assert.ok(values.decode('2a04', 'ffffffffffffffff').every(field => field.value === 'No preference'));
+  assert.equal(values.decode('2a04', '06000c00ffffc800')[2].value, 'No preference');
+  assert.equal(values.decode('2a04', '06000c000000ffff')[3].value, 'No preference');
+  for (const hex of ['05000c000000c800', '0d000c000000c800', '06000c00f401c800', '06000c0000000900', '06000c000000c8']) assert.deepEqual(values.decode('2a04', hex), []);
+});
+
+test('standard descriptors and declarations expose fields without guessing vendor values', () => {
+  assert.equal(value('2901', '4e616d65'), 'Name');
+  assert.equal(value('2902', '0300'), 'Notifications and indications enabled');
+  assert.deepEqual(values.decode('2902', '0400'), []);
+  assert.equal(value('2900', '0100'), 'Supported');
+  assert.equal(value('2903', '0100'), 'Enabled');
+  assert.equal(value('2905', '10002000'), '0x0010, 0x0020');
+  assert.deepEqual(values.decode('2905', '0000'), []);
+  assert.deepEqual(values.decode('2908', '0102'), [{ label: 'Report ID', value: '1' }, { label: 'Report type', value: 'Output' }]);
+  assert.deepEqual(values.decode('2908', '0100'), []);
+  assert.equal(value('2800', '0018'), '0x1800');
+  assert.deepEqual(values.decode('2803', '120300192a'), [
+    { label: 'Characteristic UUID', value: '0x2a19' }, { label: 'Value handle', value: '0x0003' }, { label: 'Properties', value: 'Read, Notify' }
+  ]);
+  assert.equal(value('2803', '08030000000000000000b000405104e1ff00f0'), 'f000ffe1-0451-4000-b000-000000000000');
+  assert.deepEqual(values.decode('2803', '120000192a'), []);
+});

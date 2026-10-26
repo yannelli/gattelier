@@ -63,3 +63,53 @@ test('concurrent requests cannot race through the status refresh', async () => {
   await assert.rejects(connection.ensure(target), /already running/);
   release(); await first;
 });
+
+test('queued local connection can be cancelled before refresh completes without sending BLE commands', async () => {
+  let release;
+  const { calls } = harness({ ble: {}, devices: [] }, { hooks: { refresh: () => new Promise(resolve => { release = resolve; }) } });
+  const operation = connection.ensure(target);
+  assert.equal(connection.describe(target).label, 'Cancel connection');
+  assert.equal(connection.describe(target).enabled, true);
+  assert.equal(connection.describe(other).enabled, false);
+  assert.equal(connection.pendingDevice(), target);
+  await connection.cancel(target);
+  release(); await assert.rejects(operation, /cancelled/);
+  assert.equal(calls.length, 0); assert.equal(connection.snapshot().pending, false);
+});
+
+test('connecting and discovering cancellation is scoped to the target, type and attempt', async () => {
+  for (const operation of ['connecting', 'discovering']) {
+    const initial = { ble: { busy: true, connected: operation === 'discovering', operation, address: target.address, addressType: 0, connectionAttempt: 19 }, devices: [target] };
+    const { calls } = harness(initial);
+    const status = connection.describe(target);
+    assert.equal(status.label, 'Cancel connection'); assert.equal(status.enabled, true);
+    assert.equal(connection.describe(other).enabled, false);
+    assert.equal(connection.describe({ ...target, addressType: 1 }).enabled, false);
+    await assert.rejects(connection.cancel(other), /progress/);
+    await connection.cancel(target);
+    assert.deepEqual(calls, [{ action: 'cancel-connect', body: { address: target.address, addressType: 0, connectionAttempt: 19 } }]);
+  }
+});
+
+test('cancelling a switch during disconnect prevents the next connection', async () => {
+  let release;
+  const calls = [];
+  harness({ ble: { connected: true, address: other.address }, devices: [target] }, { hooks: { action: async action => { calls.push(action); await new Promise(resolve => { release = resolve; }); return { ble: { connected: false }, devices: [target] }; } } });
+  const operation = connection.ensure(target);
+  await Promise.resolve();
+  await connection.cancel(target); release();
+  await assert.rejects(operation, /cancelled/); assert.deepEqual(calls, ['disconnect']);
+});
+
+test('active connection cancellation bypasses inFlight while unrelated actions remain blocked', async () => {
+  let release; const calls = [];
+  harness({ ble: {}, devices: [] }, { hooks: { action: async (action, body) => {
+    calls.push({ action, body });
+    if (action === 'connect') { await new Promise(resolve => { release = resolve; }); throw new Error('Connection cancelled.'); }
+    return { ble: { busy: true, operation: 'cancelling' } };
+  } } });
+  const operation = connection.ensure(target); await Promise.resolve();
+  await assert.rejects(connection.ensure(other), /already running/);
+  await connection.cancel(target); release(); await assert.rejects(operation, /cancelled/);
+  assert.equal(calls[1].action, 'cancel-connect'); assert.equal(calls[1].body.address, target.address);
+});

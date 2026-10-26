@@ -17,6 +17,10 @@ test('bundled catalog provides UUID names and exact-length human-readable states
   assert.deepEqual(api.decode('2902', '02'), []);
   assert.equal(api.decode('2a38', 'ff')[0].value, 'Unassigned (255)');
   assert.deepEqual(api.decode('2a38', 'zz'), []);
+  assert.ok(api.status().count >= 743);
+  for (const [uuid, name] of Object.entries({ '2a05': 'Service Changed', '2b29': 'Client Supported Features', '2b3a': 'Server Supported Features', '2900': 'Characteristic Extended Properties', '2902': 'Client Characteristic Configuration', '272f': 'Celsius temperature (degree Celsius)', '2803': 'Characteristic' })) assert.equal(api.lookup(uuid).name, name);
+  assert.match(api.lookup('2a05').description, /changed attribute handles/);
+  assert.equal(api.lookup('f000ffe0-0451-4000-b000-000000000000'), null);
 });
 
 test('supplemental downloads send no device data and persist origin and definitions', async () => {
@@ -45,6 +49,7 @@ test('invalid downloads keep the previous catalog and reject executable decoder 
   await assert.rejects(api.refresh('http://example.org'), /HTTPS/);
   assert.throws(() => metadata.validate({ ...supplemental, entries: [supplemental.entries[0], supplemental.entries[0]] }), /Invalid metadata entry/);
   assert.throws(() => metadata.validate({ ...supplemental, entries: [{ ...supplemental.entries[0], source: 'javascript:alert(1)' }] }), /HTTPS/);
+  assert.throws(() => metadata.validate({ ...supplemental, entries: [{ ...supplemental.entries[0], description: 'x'.repeat(481) }] }), /description/);
 });
 
 test('oversized metadata does not replace stored definitions', async () => {

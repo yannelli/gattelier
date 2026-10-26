@@ -43,6 +43,8 @@ struct AppState {
   String operation = "idle", address, error;
   String discoveryScope = "all services";
   uint16_t mtu = 23;
+  uint32_t connectionAttempt = 0;
+  uint8_t addressType = 0;
   String captureAddress;
   std::vector<DeviceInfo> devices;
   std::vector<ServiceInfo> services;
@@ -64,10 +66,14 @@ struct Command {
   uint16_t length = 0;
   uint8_t data[512] = {};
   uint8_t mode = 0;
+  uint32_t connectionAttempt = 0;
 };
 
 void startBle();
 bool queueCommand(Command command, String& error);
+bool cancelConnection(const String& address, uint8_t addressType, uint32_t attempt, String& error);
+bool connectionCancellationRequested();
+void updateConnectionCancellation();
 class WebServer;
 void sendState(WebServer& server);
 String hexBytes(const uint8_t* bytes, size_t length);

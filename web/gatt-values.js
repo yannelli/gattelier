@@ -1,7 +1,7 @@
 'use strict';
 
 const NanoGattValues = (() => {
-  const strings = { '2a00': 'Device name', '2a29': 'Manufacturer', '2a24': 'Model', '2a25': 'Serial number', '2a26': 'Firmware revision', '2a27': 'Hardware revision', '2a28': 'Software revision' };
+  const strings = { '2a00': 'Device name', '2a29': 'Manufacturer', '2a24': 'Model', '2a25': 'Serial number', '2a26': 'Firmware revision', '2a27': 'Hardware revision', '2a28': 'Software revision', '2901': 'Characteristic description' };
   const temperatureTypes = ['Reserved', 'Armpit', 'Body', 'Ear', 'Finger', 'Gastrointestinal tract', 'Mouth', 'Rectum', 'Toe', 'Eardrum'];
   const appearances = {
     0: 'Unknown', 1: 'Phone', 2: 'Computer', 3: 'Watch', 4: 'Clock', 5: 'Display', 6: 'Remote Control', 7: 'Eye-glasses', 8: 'Tag', 9: 'Keyring',
@@ -22,6 +22,20 @@ const NanoGattValues = (() => {
   ];
   const field = (label, value) => ({ label, value: String(value) });
   const hex16 = value => `0x${value.toString(16).padStart(4, '0').toUpperCase()}`;
+  const hexBytes = bytes => Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('');
+  function features(bytes, labels) {
+    const fields = labels.map((label, index) => field(label, bytes[0] & 2 ** index ? 'Supported' : 'Not supported'));
+    const unknown = [];
+    for (let index = labels.length; index < bytes.length * 8; index++) {
+      if (bytes[index >>> 3] & 2 ** (index % 8)) unknown.push(index);
+    }
+    if (unknown.length) fields.push(field('Unassigned feature bits', unknown.join(', ')));
+    return fields;
+  }
+  function attributeUuid(bytes) {
+    const text = hexBytes(Uint8Array.from(bytes).reverse());
+    return bytes.length === 2 ? `0x${text}` : `${text.slice(0, 8)}-${text.slice(8, 12)}-${text.slice(12, 16)}-${text.slice(16, 20)}-${text.slice(20)}`;
+  }
   function shortUuid(uuid) {
     if (typeof uuid !== 'string') return '';
     uuid = uuid.trim().toLowerCase();
@@ -52,6 +66,39 @@ const NanoGattValues = (() => {
     const key = shortUuid(uuid), bytes = Uint8Array.from(hex.match(/../g) || [], pair => parseInt(pair, 16));
     const data = new DataView(bytes.buffer);
     try {
+      if (key === '2a05' && bytes.length === 4) {
+        const start = data.getUint16(0, true), end = data.getUint16(2, true);
+        if (!start || end < start) return [];
+        return [field('Changed handles', `${hex16(start)} to ${hex16(end)}`), field('Required action', 'Rediscover services before using affected handles')];
+      }
+      if (['2b29', '2b3a'].includes(key) && bytes.length) return features(bytes, key === '2b29'
+        ? ['Robust caching', 'Enhanced ATT bearer', 'Multiple handle value notifications'] : ['Enhanced ATT bearer']);
+      if (key === '2b2a' && bytes.length === 16) return [field('Database hash (wire bytes)', hexBytes(bytes)), field('Meaning', 'A changed hash invalidates the cached GATT database')];
+      if (key === '2a04' && bytes.length === 8) {
+        const min = data.getUint16(0, true), max = data.getUint16(2, true), latency = data.getUint16(4, true), timeout = data.getUint16(6, true);
+        const intervalValid = value => value === 65535 || value >= 6 && value <= 3200;
+        if (!intervalValid(min) || !intervalValid(max) || min !== 65535 && max !== 65535 && min > max || latency !== 65535 && latency > 499 || timeout !== 65535 && (timeout < 10 || timeout > 3200)) return [];
+        return [field('Minimum connection interval', min === 65535 ? 'No preference' : `${min * 1.25} ms`), field('Maximum connection interval', max === 65535 ? 'No preference' : `${max * 1.25} ms`), field('Peripheral latency', latency === 65535 ? 'No preference' : `${latency} connection events`), field('Supervision timeout', timeout === 65535 ? 'No preference' : `${timeout * 10} ms`)];
+      }
+      if (['2800', '2801'].includes(key) && [2, 16].includes(bytes.length)) return [field('Service UUID', attributeUuid(bytes))];
+      if (key === '2803' && [5, 19].includes(bytes.length)) {
+        const handle = data.getUint16(1, true);
+        if (!handle) return [];
+        const labels = ['Broadcast', 'Read', 'Write without response', 'Write', 'Notify', 'Indicate', 'Authenticated signed writes', 'Extended properties'];
+        return [field('Characteristic UUID', attributeUuid(bytes.slice(3))), field('Value handle', hex16(handle)), field('Properties', labels.filter((_, index) => bytes[0] & 2 ** index).join(', ') || 'None')];
+      }
+      if (['2900', '2902', '2903'].includes(key) && bytes.length === 2) {
+        const value = data.getUint16(0, true), mask = key === '2903' ? 1 : 3;
+        if (value & ~mask) return [];
+        if (key === '2902') return [field('Subscription configuration', ['Disabled', 'Notifications enabled', 'Indications enabled', 'Notifications and indications enabled'][value])];
+        if (key === '2903') return [field('Broadcasts', value ? 'Enabled' : 'Disabled')];
+        return [field('Reliable write', value & 1 ? 'Supported' : 'Not supported'), field('Writable auxiliaries', value & 2 ? 'Supported' : 'Not supported')];
+      }
+      if (key === '2905' && bytes.length && bytes.length % 2 === 0) {
+        const handles = Array.from({ length: bytes.length / 2 }, (_, index) => data.getUint16(index * 2, true));
+        return handles.every(Boolean) ? [field('Presentation descriptor handles', handles.map(hex16).join(', '))] : [];
+      }
+      if (key === '2908' && bytes.length === 2 && bytes[1] >= 1 && bytes[1] <= 3) return [field('Report ID', bytes[0]), field('Report type', ['Reserved', 'Input', 'Output', 'Feature'][bytes[1]])];
       if (Object.hasOwn(strings, key)) {
         if (!bytes.length) return [];
         const text = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
@@ -102,6 +149,7 @@ const NanoGattValues = (() => {
       if (key === '2904' && bytes.length === 7) return [
         field('Value format', formats[bytes[0]] || `Reserved format 0x${bytes[0].toString(16).padStart(2, '0')}`),
         field('Decimal exponent (raw)', data.getInt8(1)), field('Unit UUID', hex16(data.getUint16(2, true))),
+        ...(typeof NanoMetadata !== 'undefined' && NanoMetadata.lookup(data.getUint16(2, true).toString(16).padStart(4, '0')) ? [field('Unit', NanoMetadata.lookup(data.getUint16(2, true).toString(16).padStart(4, '0')).name)] : []),
         field('Namespace', bytes[4] === 1 ? 'Bluetooth SIG' : `0x${bytes[4].toString(16).padStart(2, '0')}`),
         field('Description code', hex16(data.getUint16(5, true)))
       ];

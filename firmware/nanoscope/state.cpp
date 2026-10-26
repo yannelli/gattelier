@@ -63,6 +63,8 @@ void sendState(WebServer& server) {
     addText(ble, "error", state.error);
     addText(ble, "captureAddress", state.captureAddress);
     cJSON_AddNumberToObject(ble, "mtu", state.mtu);
+    cJSON_AddNumberToObject(ble, "addressType", state.addressType);
+    cJSON_AddNumberToObject(ble, "connectionAttempt", state.connectionAttempt);
     cJSON_AddBoolToObject(root, "scanCompleted", state.scanCompleted);
     deviceIds.reserve(state.devices.size());
     for (const auto& device : state.devices) deviceIds.push_back(device.id);
