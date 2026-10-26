@@ -44,3 +44,9 @@
   .radiacode-actions .primary { width: 100%; }
   .radiacode-actions .secondary { flex: 1; }
 }
+@media (max-width: 480px) {
+  .radiacode-result-measurements .radiacode-fields { grid-template-columns: minmax(0, 1fr); }
+  .radiacode-result-measurements .radiacode-field { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+  .radiacode-result-measurements dt, .radiacode-result-measurements dd { margin: 0; }
+  .radiacode-result-measurements dd > span:first-child { white-space: nowrap; }
+}
