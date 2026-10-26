@@ -3,7 +3,7 @@
 #include "usb_hci.h"
 #include <SPIFFS.h>
 #include <Preferences.h>
-#include <WebServer.h>
+#include "board_server.h"
 #include <esp_random.h>
 #include <deque>
 #include <cmath>
@@ -245,7 +245,7 @@ cJSON* collectionState() {
 
 uint32_t collectionLedColor(uint32_t base, uint32_t now) { return collectionColor(collectionEnabled(), storageError.length(), base, now); }
 
-void downloadCollection(WebServer& server) {
+void downloadCollection(BoardServer& server) {
   flush();
   if (!mounted || !SPIFFS.exists(logPath)) { server.send(404, "application/json", "{\"error\":\"No saved collection log.\"}"); return; }
   auto file = SPIFFS.open(logPath, FILE_READ);

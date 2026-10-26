@@ -8,11 +8,13 @@
 #include "usb_hci.h"
 #include "collection.h"
 #include "scan_stream.h"
-#include <WebServer.h>
+#include "serial_api.h"
+#include "board_server.h"
 #include <cJSON.h>
 #include <cmath>
 
-static WebServer server(80);
+static BoardServer server(80);
+static bool httpEnabled = false;
 
 static void sendError(int code, const String& message) {
   auto root = cJSON_CreateObject();
@@ -191,6 +193,15 @@ void startHttp() {
   });
   server.onNotFound([] { sendError(404, "Not found."); });
   server.begin();
+  httpEnabled = true;
 }
 
-void handleHttp() { server.handleClient(); updateConnectionCancellation(); }
+void handleHttp() { if (httpEnabled) server.handleClient(); updateConnectionCancellation(); }
+
+void handleSerialHttp() { handleSerialApi(server); }
+
+void setHttpEnabled(bool enabled) {
+  if (httpEnabled == enabled) return;
+  httpEnabled = enabled;
+  if (enabled) server.begin(); else server.stop();
+}

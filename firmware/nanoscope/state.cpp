@@ -6,7 +6,8 @@
 #include "scan_stream.h"
 #include <WiFi.h>
 #include <cJSON.h>
-#include <WebServer.h>
+#include "board_server.h"
+#include "serial_api.h"
 #include <algorithm>
 
 AppState state;
@@ -40,12 +41,13 @@ static String jsonText(cJSON* value) {
   return result;
 }
 
-void sendState(WebServer& server) {
+void sendState(BoardServer& server) {
   auto root = cJSON_CreateObject();
   auto wifi = cJSON_AddObjectToObject(root, "wifi");
   addNetworkState(wifi);
   addSecurityState(root);
   addUsbState(cJSON_AddObjectToObject(root, "usb"));
+  addSerialApiState(cJSON_AddObjectToObject(root, "serial"));
   cJSON_AddItemToObject(root, "collection", collectionState());
   cJSON_AddNumberToObject(root, "uptime", millis() / 1000);
   cJSON_AddNumberToObject(root, "freeHeap", ESP.getFreeHeap());

@@ -6,6 +6,7 @@
 .network-led { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: var(--muted); flex-shrink: 0; }
 .network-led[data-led="blue"], .network-led[data-led="blue-blink"] { background: #268bff; }
 .network-led[data-led="amber"] { background: #dc9200; }
+.network-led[data-led="cyan"] { background: #169eae; }
 .network-led[data-led="red"] { background: #dc4141; }
 .network-led[data-led="blue-blink"] { animation: network-pulse 1.2s ease-in-out infinite; }
 .network-facts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 18px; margin: 20px 0; padding: 16px; border-radius: 11px; background: var(--surface-secondary); }

@@ -1,8 +1,8 @@
 #include "http_access.h"
 #include "board_network.h"
-#include <WebServer.h>
+#include "board_server.h"
 
-static void respond(WebServer& server, int status, cJSON* json) {
+static void respond(BoardServer& server, int status, cJSON* json) {
   char* body = cJSON_PrintUnformatted(json);
   server.sendHeader("Cache-Control", "no-store");
   server.sendHeader("X-Content-Type-Options", "nosniff");
@@ -10,11 +10,11 @@ static void respond(WebServer& server, int status, cJSON* json) {
   cJSON_free(body); cJSON_Delete(json);
 }
 
-static void reject(WebServer& server, int status, const String& message) {
+static void reject(BoardServer& server, int status, const String& message) {
   auto json = cJSON_CreateObject(); cJSON_AddStringToObject(json, "error", message.c_str()); respond(server, status, json);
 }
 
-static cJSON* request(WebServer& server) {
+static cJSON* request(BoardServer& server) {
   if (!allowedHttpOrigin(server)) { reject(server, 403, "Use this device's own page to change network settings."); return nullptr; }
   if (!server.header("Content-Type").startsWith("application/json")) { reject(server, 415, "Expected application/json."); return nullptr; }
   String body = server.arg("plain");
@@ -25,7 +25,7 @@ static cJSON* request(WebServer& server) {
   return json;
 }
 
-void registerNetworkRoutes(WebServer& server) {
+void registerNetworkRoutes(BoardServer& server) {
   server.on("/api/network", HTTP_GET, [&server] {
     if (!allowedHttpOrigin(server)) { reject(server, 403, "Open this device's own page."); return; }
     auto json = cJSON_CreateObject(); addNetworkState(json); respond(server, 200, json);

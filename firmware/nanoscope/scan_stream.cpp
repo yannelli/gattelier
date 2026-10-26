@@ -2,7 +2,7 @@
 #include "scan_retention.h"
 #include "scan_encoding.h"
 #include "collection.h"
-#include <WebServer.h>
+#include "board_server.h"
 #include <esp_random.h>
 #include <algorithm>
 
@@ -143,7 +143,7 @@ cJSON* scanDeviceJson(const DeviceInfo& device) {
   return item;
 }
 
-void sendAdvertisements(WebServer& server, uint64_t after, const String& expectedBoot, bool raw, bool compact, bool offload) {
+void sendAdvertisements(BoardServer& server, uint64_t after, const String& expectedBoot, bool raw, bool compact, bool offload) {
   uint64_t end, oldest, dropped, overwritten, truncated; String header;
   {
     StateLock lock;

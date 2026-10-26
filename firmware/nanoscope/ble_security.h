@@ -4,7 +4,7 @@
 
 class NimBLEClient;
 class NimBLEConnInfo;
-class WebServer;
+class BoardServer;
 void startSecuritySupport(NimBLEClient* client);
 void securityConnected(NimBLEConnInfo& info);
 void securityDisconnected();
@@ -18,4 +18,4 @@ bool respondPairing(const String& address, const String& challengeId, const Stri
 bool cancelPairing(const String& address, const String& challengeId, String& error);
 void updateSecurity();
 void addSecurityState(cJSON* root);
-void registerSecurityRoutes(WebServer& server);
+void registerSecurityRoutes(BoardServer& server);

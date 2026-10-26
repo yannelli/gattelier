@@ -2,7 +2,7 @@
 #include "trace_retention.h"
 #include "state.h"
 #include "activity_led.h"
-#include <WebServer.h>
+#include "board_server.h"
 #include <cJSON.h>
 #include <esp_random.h>
 #include <array>
@@ -83,7 +83,7 @@ static String eventJson(const TraceEvent& event) {
   return result;
 }
 
-void sendTrace(WebServer& server, uint32_t after) {
+void sendTrace(BoardServer& server, uint32_t after) {
   xSemaphoreTake(traceMutex, portMAX_DELAY);
   uint32_t end = sequence;
   uint32_t oldest = retention.first;

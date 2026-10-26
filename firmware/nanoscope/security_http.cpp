@@ -3,15 +3,15 @@
 #include "pairing_rules.h"
 #include "state.h"
 #include "usb_hci.h"
-#include <WebServer.h>
+#include "board_server.h"
 
-static void reject(WebServer& server, int code, const String& message) {
+static void reject(BoardServer& server, int code, const String& message) {
   auto json = cJSON_CreateObject(); cJSON_AddStringToObject(json, "error", message.c_str());
   char* body = cJSON_PrintUnformatted(json); server.send(code, "application/json", body ? body : "{}");
   cJSON_free(body); cJSON_Delete(json);
 }
 
-static cJSON* request(WebServer& server) {
+static cJSON* request(BoardServer& server) {
   server.sendHeader("Cache-Control", "no-store");
   if (usbHciMode()) { reject(server, 409, "Restore Bluetooth workbench mode before pairing from the web UI."); return nullptr; }
   if (!allowedHttpOrigin(server)) { reject(server, 403, "Open this board's own page to pair devices."); return nullptr; }
@@ -28,7 +28,7 @@ static cJSON* request(WebServer& server) {
   return json;
 }
 
-void registerSecurityRoutes(WebServer& server) {
+void registerSecurityRoutes(BoardServer& server) {
   server.on("/api/pair", HTTP_POST, [&server] {
     auto json = request(server); if (!json) return;
     String address = cJSON_GetObjectItemCaseSensitive(json, "address")->valuestring; address.toLowerCase();

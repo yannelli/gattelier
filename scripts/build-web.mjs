@@ -5,7 +5,7 @@ import { transform } from 'esbuild';
 const web = fileURLToPath(new URL('../web/', import.meta.url));
 const scripts = [
   'catalog-schema', 'catalog-match', 'catalogs', 'vendors', 'packets', 'pklg', 'btsnoop', 'recorders', 'bthome-crypto', 'sensor-profiles', 'apple-continuity', 'nespresso-protocol', 'vesync-protocol', 'samsung-protocol', 'lg-webos-protocol', 'resmed-fig', 'beacon-protocol', 'bose-protocol', 'device-apps', 'profiles', 'device-library', 'scan-store', 'scan-query',
-  'metadata', 'gatt-values', 'analysis', 'console', 'traffic', 'api', 'advertisement', 'scan-stream', 'lab', 'connection', 'pocket-protocol', 'plaud-crypto',
+  'metadata', 'gatt-values', 'analysis', 'console', 'traffic', 'serial-codec', 'serial-wire', 'serial', 'api', 'advertisement', 'scan-stream', 'lab', 'connection', 'pocket-protocol', 'plaud-crypto',
   'plaud-protocol', 'credentials', 'credentials-ui', 'pocket', 'plaud', 'sleep-number-protocol', 'sleep-number', 'browser-cache',
   'sleep-mcr-protocol', 'sleep-mcr', 'sleep-router', 'radiacode-protocol', 'radiacode', 'dexcom-crypto', 'dexcom-protocol', 'dexcom-commands', 'dexcom-transport', 'dexcom-session',
   'dexcom-storage', 'dexcom-view', 'dexcom',

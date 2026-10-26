@@ -7,6 +7,7 @@
 #include "collection.h"
 
 void setup() {
+  if (Serial.setRxBufferSize(4224) != 4224) abort();
   Serial.begin(115200);
   initUsbMode();
   stateMutex = xSemaphoreCreateMutex();
@@ -21,6 +22,7 @@ void setup() {
 }
 
 void loop() {
+  if (!usbHciMode()) handleSerialHttp();
   handleHttp();
   updateNetwork();
   updateUsbHci();

@@ -2,7 +2,7 @@
 #include <Arduino.h>
 #include <cJSON.h>
 
-class WebServer;
+class BoardServer;
 struct NetworkChange {
   String mode, ssid, password, apSSID, apPassword;
   bool hasSSID = false, hasPassword = false, keepPassword = false;
@@ -12,7 +12,10 @@ struct NetworkChange {
 void startNetwork();
 void updateNetwork();
 void addNetworkState(cJSON* wifi);
-void registerNetworkRoutes(WebServer& server);
+void registerNetworkRoutes(BoardServer& server);
+bool setSerialWifiSuspended(bool suspended, String& error);
+bool serialWifiSuspended();
+void handleNetworkConsole(const String& line);
 bool queueNetworkChange(const NetworkChange& change, String& error);
 void deferNetworkApply();
 String networkHotspotPassword();

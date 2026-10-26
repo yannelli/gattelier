@@ -125,8 +125,9 @@ function render() {
   NanoLab.update(state, online);
   NanoLab.setBackgroundCapture(scanStore?.getPreference('backgroundScan', false));
   const scanning = state.ble.scanning;
-  $('network').textContent = online ? (state.wifi.connected ? `${state.wifi.ssid} · ${state.wifi.ip}` : 'Wi-Fi disconnected') : 'Board unavailable';
-  $('network-dot').classList.toggle('online', online && state.wifi.connected);
+  const usbConnected = NanoAPI.transport() === 'serial' && online;
+  $('network').textContent = usbConnected ? `USB connected${state.wifi.suspendedForUsb ? ' · Wi-Fi paused' : ''}` : online ? (state.wifi.connected ? `${state.wifi.ssid} · ${state.wifi.ip}` : 'Wi-Fi disconnected') : 'Board unavailable';
+  $('network-dot').classList.toggle('online', online && (usbConnected || state.wifi.connected));
   $('scan').disabled = !canScan(state, online, pending);
   $('scan').title = state.collection?.enabled ? 'Collection controls are in Settings. Hold the board button for 3 seconds to stop.' : state.usb?.mode === 'hci' ? 'Restore Bluetooth workbench in Settings.' : '';
   $('scan-label').textContent = scanning ? 'Stop scan' : 'Scan';
@@ -137,7 +138,7 @@ function render() {
   const error = transportError || notice || state.ble.error;
   $('notice').hidden = !error; $('notice-text').textContent = error || '';
   $('retry').hidden = online; $('retry').disabled = pending;
-  $('board-status').textContent = online ? `Board online · ${Math.floor((state.freeHeap || 0) / 1024)} KB free` : 'Reconnect to the board’s Wi-Fi network';
+  $('board-status').textContent = online ? `Board online · ${Math.floor((state.freeHeap || 0) / 1024)} KB free` : NanoAPI.transport() === 'serial' ? 'Connect USB in Settings' : 'Reconnect to the board’s Wi-Fi network';
   renderList(); renderInspector();
   const device = selectedDevice();
   NanoWorkspace.update({ device, connected: Boolean(device && state.ble.connected && state.ble.address === device.address) });
@@ -189,7 +190,7 @@ function poll({ streamOnly = false } = {}) {
       if (generation !== apiGeneration) return;
       online = false;
       scanStore?.setOffline();
-      transportError = error.name === 'AbortError' ? 'The board took too long to respond. Check its power and Wi-Fi connection.' : 'Cannot reach the board. Check its power and connect to the same Wi-Fi network.';
+      transportError = NanoAPI.transport() === 'serial' ? NanoAPI.serialStatus().error || 'USB is unavailable. Connect the board in Settings.' : error.name === 'AbortError' ? 'The board took too long to respond. Check its power and Wi-Fi connection.' : 'Cannot reach the board. Check its power and connect to the same Wi-Fi network.';
     } finally {
       if (generation === apiGeneration) {
         NanoPWA.reportConnection(online);
@@ -257,7 +258,7 @@ async function boot() {
     apiGeneration++; stateController?.abort(); scanStream.reset();
     clearTimeout(timer);
     state = { wifi: {}, ble: {}, devices: [], services: [] };
-    online = false; pending = false; transportError = NanoAPI.configured() ? 'Checking the new board endpoint.' : 'Set the private board endpoint in Settings.';
+    online = false; pending = false; transportError = NanoAPI.transport() === 'serial' ? NanoAPI.configured() ? 'Checking the USB board.' : 'Connect USB in Settings.' : NanoAPI.configured() ? 'Checking the new board endpoint.' : 'Set the private board endpoint in Settings.';
     scanStore?.setOffline(); NanoLab.update(state, false); render();
     Promise.resolve(pollPromise).finally(tick);
   });

@@ -1,5 +1,14 @@
 .api-settings .panel-heading { align-items: center; }
 .api-settings .badge.online { color: var(--success); }
+.api-transport { display: flex; flex-wrap: wrap; gap: var(--section-gap); margin: 0 var(--panel-inset) var(--section-gap); border: 0; padding: 0; }
+.api-transport legend { margin-bottom: 8px; font-weight: 650; }
+.api-transport label, .api-wifi-toggle { display: flex; align-items: center; gap: 8px; }
+.api-transport input, .api-wifi-toggle input { width: 18px; height: 18px; flex: 0 0 auto; }
+.api-usb { display: grid; gap: 12px; padding: 0 var(--panel-inset) var(--panel-inset); }
+.api-usb h3, .api-usb p { margin: 0; }
+.api-usb p { color: var(--muted); }
+.api-section-title { margin: 0; padding: 0 var(--panel-inset) 12px; }
+.api-network-hint { margin: 0; padding: 0 var(--panel-inset) var(--section-gap); }
 .api-form { display: grid; gap: var(--section-gap); padding: 0 var(--panel-inset) var(--panel-inset); }
 .api-form label { display: grid; gap: 7px; font-weight: 650; }
 .api-form input { width: 100%; }

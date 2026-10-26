@@ -3,7 +3,7 @@
 #include <cJSON.h>
 #include "collection_rules.h"
 
-class WebServer;
+class BoardServer;
 void startCollection(bool allowRun = true);
 void updateCollection();
 bool collectionEnabled();
@@ -14,5 +14,5 @@ bool configureCollection(const cJSON* json, String& error);
 cJSON* collectionState();
 bool initializeCollectionStorage(String& error);
 bool clearCollectionStorage(String& error);
-void downloadCollection(WebServer& server);
-void registerCollectionRoutes(WebServer& server);
+void downloadCollection(BoardServer& server);
+void registerCollectionRoutes(BoardServer& server);

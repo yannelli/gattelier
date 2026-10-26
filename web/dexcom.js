@@ -101,7 +101,7 @@ const NanoDexcom = (() => {
     client = createClient(lab, { ...options, onChange: schedule });
     const makeSession = () => NanoDexcomSession.create(lab, { connection, ...storage, onChange: schedule });
     session = makeSession();
-    const scope = device => device?.address ? `${NanoAPI.origin()}/${device.address}/${device.addressType}` : '';
+    const scope = device => device?.address ? `${NanoAPI.transport?.() === 'serial' ? 'usb' : NanoAPI.origin()}/${device.address}/${device.addressType}` : '';
     function render() {
       if (destroying || rendering || !session || !client) return;
       rendering = true;

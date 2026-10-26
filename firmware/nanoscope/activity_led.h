@@ -1,7 +1,7 @@
 #pragma once
 #include <Arduino.h>
 
-class WebServer;
+class BoardServer;
 
 void startActivityLed();
 void signalActivityLed();
@@ -10,4 +10,4 @@ uint8_t activityLedBrightness();
 bool activityLedReady();
 bool setActivityLedBrightness(uint8_t brightness, String& error);
 bool testActivityLed(String& error);
-void registerActivityLedRoutes(WebServer& server);
+void registerActivityLedRoutes(BoardServer& server);

@@ -4,7 +4,7 @@
 
 static String appOrigin;
 
-bool allowedHttpOrigin(WebServer& server) {
+bool allowedHttpOrigin(BoardServer& server) {
   const String origin = server.header("Origin");
   return origin.isEmpty() || origin == "http://" + server.hostHeader() || (!appOrigin.isEmpty() && origin == appOrigin);
 }
@@ -26,14 +26,14 @@ static bool validOrigin(const String& origin) {
   return true;
 }
 
-void registerHttpAccess(WebServer& server) {
+void registerHttpAccess(BoardServer& server) {
   Preferences preferences;
   preferences.begin("web-access", true);
   appOrigin = preferences.getString("origin", "https://gattelier.ryanyannelli.com");
   if (appOrigin == "-") appOrigin = "";
   preferences.end();
-  server.addMiddleware([](WebServer& request, Middleware::Callback next) {
-    if (!request.uri().startsWith("/api/")) return next();
+  server.access([](BoardServer& request) {
+    if (!request.uri().startsWith("/api/")) return false;
     request.sendHeader("Cache-Control", "no-store");
     if (!allowedHttpOrigin(request)) {
       request.send(403, "application/json", "{\"error\":\"This app origin is not allowed. Configure hosted app access on the board's local page.\"}");
@@ -44,7 +44,7 @@ void registerHttpAccess(WebServer& server) {
       request.sendHeader("Access-Control-Allow-Origin", origin);
       request.sendHeader("Vary", "Origin");
     }
-    if (request.method() != HTTP_OPTIONS) return next();
+    if (request.method() != HTTP_OPTIONS) return false;
     const String method = request.header("Access-Control-Request-Method");
     String headers = request.header("Access-Control-Request-Headers"); headers.toLowerCase(); headers.trim();
     if (origin.isEmpty() || (method != "GET" && method != "POST") || (!headers.isEmpty() && headers != "content-type")) {

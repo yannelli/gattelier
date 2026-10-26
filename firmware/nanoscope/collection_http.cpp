@@ -1,23 +1,23 @@
 #include "http_access.h"
 #include "collection.h"
-#include <WebServer.h>
+#include "board_server.h"
 
-static void respond(WebServer& server, int status, cJSON* json) {
+static void respond(BoardServer& server, int status, cJSON* json) {
   char* body = cJSON_PrintUnformatted(json);
   server.sendHeader("Cache-Control", "no-store"); server.sendHeader("X-Content-Type-Options", "nosniff");
   server.send(status, "application/json", body ? body : "{}"); cJSON_free(body); cJSON_Delete(json);
 }
 
-static void reject(WebServer& server, int status, const String& error) {
+static void reject(BoardServer& server, int status, const String& error) {
   auto json = cJSON_CreateObject(); cJSON_AddStringToObject(json, "error", error.c_str()); respond(server, status, json);
 }
 
-static bool originAllowed(WebServer& server) {
+static bool originAllowed(BoardServer& server) {
   if (!allowedHttpOrigin(server)) { reject(server, 403, "Open this board's own page to use collection."); return false; }
   return true;
 }
 
-static cJSON* request(WebServer& server) {
+static cJSON* request(BoardServer& server) {
   if (!originAllowed(server)) return nullptr;
   if (!server.header("Content-Type").startsWith("application/json")) { reject(server, 415, "Expected application/json."); return nullptr; }
   String body = server.arg("plain");
@@ -28,7 +28,7 @@ static cJSON* request(WebServer& server) {
   return json;
 }
 
-void registerCollectionRoutes(WebServer& server) {
+void registerCollectionRoutes(BoardServer& server) {
   server.on("/api/collection", HTTP_GET, [&server] { if (originAllowed(server)) respond(server, 200, collectionState()); });
   server.on("/api/collection", HTTP_POST, [&server] {
     auto json = request(server); if (!json) return; String error;

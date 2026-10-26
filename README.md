@@ -100,6 +100,10 @@ Use a Cloudflare token with Workers deployment permission for the target account
 
 Cloudflare Workers hosts only the static app files. The browser stores recorder credentials and private keys locally. The app sends board API requests directly to the board or through the private bridge.
 
+In desktop Chrome, connect the NanoC6 by USB, open the hosted app, and choose **Settings > Board connection > Connect USB**. Select the Espressif USB serial device. Scanning, GATT tools, recorder apps, and collection export use the same board API over USB. The board needs the current firmware in Bluetooth workbench mode. Chrome asks for serial access; each page reload requires reconnecting. [Chrome's Web Serial documentation](https://developer.chrome.com/docs/capabilities/serial) covers browser support and permissions.
+
+**Pause Wi-Fi while USB is connected** stops Wi-Fi and its HTTP listener to release heap. Uncheck it to keep USB and Wi-Fi running together. Disconnecting restores the previous network mode; an interrupted session has a 90-second recovery timeout. A short button press also resumes Wi-Fi. Network settings saved during a pause apply when Wi-Fi resumes. USB connection changes do not write saved network settings or scan history to flash. HCI controller mode uses a separate serial protocol and requires returning to workbench mode before connecting the browser.
+
 Chrome 142+ on desktop and Android supports direct local HTTP connections after a local-network permission prompt. In the hosted app's Settings, enter `http://nanoscope.local` or the board's private IP address, then allow access. The firmware allows `https://gattelier.ryanyannelli.com` by default. For a different hosted URL, open the board's local page and set **Allowed hosted app** in Settings to that exact HTTPS origin. [Chrome's Local Network Access guide](https://developer.chrome.com/blog/local-network-access) describes the permission and mixed-content exemption.
 
 Safari on iPhone does not support this local HTTP exemption. It needs an HTTPS endpoint. The board itself does not need a certificate: run the private HTTPS bridge on a Mac connected to the board and Tailscale:

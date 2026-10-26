@@ -1,11 +1,11 @@
 #pragma once
 #include <Arduino.h>
 #include <cJSON.h>
-class WebServer;
+class BoardServer;
 void initUsbMode();
 bool usbHciMode();
 bool startUsbHci();
 void updateUsbHci();
 bool queueUsbMode(bool hci, String& error);
 void addUsbState(cJSON* target);
-void registerUsbRoutes(WebServer& server);
+void registerUsbRoutes(BoardServer& server);

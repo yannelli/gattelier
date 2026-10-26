@@ -5,6 +5,44 @@ var NanoAPI = (() => {
   const API_PATH = /^\/?(?:api\/)?([a-zA-Z0-9_-]+(?:\/[a-zA-Z0-9_-]+)*)(\?.*)?$/;
   let revision = 0;
   const active = new Set();
+  const TRANSPORT_KEY = 'nanoscope.transport';
+  let mode = 'http', serial;
+  try { if (globalThis.localStorage?.getItem(TRANSPORT_KEY) === 'serial') mode = 'serial'; } catch {}
+
+  function serialClient() {
+    if (!serial) {
+      const module = globalThis.NanoSerial;
+      if (!module) throw new Error('USB support is unavailable. Reload the app.');
+      serial = module.create();
+      let connected = false;
+      serial.onChange(status => {
+        if (status.connected !== connected) {
+          connected = status.connected;
+          if (mode === 'serial') changed();
+        }
+        if (typeof globalThis.dispatchEvent === 'function' && typeof CustomEvent !== 'undefined') globalThis.dispatchEvent(new CustomEvent('nanoscope:serial', { detail: status }));
+      });
+    }
+    return serial;
+  }
+
+  function serialStatus() {
+    return serial ? serial.status() : { supported: Boolean(globalThis.navigator?.serial), secure: globalThis.isSecureContext !== false, state: 'disconnected', connected: false, wifiSuspended: false, error: '' };
+  }
+
+  function selectTransport(next) {
+    if (!['http', 'serial'].includes(next)) throw new Error('Select HTTP or USB.');
+    if (next === mode) return mode;
+    mode = next;
+    try { globalThis.localStorage?.setItem(TRANSPORT_KEY, mode); } catch {}
+    changed();
+    if (mode === 'http') serial?.close().catch(() => {});
+    return mode;
+  }
+
+  function connectSerial(options) { selectTransport('serial'); return serialClient().connect(options); }
+  function disconnectSerial() { return serial ? serial.close() : Promise.resolve(); }
+  function setSerialWifiOff(value) { return serialClient().setWifiOff(value); }
 
   function addressSpace(hostname) {
     const host = String(hostname).toLowerCase().replace(/^\[|\]$/g, '').replace(/\.$/, '');
@@ -62,7 +100,7 @@ var NanoAPI = (() => {
     for (const controller of active) controller.abort();
     active.clear();
     if (typeof globalThis.dispatchEvent === 'function' && typeof CustomEvent !== 'undefined') {
-      globalThis.dispatchEvent(new CustomEvent('nanoscope:api-change', { detail: { origin: endpoint, revision } }));
+      globalThis.dispatchEvent(new CustomEvent('nanoscope:api-change', { detail: { origin: endpoint, transport: mode, revision } }));
     }
   }
 
@@ -89,10 +127,14 @@ var NanoAPI = (() => {
     else suppliedSignal?.addEventListener('abort', abort, { once: true });
     active.add(controller);
     try {
-      const target = new URL(url(path)), space = target.protocol === 'http:' ? addressSpace(target.hostname) : '';
-      const response = await fetch(target.href, { ...options, ...(space ? { targetAddressSpace: space } : {}), credentials: 'omit', cache: options.cache || 'no-store', signal: controller.signal });
+      let response;
+      if (mode === 'serial') response = await serialClient().fetch(normalizePath(path), { ...options, signal: controller.signal });
+      else {
+        const target = new URL(url(path)), space = target.protocol === 'http:' ? addressSpace(target.hostname) : '';
+        response = await fetch(target.href, { ...options, ...(space ? { targetAddressSpace: space } : {}), credentials: 'omit', cache: options.cache || 'no-store', signal: controller.signal });
+      }
       const body = await response.arrayBuffer();
-      if (requestRevision !== revision) throw new DOMException('Board endpoint changed.', 'AbortError');
+      if (requestRevision !== revision || controller.signal.aborted) throw new DOMException('Board connection changed.', 'AbortError');
       const responseBody = [204, 205, 304].includes(response.status) ? null : body;
       return new Response(responseBody, { status: response.status, statusText: response.statusText, headers: response.headers });
     } finally {
@@ -101,7 +143,8 @@ var NanoAPI = (() => {
     }
   }
 
-  return { fetch: apiFetch, url, origin: () => endpoint, configured: () => Boolean(endpoint), setOrigin, clearOrigin, validateOrigin, sameOriginDefault, addressSpace };
+  return { fetch: apiFetch, url, origin: () => endpoint, configured: () => mode === 'serial' ? serialStatus().connected : Boolean(endpoint), setOrigin, clearOrigin, validateOrigin, sameOriginDefault, addressSpace,
+    transport: () => mode, selectTransport, connectSerial, disconnectSerial, serialStatus, setSerialWifiOff };
 })();
 globalThis.NanoAPI = NanoAPI;
 if (typeof module !== 'undefined') module.exports = NanoAPI;

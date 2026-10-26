@@ -1,10 +1,10 @@
 #include "activity_led.h"
 #include "http_access.h"
-#include <WebServer.h>
+#include "board_server.h"
 #include <cJSON.h>
 #include <math.h>
 
-static void respond(WebServer& server, int status, cJSON* json) {
+static void respond(BoardServer& server, int status, cJSON* json) {
   char* body = cJSON_PrintUnformatted(json);
   server.sendHeader("Cache-Control", "no-store");
   server.sendHeader("X-Content-Type-Options", "nosniff");
@@ -13,13 +13,13 @@ static void respond(WebServer& server, int status, cJSON* json) {
   cJSON_Delete(json);
 }
 
-static void reject(WebServer& server, int status, const char* error) {
+static void reject(BoardServer& server, int status, const char* error) {
   auto json = cJSON_CreateObject();
   cJSON_AddStringToObject(json, "error", error);
   respond(server, status, json);
 }
 
-static bool originAllowed(WebServer& server) {
+static bool originAllowed(BoardServer& server) {
   if (allowedHttpOrigin(server)) return true;
   reject(server, 403, "Open this board's own page to change the activity LED.");
   return false;
@@ -33,7 +33,7 @@ static cJSON* ledState() {
   return json;
 }
 
-void registerActivityLedRoutes(WebServer& server) {
+void registerActivityLedRoutes(BoardServer& server) {
   server.on("/api/activity-led", HTTP_GET, [&server] {
     if (originAllowed(server)) respond(server, 200, ledState());
   });

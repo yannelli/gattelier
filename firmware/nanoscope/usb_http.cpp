@@ -1,8 +1,8 @@
 #include "http_access.h"
 #include "usb_hci.h"
-#include <WebServer.h>
+#include "board_server.h"
 
-void registerUsbRoutes(WebServer& server) {
+void registerUsbRoutes(BoardServer& server) {
   auto respond = [&server](int status, const String& error = "") {
     auto json = cJSON_CreateObject();
     if (error.isEmpty()) addUsbState(json); else cJSON_AddStringToObject(json, "error", error.c_str());

@@ -3,6 +3,8 @@
 #include "collection.h"
 #include "network_button.h"
 #include "activity_led.h"
+#include "state.h"
+#include "serial_api.h"
 #include "secrets.h"
 #include <WiFi.h>
 #include <ESPmDNS.h>
@@ -15,8 +17,9 @@
 static Preferences preferences;
 static NetworkButton button;
 static String stationSSID = WIFI_SSID, stationPassword = WIFI_PASSWORD, apSSID, apPassword;
-static String requestedMode = "station", actualMode = "station", pendingMode, networkError, serialLine;
+static String requestedMode = "station", actualMode = "station", pendingMode, networkError, resumeMode;
 static bool storageReady = false, apActive = false, previousConnected = false, mdnsActive = false;
+static bool wifiSuspended = false;
 static uint32_t applyAt = 0, connectingSince = 0, lastRetry = 0, lastMdns = 0;
 static const IPAddress apIP(192, 168, 4, 1), netmask(255, 255, 255, 0);
 
@@ -60,7 +63,7 @@ static void hotspot(bool recovery) {
   if (!apActive) { networkError = "Hotspot could not start. Press the button to retry station mode."; return; }
   if (!recovery) networkError = "";
   announce();
-  if (!usbHciMode()) Serial.printf("Gattelier hotspot: %s http://%s/ password: %s\n", apSSID.c_str(), apIP.toString().c_str(), apPassword.c_str());
+  if (!usbHciMode() && !serialApiActive()) Serial.printf("Gattelier hotspot: %s http://%s/ password: %s\n", apSSID.c_str(), apIP.toString().c_str(), apPassword.c_str());
 }
 
 static void station() {
@@ -70,6 +73,32 @@ static void station() {
   if (!WiFi.mode(WIFI_STA)) { networkError = "Station interface could not start."; hotspot(true); return; }
   WiFi.setHostname("nanoscope"); WiFi.setAutoReconnect(true);
   WiFi.begin(stationSSID.c_str(), stationPassword.isEmpty() ? nullptr : stationPassword.c_str());
+}
+
+bool serialWifiSuspended() { return wifiSuspended; }
+
+bool setSerialWifiSuspended(bool suspended, String& error) {
+  if (suspended == wifiSuspended) return true;
+  if (suspended) {
+    resumeMode = actualMode;
+    setHttpEnabled(false);
+    MDNS.end(); mdnsActive = false; previousConnected = false;
+    WiFi.setAutoReconnect(false);
+    if (!WiFi.mode(WIFI_OFF)) {
+      error = "Wi-Fi could not pause. USB remains available with Wi-Fi enabled.";
+      if (resumeMode == "hotspot") hotspot(false); else station();
+      setHttpEnabled(true);
+      return false;
+    }
+    apActive = false; wifiSuspended = true;
+    return true;
+  }
+  wifiSuspended = false;
+  String mode = pendingMode.isEmpty() ? resumeMode : pendingMode;
+  pendingMode = "";
+  if (mode == "hotspot") hotspot(false); else station();
+  setHttpEnabled(true);
+  return true;
 }
 
 bool queueNetworkChange(const NetworkChange& change, String& error) {
@@ -97,19 +126,20 @@ String networkHotspotPassword() { return apPassword; }
 void deferNetworkApply() { if (!pendingMode.isEmpty()) applyAt = millis() + 750; }
 
 void addNetworkState(cJSON* wifi) {
-  bool connected = actualMode == "station" && WiFi.status() == WL_CONNECTED;
+  bool connected = !wifiSuspended && actualMode == "station" && WiFi.status() == WL_CONNECTED;
   String ssid = apActive ? WiFi.softAPSSID() : connected ? WiFi.SSID() : stationSSID;
   String ip = apActive ? apIP.toString() : connected ? WiFi.localIP().toString() : "";
-  const char* status = apActive ? "hotspot" : connected ? "station-connected" : networkError.isEmpty() ? "station-connecting" : "error";
-  const char* led = apActive ? "amber" : connected ? "blue" : networkError.isEmpty() ? "blue-blink" : "red";
+  const char* status = wifiSuspended ? "usb-paused" : apActive ? "hotspot" : connected ? "station-connected" : networkError.isEmpty() ? "station-connecting" : "error";
+  const char* led = wifiSuspended ? "cyan" : apActive ? "amber" : connected ? "blue" : networkError.isEmpty() ? "blue-blink" : "red";
+  cJSON_AddBoolToObject(wifi, "suspendedForUsb", wifiSuspended);
   cJSON_AddBoolToObject(wifi, "connected", connected || apActive);
   cJSON_AddBoolToObject(wifi, "stationConnected", connected); cJSON_AddBoolToObject(wifi, "apActive", apActive);
-  cJSON_AddStringToObject(wifi, "mode", actualMode.c_str()); cJSON_AddStringToObject(wifi, "requestedMode", requestedMode.c_str());
+  cJSON_AddStringToObject(wifi, "mode", wifiSuspended ? "usb" : actualMode.c_str()); cJSON_AddStringToObject(wifi, "requestedMode", requestedMode.c_str());
   cJSON_AddStringToObject(wifi, "status", status); cJSON_AddStringToObject(wifi, "ssid", ssid.c_str());
   cJSON_AddStringToObject(wifi, "networkSSID", ssid.c_str()); cJSON_AddStringToObject(wifi, "ip", ip.c_str());
   cJSON_AddStringToObject(wifi, "configuredSSID", stationSSID.c_str()); cJSON_AddStringToObject(wifi, "apSSID", apSSID.c_str());
   cJSON_AddStringToObject(wifi, "apIP", apIP.toString().c_str()); cJSON_AddStringToObject(wifi, "led", led);
-  cJSON_AddStringToObject(wifi, "error", networkError.c_str()); cJSON_AddNumberToObject(wifi, "buttonPin", 9);
+  cJSON_AddStringToObject(wifi, "error", wifiSuspended ? "" : networkError.c_str()); cJSON_AddNumberToObject(wifi, "buttonPin", 9);
   cJSON_AddBoolToObject(wifi, "passwordSet", !stationPassword.isEmpty()); cJSON_AddBoolToObject(wifi, "stationPasswordSet", !stationPassword.isEmpty());
   cJSON_AddBoolToObject(wifi, "apPasswordSet", !apPassword.isEmpty()); cJSON_AddBoolToObject(wifi, "pending", !pendingMode.isEmpty());
   cJSON_AddNumberToObject(wifi, "applyAfterMs", pendingMode.isEmpty() ? 0 : std::max(int32_t(0), int32_t(applyAt - millis())));
@@ -146,21 +176,16 @@ void startNetwork() {
   if (requestedMode == "hotspot") hotspot(false); else station();
 }
 
-static void serialCommand() {
-  while (Serial.available()) {
-    char character = Serial.read();
-    if (character == '\r') continue;
-    if (character != '\n') { if (serialLine.length() < 80) serialLine += character; continue; }
-    if (serialLine == "network status") {
+void handleNetworkConsole(const String& line) {
+    if (serialApiActive()) return;
+    if (line == "network status") {
       auto json = cJSON_CreateObject(); addNetworkState(json);
       char* encoded = cJSON_PrintUnformatted(json); if (encoded) { Serial.print("NETWORK "); Serial.println(encoded); }
       cJSON_free(encoded); cJSON_Delete(json);
-    } else if (serialLine == "network station" || serialLine == "network hotspot") {
-      NetworkChange change; change.mode = serialLine.substring(8); String error;
+    } else if (line == "network station" || line == "network hotspot") {
+      NetworkChange change; change.mode = line.substring(8); String error;
       Serial.println(queueNetworkChange(change, error) ? "Network mode change queued" : error);
     }
-    serialLine = "";
-  }
 }
 
 void updateNetwork() {
@@ -170,21 +195,24 @@ void updateNetwork() {
   if (buttonEvent == NetworkButtonEvent::TriplePress) { String error; queueUsbMode(!usbHciMode(), error); }
   if (buttonEvent == NetworkButtonEvent::LongPress && !usbHciMode()) collectionToggle();
   if (buttonEvent == NetworkButtonEvent::ShortPress) {
-    NetworkChange change; change.mode = actualMode == "hotspot" ? "station" : "hotspot"; String error;
-    if (!queueNetworkChange(change, error) && !usbHciMode()) Serial.println(error);
+    String error;
+    if (wifiSuspended) setSerialWifiSuspended(false, error);
+    else {
+      NetworkChange change; change.mode = actualMode == "hotspot" ? "station" : "hotspot";
+      if (!queueNetworkChange(change, error) && !usbHciMode() && !serialApiActive()) Serial.println(error);
+    }
   }
-  if (!usbHciMode()) serialCommand();
-  if (!pendingMode.isEmpty() && int32_t(now - applyAt) >= 0) {
+  if (!wifiSuspended && !pendingMode.isEmpty() && int32_t(now - applyAt) >= 0) {
     String mode = pendingMode; pendingMode = "";
     if (mode == "hotspot") hotspot(false); else station();
   }
   now = millis();
-  bool connected = actualMode == "station" && WiFi.status() == WL_CONNECTED;
+  bool connected = !wifiSuspended && actualMode == "station" && WiFi.status() == WL_CONNECTED;
   if (connected && !previousConnected) {
     networkError = ""; announce();
-    if (!usbHciMode()) Serial.printf("Gattelier ready: http://%s/ (http://nanoscope.local/)\n", WiFi.localIP().toString().c_str());
+    if (!usbHciMode() && !serialApiActive()) Serial.printf("Gattelier ready: http://%s/ (http://nanoscope.local/)\n", WiFi.localIP().toString().c_str());
   }
-  if (actualMode == "station" && !connected) {
+  if (!wifiSuspended && actualMode == "station" && !connected) {
     if (previousConnected) { connectingSince = lastRetry = now; MDNS.end(); mdnsActive = false; }
     if (uint32_t(now - connectingSince) >= 30000) {
       networkError = "Wi-Fi connection failed after 30 seconds. Hotspot recovery is active."; hotspot(true);
@@ -192,7 +220,7 @@ void updateNetwork() {
   }
   previousConnected = connected;
   if ((connected || apActive) && !mdnsActive && uint32_t(now - lastMdns) >= 10000) announce();
-  uint32_t color = apActive ? 0x201000 : connected ? 0x000020 : !networkError.isEmpty() ? 0x200000 : now % 1000 < 500 ? 0x000020 : 0;
+  uint32_t color = wifiSuspended ? 0x000808 : apActive ? 0x201000 : connected ? 0x000020 : !networkError.isEmpty() ? 0x200000 : now % 1000 < 500 ? 0x000020 : 0;
   if (usbHciMode() && now % 1500 < 250) color = 0x180020;
   if (!usbHciMode()) color = collectionLedColor(color, now);
   static uint32_t previousColor = 0xffffffff;

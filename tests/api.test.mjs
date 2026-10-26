@@ -68,3 +68,48 @@ test('an endpoint change aborts requests from the previous endpoint', async () =
   await assert.rejects(pending, error => error.name === 'AbortError');
   assert.equal(api.url('events?after=4'), 'https://second.example.ts.net/api/events?after=4');
 });
+
+test('USB selection preserves HTTP endpoint and prevents network fallback', async () => {
+  let connected = false, listener, serialFetches = 0, networkFetches = 0;
+  globalThis.NanoSerial = { create: () => ({
+    onChange: callback => { listener = callback; },
+    status: () => ({ connected, state: connected ? 'connected' : 'disconnected' }),
+    connect: async () => { connected = true; listener({ connected }); },
+    close: async () => { connected = false; listener({ connected }); },
+    fetch: async () => {
+      serialFetches++;
+      if (!connected) throw new Error('USB is disconnected.');
+      return new Response('{"usb":true}');
+    },
+    setWifiOff: async () => {},
+  }) };
+  globalThis.fetch = async () => { networkFetches++; return new Response('{}'); };
+  const origin = api.origin();
+  api.selectTransport('serial');
+  assert.equal(api.configured(), false);
+  await assert.rejects(api.fetch('/api/state'), /disconnected/);
+  assert.equal(networkFetches, 0);
+  assert.equal(api.origin(), origin);
+  await api.connectSerial({ wifiOff: true });
+  assert.equal(api.configured(), true);
+  assert.deepEqual(await (await api.fetch('/api/state')).json(), { usb: true });
+  await api.disconnectSerial();
+  assert.equal(api.transport(), 'serial');
+  await assert.rejects(api.fetch('/api/state'), /disconnected/);
+  assert.equal(serialFetches, 3);
+  api.selectTransport('http');
+  await api.fetch('/api/state');
+  assert.equal(networkFetches, 1);
+  assert.equal(api.origin(), origin);
+});
+
+test('transport change aborts HTTP work and suppresses stale response', async () => {
+  let resolveFetch, signal;
+  globalThis.fetch = (url, options) => { signal = options.signal; return new Promise(resolve => { resolveFetch = resolve; }); };
+  const pending = api.fetch('/api/state');
+  api.selectTransport('serial');
+  assert.equal(signal.aborted, true);
+  resolveFetch(new Response('{}'));
+  await assert.rejects(pending, { name: 'AbortError' });
+  api.selectTransport('http');
+});

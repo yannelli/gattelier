@@ -1,5 +1,5 @@
 #pragma once
-#include <WebServer.h>
+#include "board_server.h"
 
-bool allowedHttpOrigin(WebServer& server);
-void registerHttpAccess(WebServer& server);
+bool allowedHttpOrigin(BoardServer& server);
+void registerHttpAccess(BoardServer& server);
