@@ -32,6 +32,11 @@
 .radiacode-help summary { width: fit-content; cursor: pointer; font-size: 12px; }
 .radiacode-help p { max-width: 640px; margin: 10px 0 8px; line-height: 1.7; }
 .radiacode-help a { color: var(--accent); }
+.radiacode-actions .radiacode-reset { background: transparent; color: var(--warning-text); border: 1px solid var(--line); margin-left: auto; }
+.radiacode-spectrum { margin: 16px 0 0; padding: 14px; border: 1px solid var(--line); border-radius: 11px; }
+.radiacode-spectrum figcaption { color: var(--muted); font-size: 11px; }
+.radiacode-spectrum svg { display: block; width: 100%; height: auto; color: var(--accent); border-bottom: 1px solid var(--line); }
+.radiacode-spectrum-scale { display: flex; justify-content: space-between; gap: 12px; color: var(--muted); font-size: 10px; margin-top: 7px; font-variant-numeric: tabular-nums; }
 @media (max-width: 680px) {
   .radiacode-body { padding: 0 18px 18px; }
   .radiacode-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }

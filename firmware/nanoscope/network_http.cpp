@@ -1,3 +1,4 @@
+#include "http_access.h"
 #include "board_network.h"
 #include <WebServer.h>
 
@@ -14,8 +15,7 @@ static void reject(WebServer& server, int status, const String& message) {
 }
 
 static cJSON* request(WebServer& server) {
-  String origin = server.header("Origin");
-  if (origin.length() && origin != "http://" + server.hostHeader()) { reject(server, 403, "Use this device's own page to change network settings."); return nullptr; }
+  if (!allowedHttpOrigin(server)) { reject(server, 403, "Use this device's own page to change network settings."); return nullptr; }
   if (!server.header("Content-Type").startsWith("application/json")) { reject(server, 415, "Expected application/json."); return nullptr; }
   String body = server.arg("plain");
   if (body.length() > 1400) { reject(server, 413, "Network request is too large."); return nullptr; }
@@ -27,8 +27,7 @@ static cJSON* request(WebServer& server) {
 
 void registerNetworkRoutes(WebServer& server) {
   server.on("/api/network", HTTP_GET, [&server] {
-    String origin = server.header("Origin");
-    if (origin.length() && origin != "http://" + server.hostHeader()) { reject(server, 403, "Open this device's own page."); return; }
+    if (!allowedHttpOrigin(server)) { reject(server, 403, "Open this device's own page."); return; }
     auto json = cJSON_CreateObject(); addNetworkState(json); respond(server, 200, json);
   });
   server.on("/api/network", HTTP_POST, [&server] {

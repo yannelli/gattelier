@@ -68,7 +68,11 @@ const NanoProfiles = (() => {
         field('Battery voltage', view.getUint16(2) ? `${view.getUint16(2)} mV` : 'Not supplied');
         field('Beacon temperature', view.getUint16(4) === 0x8000 ? 'Not supplied' : `${view.getInt16(4) / 256} °C`);
         field('Advertisement counter', view.getUint32(6)); field('Beacon uptime', `${view.getUint32(10) / 10} seconds`);
-      } else result.limitations.push('No supported UID, URL, or unencrypted telemetry frame in this advertisement.');
+      } else if (data[0] === 0x30 && data.length === 10) {
+        result.title = 'Eddystone EID'; result.confidence = 'Decoded format';
+        field('Calibrated TX power', `${view.getInt8(1)} dBm`); field('Ephemeral identifier', Array.from(data.slice(2), value => value.toString(16).padStart(2, '0')).join(''));
+        result.limitations.push('This rotating identifier requires its authorized resolver to establish a beacon identity.');
+      } else result.limitations.push('No supported UID, URL, EID, or unencrypted telemetry frame in this advertisement.');
     }
     const dexcomService = services.find(value => ['febc', 'f8083532-849e-531c-c594-30f1f86a4ea5'].includes(value));
     const dexcomName = /^(?:DXCM|DX02|Dexcom)[\da-z]{2}$/i.test(device.name || '');

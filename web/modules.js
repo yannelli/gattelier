@@ -8,14 +8,14 @@ const NanoModules = (() => {
     { id: 'plaud', title: 'PLAUD', description: 'Authenticate your Note Pro and download recordings.', category: 'recorder' },
     { id: 'pocket', title: 'Pocket', description: 'Browse recorder storage and retrieve audio.', category: 'recorder' },
     { id: 'sleep', title: 'Sleep Number', description: 'Read supported Fuzion and MCR bed settings.', category: 'sleep' },
-    { id: 'radiacode', title: 'RadiaCode', description: 'Read identity, status, and buffered measurements.', category: 'sensor' },
+    { id: 'radiacode', title: 'RadiaCode', description: 'Read measurements and spectrum, refresh live, and reset accumulated dose.', category: 'sensor' },
     { id: 'thermometer', title: 'Thermometers', description: 'Read or capture standard temperature measurements.', category: 'sensor' },
     { id: 'locks', title: 'Locks', description: 'Inspect lock services, identity, and security requirements.', category: 'lock' },
     { id: 'resmed', title: 'ResMed CPAP', description: 'Inspect Air11 transport and exposed device metadata.', category: 'medical' },
     { id: 'ge', title: 'GE appliances', description: 'Inspect BLE metadata and GEA transport requirements.', category: 'appliance' },
     { id: 'samsung', title: 'Samsung TVs', description: 'Inspect broadcasts and local API transport requirements.', category: 'appliance' },
     { id: 'tracker', title: 'Trackers & beacons', description: 'Inspect Find My, Tile, iBeacon and Eddystone broadcasts.', category: 'tracker' },
-    { id: 'medical', title: 'Dexcom metadata', description: 'Identify advertised device metadata and matching evidence.', category: 'medical' },
+    { id: 'medical', title: 'Dexcom G7', description: 'Decode captured readings, history, sensor state, and identity.', category: 'medical' },
     { id: 'sensor', title: 'Environmental sensors', description: 'Decode BTHome and Ruuvi broadcast measurements.', category: 'sensor' }
   ];
   function matches(device) {
@@ -36,6 +36,7 @@ const NanoModules = (() => {
       const panel = document.createElement('section'); panel.id = `${id}-panel`; panel.className = 'panel metadata-module'; panel.hidden = true;
       panel.setAttribute('aria-label', catalog.find(item => item.id === id).title);
       document.getElementById('module-content').append(panel);
+      if (id === 'medical') NanoDexcom.mount(panel, NanoLab, { getDevice: hooks.selected });
       if (Object.hasOwn(NanoDeviceSupport.families, id)) NanoDeviceSupport.mount(panel, id, NanoLab);
     }
   }
@@ -73,7 +74,7 @@ const NanoModules = (() => {
     const fragment = document.createDocumentFragment(); fragment.append(intro, grid);
     replacePreservingFocus(root, fragment);
     }
-    for (const id of ['tracker', 'medical', 'sensor']) {
+    for (const id of ['tracker', 'sensor']) {
       const panel = document.getElementById(`${id}-panel`); if (active !== id) continue;
       const heading = document.createElement('h2'); heading.textContent = catalog.find(item => item.id === id).title;
       const content = [heading];

@@ -1,3 +1,4 @@
+#include "http_access.h"
 #include "ble_security.h"
 #include "pairing_rules.h"
 #include "state.h"
@@ -13,8 +14,7 @@ static void reject(WebServer& server, int code, const String& message) {
 static cJSON* request(WebServer& server) {
   server.sendHeader("Cache-Control", "no-store");
   if (usbHciMode()) { reject(server, 409, "Restore Bluetooth workbench mode before pairing from the web UI."); return nullptr; }
-  String origin = server.header("Origin");
-  if (origin.length() && origin != "http://" + server.hostHeader()) { reject(server, 403, "Open this board's own page to pair devices."); return nullptr; }
+  if (!allowedHttpOrigin(server)) { reject(server, 403, "Open this board's own page to pair devices."); return nullptr; }
   if (!server.header("Content-Type").startsWith("application/json")) { reject(server, 415, "Expected application/json."); return nullptr; }
   String body = server.arg("plain");
   if (body.length() > 512) { reject(server, 413, "Pairing request is too large."); return nullptr; }

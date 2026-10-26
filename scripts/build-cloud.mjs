@@ -3,7 +3,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
-const assets = ['index.html', 'app.bundle.js', 'app.bundle.css', 'vendors.json',
+const assets = ['index.html', 'app.bundle.js', 'app.bundle.css', 'vendors.json', 'metadata-v1.json',
   'manifest.webmanifest', 'icons/nanoscope-180.png', 'icons/nanoscope-192.png', 'icons/nanoscope-512.png'];
 const hash = createHash('sha256');
 await mkdir(`${root}dist/icons`, { recursive: true });
@@ -20,8 +20,11 @@ await writeFile(`${root}dist/sw.js`, serviceWorker.replaceAll('__NANO_BUILD__', 
 await writeFile(`${root}dist/_headers`, `/*
   X-Content-Type-Options: nosniff
   Referrer-Policy: no-referrer
-  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self' https:; worker-src 'self'; manifest-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'none'
+  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self' http: https:; worker-src 'self'; manifest-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'none'
   Cache-Control: no-cache
+/metadata-v1.json
+  Access-Control-Allow-Origin: *
+  Cache-Control: public, max-age=300
 /sw.js
   Service-Worker-Allowed: /
   Cache-Control: no-store

@@ -99,3 +99,11 @@ test('foreground failures back off and background polling follows the preference
   assert.equal(app.pollDelay(), null);
   assert.equal(app.pollDelay({ background: true }), 30000);
 });
+
+test('explicit metadata download bypasses the installed shell catalog', async () => {
+  const instance = worker(); await lifecycle(instance, 'install');
+  assert.equal((await fetchEvent(instance, '/metadata-v1.json')).text, 'first:/metadata-v1.json');
+  let intercepted = false;
+  instance.listeners.fetch({ request: { method: 'GET', url: 'https://nano.test/metadata-v1.json', cache: 'no-store' }, respondWith() { intercepted = true; } });
+  assert.equal(intercepted, false);
+});

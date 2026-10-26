@@ -1,3 +1,4 @@
+#include "http_access.h"
 #include "collection.h"
 #include <WebServer.h>
 
@@ -12,8 +13,7 @@ static void reject(WebServer& server, int status, const String& error) {
 }
 
 static bool originAllowed(WebServer& server) {
-  const String origin = server.header("Origin");
-  if (origin.length() && origin != "http://" + server.hostHeader()) { reject(server, 403, "Open this board's own page to use collection."); return false; }
+  if (!allowedHttpOrigin(server)) { reject(server, 403, "Open this board's own page to use collection."); return false; }
   return true;
 }
 

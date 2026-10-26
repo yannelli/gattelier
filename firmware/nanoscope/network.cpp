@@ -2,6 +2,7 @@
 #include "usb_hci.h"
 #include "collection.h"
 #include "network_button.h"
+#include "activity_led.h"
 #include "secrets.h"
 #include <WiFi.h>
 #include <ESPmDNS.h>
@@ -115,6 +116,7 @@ void addNetworkState(cJSON* wifi) {
 }
 
 void startNetwork() {
+  startActivityLed();
   pinMode(9, INPUT_PULLUP); pinMode(19, OUTPUT); digitalWrite(19, HIGH);
   button.begin(digitalRead(9) == LOW, millis()); rgbLedWrite(20, 0, 0, 24);
   uint8_t mac[6]; esp_read_mac(mac, ESP_MAC_WIFI_STA);
@@ -162,6 +164,7 @@ static void serialCommand() {
 }
 
 void updateNetwork() {
+  updateActivityLed();
   uint32_t now = millis();
   auto buttonEvent = button.updateEvent(digitalRead(9) == LOW, now);
   if (buttonEvent == NetworkButtonEvent::TriplePress) { String error; queueUsbMode(!usbHciMode(), error); }

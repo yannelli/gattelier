@@ -15,12 +15,14 @@ The board address is `http://nanoscope.local`. Existing NanoScope storage keys a
 - GATT service discovery, reads, writes, notifications, pairing prompts, packet capture, snapshots, and saved recipes
 - Contextual apps selected from discovered device metadata
 - Import and export of PLAUD and Pocket recorder credentials, plus authenticated recording access
-- RadiaCode identity, status, and measurement reads verified on hardware
+- RadiaCode identity, status, measurements, calibrated spectrum plots, live refresh, and confirmed dose reset
 - Sleep Number Fuzion and MCR readers with passing unit tests; a live link has not been verified
-- Standard Bluetooth thermometer and environmental sensor recipes
+- Captured Dexcom G7 glucose/history, serial/firmware, sensor states, and estimated timestamps; direct G7 authentication remains unimplemented
+- Standard Bluetooth thermometer and environmental sensor recipes, plus BTHome energy, current, and CO2 decoding
+- Optional browser-cached supplemental metadata from `https://gattelier.ryanyannelli.com`
 - Metadata and investigation helpers for locks, ResMed devices, GE appliances, and Samsung TVs
 
-Gattelier does not include full TV or GE appliance control.
+Gattelier does not include full TV or GE appliance control. [Device expansion research](docs/device-expansion.md) lists the next supported protocol paths and their source repositories.
 
 ## Hardware limits
 
@@ -33,6 +35,8 @@ The board button controls its operating mode:
 - Short press: switch between saved Wi-Fi and the board hotspot. Blue means Wi-Fi; amber means hotspot.
 - Triple press: switch to USB HCI mode. The LED turns purple.
 - Hold for three seconds: start or stop collection. The LED shows a teal double pulse while collection is active.
+
+The separate blue LED flashes for BLE advertisements, GATT traffic, connection events, and USB HCI traffic. Settings > Activity LED provides a brightness slider, test flash, and off button; the board saves the chosen brightness. Sustained activity produces spaced flashes. The RGB LED continues to show the operating mode.
 
 Onboard collection stores up to 512 KiB of NDJSON. Active or passive scan mode, interval, window, and scheduled bursts are configurable and persist across restarts. Download the log from the Collection screen.
 
@@ -86,7 +90,9 @@ Use a Cloudflare token with Workers deployment permission for the target account
 
 Cloudflare Workers hosts only the static app files. The browser stores recorder credentials and private keys locally. The app sends board API requests directly to the board or through the private bridge.
 
-A page loaded over public HTTPS cannot call the board's plain HTTP endpoint because browsers block mixed content. Run the private HTTPS bridge on a Mac connected to the board and Tailscale:
+Chrome 142+ on desktop and Android supports direct local HTTP connections after a local-network permission prompt. In the hosted app's Settings, enter `http://nanoscope.local` or the board's private IP address, then allow access. The firmware allows `https://gattelier.ryanyannelli.com` by default. For a different hosted URL, open the board's local page and set **Allowed hosted app** in Settings to that exact HTTPS origin. [Chrome's Local Network Access guide](https://developer.chrome.com/blog/local-network-access) describes the permission and mixed-content exemption.
+
+Safari on iPhone does not support this local HTTP exemption. It needs an HTTPS endpoint. The board itself does not need a certificate: run the private HTTPS bridge on a Mac connected to the board and Tailscale:
 
 ```sh
 NANOSCOPE_BOARD_URL=http://nanoscope.local \
@@ -94,5 +100,9 @@ NANOSCOPE_BOARD_URL=http://nanoscope.local \
 ```
 
 Open Settings in the hosted app and set the board connection URL to the private HTTPS address printed by the bridge. The bridge accepts requests from the app origin you allow. The computer running the bridge and the iPhone must both be connected to your Tailscale network.
+
+### Supplemental metadata
+
+Settings > Device metadata downloads `/metadata-v1.json` from `https://gattelier.ryanyannelli.com` by default. The Worker serves this public catalog alongside the app. Downloads contain UUID names and declarative value decoders; they contain no executable code. Device addresses, recordings, credentials, and health readings are excluded from metadata requests. Downloaded definitions stay in browser storage and can be disabled or removed.
 
 The repository does not have a license yet.

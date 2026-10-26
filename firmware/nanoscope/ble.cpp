@@ -4,6 +4,7 @@
 #include "ble_security.h"
 #include "usb_hci.h"
 #include "collection.h"
+#include "activity_led.h"
 #include <NimBLEDevice.h>
 #include <algorithm>
 #include <freertos/queue.h>
@@ -14,6 +15,7 @@ static uint32_t nextDeviceId = 1;
 
 class ScanCallbacks : public NimBLEScanCallbacks {
   void onResult(const NimBLEAdvertisedDevice* advertised) override {
+    signalActivityLed();
     StateLock lock;
     if (!state.scanning) return;
     String address = advertised->getAddress().toString().c_str();

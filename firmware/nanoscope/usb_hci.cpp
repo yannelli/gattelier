@@ -1,5 +1,6 @@
 #include "usb_hci.h"
 #include "h4_frame.h"
+#include "activity_led.h"
 #include <Preferences.h>
 #include <esp_bt.h>
 #include <esp_hci_transport.h>
@@ -52,6 +53,7 @@ static int controllerPacket(hci_trans_pkt_ind_t type, uint8_t* data, uint16_t) {
     if (length <= H4Frame::Capacity - 1 && os_mbuf_copydata(mbuf, 0, length, packet.bytes + 1) == 0) packet.size = length + 1;
     os_mbuf_free_chain(mbuf);
   }
+  if (packet.size) signalActivityLed();
   if (!packet.size || xQueueSend(outbound, &packet, 0) != pdTRUE) ++dropped;
   else ++received;
   return 0;
@@ -85,6 +87,7 @@ static bool sendToController(const UsbPacket& packet) {
     hci_transport_host_acl_tx(reinterpret_cast<uint8_t*>(mbuf), packet.size - 1);
   }
   ++sent;
+  signalActivityLed();
   return true;
 }
 
@@ -94,6 +97,7 @@ void updateUsbHci() {
   if (!running) return;
   if (parser.pending() && uint32_t(now - lastByteAt) > 1000) { parser.reset(); ++rejected; }
   for (unsigned count = 0; count < 256 && Serial.available() && uxQueueSpacesAvailable(inbound); ++count) {
+    signalActivityLed();
     lastByteAt = now;
     if (parser.feed(uint8_t(Serial.read()))) {
       UsbPacket packet; packet.size = parser.length;
@@ -110,7 +114,11 @@ void updateUsbHci() {
   if (!tx.size && xQueueReceive(outbound, &tx, 0) == pdTRUE) txOffset = 0;
   if (tx.size) {
     size_t count = std::min(size_t(tx.size - txOffset), size_t(std::max(0, Serial.availableForWrite())));
-    if (count) txOffset += Serial.write(tx.bytes + txOffset, count);
+    if (count) {
+      const size_t written = Serial.write(tx.bytes + txOffset, count);
+      txOffset += written;
+      if (written) signalActivityLed();
+    }
     if (txOffset == tx.size) tx.size = txOffset = 0;
   }
 }

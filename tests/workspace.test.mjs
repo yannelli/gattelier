@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 const source = readFileSync(new URL('../web/workspace.js', import.meta.url), 'utf8');
 function setup(saved = 'discover') {
-  const elements = new Map(), viewNames = ['discover', 'apps', 'workbench', 'insights', 'settings'], tools = ['command', 'traffic', 'snapshots', 'recipes', 'guide'];
+  const events = [], elements = new Map(), viewNames = ['discover', 'apps', 'workbench', 'insights', 'settings'], tools = ['command', 'traffic', 'snapshots', 'recipes', 'guide'];
   function element(id, data = {}) {
     if (!elements.has(id)) elements.set(id, { hidden: false, dataset: data, attributes: {}, listeners: {}, setAttribute(key, value) { this.attributes[key] = value; }, getAttribute(key) { return this.attributes[key]; }, addEventListener(key, action) { this.listeners[key] = action; }, focus() {} });
     return elements.get(id);
@@ -15,11 +15,11 @@ function setup(saved = 'discover') {
   for (const button of toolButtons) button.attributes['aria-controls'] = `${button.dataset.tool}-panel`;
   for (const view of [...viewNames, 'device']) element(`view-${view}`);
   for (const module of ['plaud', 'pocket', 'sleep', 'tracker', 'medical', 'sensor']) element(`${module}-panel`);
-  const context = { module: { exports: {} }, window: { scrollTo() {} }, document: { getElementById: id => element(id), querySelectorAll: selector => selector === '[data-view]' ? buttons : toolButtons } };
+  const context = { CustomEvent: class { constructor(type, options) { this.type = type; this.detail = options.detail; } }, module: { exports: {} }, window: { scrollTo() {} }, document: { dispatchEvent: event => events.push(event), getElementById: id => element(id), querySelectorAll: selector => selector === '[data-view]' ? buttons : toolButtons } };
   vm.runInNewContext(source, context);
   const workspace = context.module.exports, prefs = {};
   workspace.init({ getPreference: key => key === 'view' ? saved : undefined, setPreference: (key, value) => { prefs[key] = value; } });
-  return { workspace, element, prefs, buttons };
+  return { workspace, element, prefs, buttons, events };
 }
 test('Apps opens the catalog and migrates the old Recordings preference', () => {
   const { workspace, element } = setup('recordings');
@@ -53,4 +53,13 @@ test('contextual device view hides primary panels and has a working return', () 
   element('device-back').listeners.click();
   assert.equal(workspace.view(), 'discover');
   assert.equal(element('view-device').hidden, true);
+});
+
+test('workspace changes identify the active module for live-reader lifecycle', () => {
+  const { workspace, events } = setup();
+  workspace.openModule('radiacode');
+  assert.equal(events.at(-1).type, 'nanoscope:workspace');
+  assert.equal(events.at(-1).detail.module, 'radiacode');
+  workspace.show('discover');
+  assert.equal(events.at(-1).detail.view, 'discover');
 });

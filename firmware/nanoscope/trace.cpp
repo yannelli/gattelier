@@ -1,12 +1,16 @@
 #include "trace.h"
+#include "trace_retention.h"
 #include "state.h"
+#include "activity_led.h"
 #include <WebServer.h>
 #include <cJSON.h>
 #include <esp_random.h>
 #include <array>
 #include <algorithm>
+#include <optional>
 
-static std::array<TraceEvent, 64> events;
+static std::array<std::optional<TraceEvent>, 256> events;
+static TraceRetention<256, 48 * 1024> retention;
 static SemaphoreHandle_t traceMutex;
 static uint32_t sequence = 0;
 static String bootId;
@@ -20,6 +24,8 @@ void startTrace() {
 void recordTrace(const String& kind, const String& address, const String& uuid,
                  uint16_t handle, const uint8_t* data, size_t length,
                  const String& message, bool success) {
+  if (kind == "read" || kind == "write" || kind == "notification" || kind == "indication" ||
+      kind == "connect" || kind == "disconnect" || kind == "mtu" || kind == "subscribe-result") signalActivityLed();
   TraceEvent event;
   event.ms = millis();
   event.kind = kind;
@@ -41,8 +47,14 @@ void recordTrace(const String& kind, const String& address, const String& uuid,
     event.hex = hexBytes(data, std::min(length, size_t(512)));
   }
   xSemaphoreTake(traceMutex, portMAX_DELAY);
+  const size_t cost = event.hex.length() + event.kind.length() + event.address.length() + event.uuid.length() + event.message.length() + 80;
+  while (!retention.empty() && !retention.room(cost)) {
+    events[(retention.first - 1) % events.size()].reset();
+    retention.discard();
+  }
+  retention.append(cost);
   event.seq = ++sequence;
-  events[(sequence - 1) % events.size()] = std::move(event);
+  events[(sequence - 1) % events.size()].emplace(std::move(event));
   xSemaphoreGive(traceMutex);
 }
 
@@ -70,7 +82,7 @@ static String eventJson(const TraceEvent& event) {
 void sendTrace(WebServer& server, uint32_t after) {
   xSemaphoreTake(traceMutex, portMAX_DELAY);
   uint32_t end = sequence;
-  uint32_t oldest = end >= events.size() ? end - events.size() + 1 : 1;
+  uint32_t oldest = retention.first;
   xSemaphoreGive(traceMutex);
   uint32_t begin = std::max(after + 1, oldest);
   uint32_t dropped = after < oldest - 1 ? oldest - 1 - after : 0;
@@ -82,7 +94,8 @@ void sendTrace(WebServer& server, uint32_t after) {
   bool first = true;
   for (uint32_t seq = begin; seq <= end && seq > 0; ++seq) {
     xSemaphoreTake(traceMutex, portMAX_DELAY);
-    TraceEvent event = events[(seq - 1) % events.size()];
+    const auto& slot = events[(seq - 1) % events.size()];
+    TraceEvent event = slot ? *slot : TraceEvent{};
     xSemaphoreGive(traceMutex);
     if (event.seq != seq) { ++dropped; continue; }
     if (!first) chunk += ',';

@@ -16,6 +16,8 @@ const NanoSensorProfiles = (() => {
     0x02: ['Temperature', 2, true, 0.01, '°C'], 0x03: ['Humidity', 2, false, 0.01, '%'],
     0x04: ['Pressure', 3, false, 0.01, 'hPa'], 0x05: ['Illuminance', 3, false, 0.01, 'lx'],
     0x09: ['Count', 1, false, 1, ''], 0x0b: ['Power', 3, false, 0.01, 'W'],
+    0x0a: ['Energy', 3, false, 0.001, 'kWh'], 0x12: ['CO2', 2, false, 1, 'ppm'],
+    0x43: ['Current', 2, false, 0.001, 'A'], 0x4d: ['Energy', 4, false, 0.001, 'kWh'],
     0x0c: ['Voltage', 2, false, 0.001, 'V'], 0x2e: ['Humidity', 1, false, 1, '%'],
     0x3d: ['Count', 2, false, 1, ''], 0x3e: ['Count', 4, false, 1, ''],
     0x45: ['Temperature', 2, true, 0.1, '°C'], 0x4a: ['Voltage', 2, false, 0.1, 'V'],

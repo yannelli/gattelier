@@ -32,7 +32,7 @@ const names = {
 function uuidName(uuid, fallback) {
   const normalized = String(uuid).toLowerCase().replace(/^0x/, '');
   const short = /^0000[0-9a-f]{4}-0000-1000-8000-00805f9b34fb$/.test(normalized) ? normalized.slice(4, 8) : normalized;
-  return names[short] || fallback;
+  return names[short] || (typeof NanoMetadata !== 'undefined' ? NanoMetadata.lookup(short)?.name : '') || fallback;
 }
 let state = { wifi: {}, ble: {}, devices: [], services: [] };
 let online = false, pending = false, selected = '', notice = '', transportError = '', pollPromise, timer, ticking = false;
@@ -233,6 +233,10 @@ async function boot() {
   NanoConnection.init({ state: () => state, online: () => online, pending: () => pending, selected: selectedDevice, devices: browseDevices, refresh: poll, select: selectDevice, action: NanoLab.action, recorder: NanoRecorders.identify, changed: render, notice: message => { notice = message; } });
   NanoCredentialsUI.mount($('credentials-panel'));
   NanoAPIUI.mount($('api-panel'));
+  NanoActivityLedUI.mount($('activity-led-panel'), NanoLab);
+  NanoMetadataUI.mount($('metadata-panel'));
+  NanoMetadata.init();
+  globalThis.addEventListener('nanoscope:metadata', () => { detailSignature = ''; render(); });
   NanoPocket.mount($('pocket-panel'), NanoLab);
   NanoPlaud.mount($('plaud-panel'), NanoLab);
   NanoSleepRouter.mount($('sleep-panel'), NanoLab);

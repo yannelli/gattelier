@@ -1,3 +1,5 @@
+#include "http_access.h"
+#include "activity_led.h"
 #include "state.h"
 #include "web_assets.h"
 #include "trace.h"
@@ -24,14 +26,13 @@ static void sendAsset(const char* contentType, const uint8_t* data, size_t size)
   server.sendHeader("Content-Encoding", "gzip");
   server.sendHeader("Cache-Control", "no-cache");
   server.sendHeader("X-Content-Type-Options", "nosniff");
-  server.sendHeader("Content-Security-Policy", "default-src 'self'; style-src 'self'; script-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'none'");
+  server.sendHeader("Content-Security-Policy", "default-src 'self'; style-src 'self'; script-src 'self'; connect-src 'self' http: https:; object-src 'none'; frame-ancestors 'none'; base-uri 'none'");
   server.send_P(200, contentType, reinterpret_cast<const char*>(data), size);
 }
 
 static void submit(Action action, const char* argument = nullptr) {
   server.sendHeader("Cache-Control", "no-store");
-  String origin = server.header("Origin");
-  if (origin.length() && origin != "http://" + server.hostHeader()) {
+  if (!allowedHttpOrigin(server)) {
     sendError(403, "Open Gattelier directly to control this board."); return;
   }
   if (!server.header("Content-Type").startsWith("application/json")) {
@@ -100,8 +101,10 @@ static void submit(Action action, const char* argument = nullptr) {
 }
 
 void startHttp() {
-  const char* headers[] = {"Origin", "Content-Type"};
-  server.collectHeaders(headers, 2);
+  const char* headers[] = {"Origin", "Content-Type", "Access-Control-Request-Method", "Access-Control-Request-Headers"};
+  server.collectHeaders(headers, 4);
+  registerHttpAccess(server);
+  registerActivityLedRoutes(server);
   registerNetworkRoutes(server);
   registerSecurityRoutes(server);
   registerUsbRoutes(server);
@@ -109,6 +112,7 @@ void startHttp() {
   server.on("/", HTTP_GET, [] { sendAsset("text/html; charset=utf-8", index_html, sizeof(index_html)); });
   server.on("/app.bundle.js", HTTP_GET, [] { sendAsset("text/javascript; charset=utf-8", app_bundle_js, sizeof(app_bundle_js)); });
   server.on("/app.bundle.css", HTTP_GET, [] { sendAsset("text/css; charset=utf-8", app_bundle_css, sizeof(app_bundle_css)); });
+  server.on("/metadata-v1.json", HTTP_GET, [] { sendAsset("application/json", metadata_json, sizeof(metadata_json)); });
   server.on("/vendors.json", HTTP_GET, [] { sendAsset("application/json", vendors_json, sizeof(vendors_json)); });
   server.on("/manifest.webmanifest", HTTP_GET, [] { sendAsset("application/manifest+json", manifest_json, sizeof(manifest_json)); });
   server.on("/sw.js", HTTP_GET, [] { sendAsset("text/javascript; charset=utf-8", service_worker_js, sizeof(service_worker_js)); });
@@ -132,8 +136,7 @@ void startHttp() {
     sendTrace(server, strtoul(cursor.c_str(), nullptr, 10));
   });
   server.on("/api/capture", HTTP_POST, [] {
-    String origin = server.header("Origin");
-    if ((origin.length() && origin != "http://" + server.hostHeader()) || !server.header("Content-Type").startsWith("application/json")) {
+    if (!allowedHttpOrigin(server) || !server.header("Content-Type").startsWith("application/json")) {
       sendError(403, "Use the board UI with a JSON request."); return;
     }
     auto json = cJSON_Parse(server.arg("plain").c_str());

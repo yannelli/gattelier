@@ -1,3 +1,4 @@
+#include "http_access.h"
 #include "usb_hci.h"
 #include <WebServer.h>
 
@@ -12,8 +13,7 @@ void registerUsbRoutes(WebServer& server) {
   };
   server.on("/api/usb-mode", HTTP_GET, [respond] { respond(200); });
   server.on("/api/usb-mode", HTTP_POST, [&server, respond] {
-    String origin = server.header("Origin");
-    if ((origin.length() && origin != "http://" + server.hostHeader()) || !server.header("Content-Type").startsWith("application/json")) {
+    if (!allowedHttpOrigin(server) || !server.header("Content-Type").startsWith("application/json")) {
       respond(403, "Open Gattelier directly and send JSON."); return;
     }
     if (server.arg("plain").length() > 128) { respond(413, "Request is too large."); return; }

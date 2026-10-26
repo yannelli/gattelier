@@ -94,3 +94,10 @@ test('Ruuvi rejects truncated, oversized and unrelated data without guessing mea
   const device = { manufacturer: '9904' + valid, credentials: 'private' }, before = JSON.stringify(device);
   identify(device); assert.equal(JSON.stringify(device), before);
 });
+
+test('BTHome official CO2, current and energy examples decode with their declared widths', () => {
+  for (const [hex, label, expected] of [['12e204', 'CO2', '1250 ppm'], ['434e34', 'Current', '13.39 A'], ['0a138a14', 'Energy', '1346.067 kWh'], ['4d12138a14', 'Energy', '344593.17 kWh']]) {
+    assert.equal(fields(bthome('40' + hex))[label], expected);
+    assert.equal(bthome('40' + hex.slice(0, -2)).confidence, 'Malformed frame');
+  }
+});

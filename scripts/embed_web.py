@@ -4,7 +4,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 assets = [("index_html", "index.html"), ("app_bundle_js", "app.bundle.js"),
-          ("app_bundle_css", "app.bundle.css"), ("vendors_json", "vendors.json"),
+          ("app_bundle_css", "app.bundle.css"), ("vendors_json", "vendors.json"), ("metadata_json", "metadata-v1.json"),
           ("manifest_json", "manifest.webmanifest"), ("service_worker_js", "sw.js"),
           *[(f"icon_{size}_png", f"icons/nanoscope-{size}.png") for size in (180, 192, 512)]]
 build_id = hashlib.sha256(b"".join((ROOT / "web" / filename).read_bytes() for _, filename in assets)).hexdigest()[:16]

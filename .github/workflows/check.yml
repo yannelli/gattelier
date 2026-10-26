@@ -16,6 +16,12 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm test
+      - name: Check firmware utilities
+        run: |
+          for source in tests/activity_led.test.cpp tests/trace_retention.test.cpp; do
+            c++ -std=c++17 -Wall -Wextra -Werror "$source" -o /tmp/firmware-test
+            /tmp/firmware-test
+          done
       - run: python3 tests/pwa_bridge_test.py
       - run: npx wrangler deploy --dry-run
   deploy:

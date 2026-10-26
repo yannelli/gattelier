@@ -8,3 +8,8 @@
 .api-help { margin: 0 24px 24px; }
 .api-help summary { cursor: pointer; font-weight: 650; }
 .api-help pre { overflow-x: auto; white-space: pre-wrap; word-break: break-word; }
+
+.api-settings > .hint { padding: 0 24px 18px; margin: 0; }
+.api-form .metadata-enabled { display: flex; align-items: center; font-weight: 500; }
+.api-form .metadata-enabled input { width: 18px; height: 18px; flex: 0 0 auto; }
+.api-help .api-form { padding: 12px 0; }

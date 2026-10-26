@@ -1,13 +1,16 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
-const require = createRequire(import.meta.url), p = require('../web/radiacode-protocol.js'), { createClient, mount } = require('../web/radiacode.js');
+const require = createRequire(import.meta.url), p = require('../web/radiacode-protocol.js'), { createClient, createPoller, mount } = require('../web/radiacode.js');
 const address = '02:00:00:00:00:01', device = { address, addressType: 0 }, measurementHex = '0000000a000000000048410ad7233d0c001700050001010003140000007b000000000020409a102e220200';
 const firmwareHex = '010004000142080004000154';
 const u32 = number => { const result = new Uint8Array(4); new DataView(result.buffer).setUint32(0, number, true); return result; };
 const concat = (...parts) => Uint8Array.from(parts.flatMap(part => Array.from(part)));
 const virtual = data => concat(u32(1), u32(data.length), data);
 const framed = (request, data) => concat(u32(data.length + 4), request.slice(4, 8), data);
+const f32 = number => { const result = new Uint8Array(4); new DataView(result.buffer).setFloat32(0, number, true); return result; };
+const spectrumHeader = concat(u32(60), f32(0.5), f32(3), f32(0.25));
+const spectrumData = concat(spectrumHeader, u32(10), u32(30), u32(0));
 
 function fixture(onRequest = () => false, timeoutMs = 100) {
   let state = { ble: { connected: true, address, mtu: 23 }, services: [{ uuid: 'private', characteristics: [{ uuid: p.WRITE, handle: 4, properties: ['write-no-response'] }, { uuid: p.NOTIFY, handle: 6, properties: ['notify'] }] }] };
@@ -28,7 +31,7 @@ function fixture(onRequest = () => false, timeoutMs = 100) {
           const request = requestBytes; requestBytes = new Uint8Array(); requests.push(request);
           if (await onRequest(request, { emit, notify, setState, state })) return state;
           const code = new DataView(request.buffer).getUint16(4, true);
-          const data = code === 7 ? new Uint8Array() : code === 10 ? p.bytes(firmwareHex) : code === 5 ? u32(5) : virtual(request[8] === 8 ? new TextEncoder().encode('RC123') : p.bytes(measurementHex));
+          const data = code === 7 ? new Uint8Array() : code === 10 ? p.bytes(firmwareHex) : code === 5 ? u32(5) : code === 0x825 ? u32(1) : virtual(request[8] === 8 ? new TextEncoder().encode('RC123') : request[8] === 2 ? new TextEncoder().encode('SpecFormatVersion=0\r\n') : request[9] === 2 ? spectrumData : p.bytes(measurementHex));
           notify(request, data);
         }
       }
@@ -39,13 +42,76 @@ function fixture(onRequest = () => false, timeoutMs = 100) {
   return { client: createClient(lab, { connection, timeoutMs }), lab, connection, actions, requests, connects, emit, setState, getState: () => state };
 }
 
-test('read-only RadiaCode requests match independent protocol vectors', () => {
+test('RadiaCode requests match independent protocol vectors and keep dose reset explicit', () => {
   assert.equal(p.hex(p.request('exchange', 0)), '080000000700008001ff12ff');
   assert.equal(p.hex(p.request('version', 1)), '040000000a000081');
   assert.equal(p.hex(p.request('serial', 2)), '080000002608008208000000');
   assert.equal(p.hex(p.request('status', 31)), '040000000500009f');
+  assert.equal(p.hex(p.request('configuration', 0)), '080000002608008002000000');
+  assert.equal(p.hex(p.request('spectrum', 0)), '080000002608008000020000');
+  assert.equal(p.hex(p.request('resetDose', 0)), '080000002508008007800000');
   for (const kind of ['set-time', 'reset', 'constructor', 'write']) assert.throws(() => p.request(kind, 0), /Unsupported/);
   assert.throws(() => p.request('status', 32), /sequence/);
+});
+
+test('spectrum format follows device configuration and decodes uint32 counts with quadratic keV calibration', () => {
+  assert.equal(p.spectrumFormat(new TextEncoder().encode('Other=2\r\nSpecFormatVersion=1\r\n')), 1);
+  assert.equal(p.spectrumFormat(new TextEncoder().encode('Other=2')), 0);
+  assert.throws(() => p.spectrumFormat(new TextEncoder().encode('SpecFormatVersion=2')), /Unsupported/);
+  const spectrum = p.spectrum(spectrumData, 0);
+  assert.deepEqual(spectrum.counts, [10, 30, 0]); assert.deepEqual(spectrum.energiesKeV, [0.5, 3.75, 7.5]);
+  assert.equal(spectrum.durationSeconds, 60); assert.equal(spectrum.totalCounts, 40);
+  assert.throws(() => p.spectrum(spectrumData.slice(0, -1), 0), /truncated/);
+  assert.throws(() => p.spectrum(spectrumData.slice(0, 15), 0), /header/);
+  assert.throws(() => p.spectrum(spectrumData, 2), /Unsupported/);
+  const invalid = spectrumData.slice(); new DataView(invalid.buffer).setFloat32(4, NaN, true); assert.throws(() => p.spectrum(invalid, 0), /calibration/);
+});
+
+test('compressed spectrum supports absolute, signed delta and zero blocks and rejects malformed counts', () => {
+  const encoded = p.bytes('21000a14220005ff13002c011400ffffff1500000001002000');
+  assert.deepEqual(p.spectrum(concat(spectrumHeader, encoded), 1).counts, [10, 20, 25, 24, 324, 323, 65859, 0, 0]);
+  assert.throws(() => p.spectrum(concat(spectrumHeader, p.bytes('1100011200fe')), 1), /count/);
+  assert.throws(() => p.spectrum(concat(spectrumHeader, p.bytes('1600')), 1), /compression/);
+  assert.deepEqual(p.spectrum(concat(spectrumHeader, p.bytes('00000000'), encoded), 1).counts, [10, 20, 25, 24, 324, 323, 65859, 0, 0]);
+  assert.throws(() => p.spectrum(concat(spectrumHeader, p.bytes('150001')), 1), /truncated/);
+});
+
+test('spectrum reads configuration once per connection and reset requires confirmation and acknowledgement', async () => {
+  const f = fixture(); await assert.rejects(f.client.resetDose(device), /Confirm/); assert.equal(f.actions.length, 0);
+  assert.equal((await f.client.read('spectrum', device)).totalCounts, 40); await f.client.read('spectrum', device);
+  assert.equal(f.requests.filter(request => request[8] === 2).length, 1);
+  await assert.rejects(f.client.read('resetDose', device), /Unsupported/);
+  assert.equal((await f.client.resetDose(device, true)).kind, 'resetDose');
+  assert.equal(new DataView(f.requests.at(-1).buffer).getUint16(4, true), 0x825); f.client.destroy();
+  assert.throws(() => p.acknowledge(u32(0)), /rejected/); assert.throws(() => p.acknowledge(new Uint8Array()), /four bytes/);
+  const rejected = fixture((request, context) => { if (request[4] !== 0x25) return false; context.notify(request, u32(0)); return true; });
+  await assert.rejects(rejected.client.resetDose(device, true), /rejected/); rejected.client.destroy();
+});
+
+test('unsupported firmware and spectrum format stop before spectrum reads or dose writes', async () => {
+  const old = fixture((request, context) => { if (request[4] !== 10) return false; context.notify(request, p.bytes('010004000142070004000154')); return true; });
+  await assert.rejects(old.client.read('spectrum', device), /4.8/); await assert.rejects(old.client.resetDose(device, true), /4.8/);
+  assert.equal(old.requests.length, 2); old.client.destroy();
+  const unknown = fixture((request, context) => { if (request[8] !== 2) return false; context.notify(request, virtual(new TextEncoder().encode('SpecFormatVersion=2'))); return true; });
+  await assert.rejects(unknown.client.read('spectrum', device), /Unsupported/);
+  assert.equal(unknown.requests.some(request => request[9] === 2), false); unknown.client.destroy();
+});
+
+test('stopping before connection setup finishes prevents initialization and writes', async () => {
+  const f = fixture(), operation = f.client.read('spectrum', device); f.client.stop();
+  await assert.rejects(operation, /stopped/); assert.equal(f.actions.length, 0); f.client.destroy();
+});
+
+test('live polling serializes reads and cancels timers and late results on stop', async () => {
+  let scheduled, cancelled = false, finish; const calls = [], results = [];
+  const poller = createPoller({ read: async kind => { calls.push(kind); return { kind }; }, onResult: result => results.push(result.kind), schedule: callback => { scheduled = callback; return 7; }, cancel: id => { assert.equal(id, 7); cancelled = true; } });
+  await poller.start(); assert.deepEqual(calls, ['measurements', 'spectrum']); assert.deepEqual(results, calls); assert.equal(poller.active(), true);
+  poller.start(); assert.equal(calls.length, 2); poller.stop(); await scheduled(); assert.equal(calls.length, 2); assert.equal(cancelled, true);
+  const pending = createPoller({ read: kind => { calls.push(kind); return new Promise(resolve => { finish = resolve; }); }, onResult: () => assert.fail('Late result rendered'), schedule: () => assert.fail('Cancelled read rescheduled') });
+  const operation = pending.start(); pending.stop(); finish({ kind: 'measurements' }); await operation; assert.equal(pending.active(), false);
+  let error;
+  const failed = createPoller({ read: async () => { throw new Error('Disconnected'); }, onError: value => { error = value; }, schedule: () => assert.fail('Failed read rescheduled') });
+  await failed.start(); assert.match(error.message, /Disconnected/); assert.equal(failed.active(), false);
 });
 
 test('response assembly handles split length headers and enforces request echoes', () => {
@@ -76,6 +142,11 @@ test('buffered records decode counts, raw dose units, temperature and charge wit
   assert.equal(records[0].timestampOffsetMs, 100); assert.equal(records[1].dose, 2.5); assert.equal(records[1].temperatureC, 22.5); assert.equal(records[1].batteryPercent, 87.5);
   assert.throws(() => p.measurements(measurementHex.slice(0, -2)), /truncated/);
   const gap = p.bytes(measurementHex); gap[22] = 4; assert.throws(() => p.measurements(gap), /sequence gap/);
+  const prefix = p.measurements(gap, { partial: true });
+  assert.equal(prefix.length, 1); assert.match(prefix.warning, /sequence changed/);
+  const unknown = p.bytes(measurementHex); unknown[2] = 4;
+  const unsupported = p.measurements(unknown, { partial: true });
+  assert.equal(unsupported.length, 0); assert.match(unsupported.warning, /record type 0\/4/);
   assert.throws(() => p.measurements('00000a00000000'), /Unsupported/);
 });
 
@@ -125,10 +196,10 @@ test('reader renders readable measurements, retains identity and clears results 
     addEventListener(name, handler) { this.listeners[name] = handler; }
   }
   const events = {}, previous = global.document;
-  global.document = { createElement: tag => new Element(tag), addEventListener: (name, listener) => { events[name] = listener; }, removeEventListener: name => { delete events[name]; } };
+  global.document = { createElement: tag => new Element(tag), createElementNS: (_, tag) => new Element(tag), addEventListener: (name, listener) => { events[name] = listener; }, removeEventListener: name => { delete events[name]; } };
   const find = (root, className) => root.className?.split(' ').includes(className) ? root : root.children.map(child => find(child, className)).find(Boolean);
-  const f = fixture(), root = new Element('div'); let selected = { ...device, name: 'RadiaCode 103' };
-  const reader = mount(root, f.lab, { connection: f.connection, getDevice: () => selected });
+  const f = fixture(), root = new Element('div'); let selected = { ...device, name: 'RadiaCode 103' }, confirmReset = false, isActive = true;
+  const reader = mount(root, f.lab, { connection: f.connection, getDevice: () => selected, confirm: () => confirmReset, isActive: () => isActive });
   t.after(() => { reader.destroy(); f.client.destroy(); if (previous === undefined) delete global.document; else global.document = previous; });
   assert.equal(f.actions.length, 0);
   assert.match(find(root, 'radiacode-device').textContent, /RadiaCode 103.*Connected/);
@@ -143,6 +214,16 @@ test('reader renders readable measurements, retains identity and clears results 
   assert.match(measurements.textContent, /Dose values use device units/);
   assert.equal(find(root, 'radiacode-empty').hidden, true);
   assert.equal(find(root, 'radiacode-status').attributes.role, 'status');
+  await reader.read('spectrum');
+  assert.match(find(root, 'radiacode-result-spectrum').textContent, /Acquisition time 60 s.*Total counts 40.*Channels 3/);
+  assert.match(find(root, 'radiacode-spectrum').textContent, /0.5 keV.*7.5 keV/);
+  const reset = find(root, 'radiacode-reset'); await reset.listeners.click(); assert.equal(f.requests.some(request => request[4] === 0x25), false);
+  confirmReset = true; await reset.listeners.click(); assert.equal(f.requests.at(-1)[4], 0x25); assert.equal(find(root, 'radiacode-result-measurements'), undefined);
+  assert.match(find(root, 'radiacode-result-resetDose').textContent, /acknowledged/);
+  const live = find(root, 'radiacode-actions').children.find(child => child.textContent === 'Start live');
+  await live.listeners.click(); assert.equal(live.textContent, 'Stop live');
+  global.document.hidden = true; events.visibilitychange(); assert.equal(live.textContent, 'Start live');
+  global.document.hidden = false; await live.listeners.click(); isActive = false; events['nanoscope:workspace'](); assert.equal(live.textContent, 'Start live');
   selected = { address: '11:22:33:44:55:66' }; events['nanoscope:selection']();
   assert.equal(find(root, 'radiacode-results').children.length, 0);
   assert.equal(find(root, 'radiacode-empty').hidden, false);

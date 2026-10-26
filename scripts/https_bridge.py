@@ -14,12 +14,13 @@ ASSETS = {
     '/': ('index.html', 'text/html; charset=utf-8'),
     '/app.bundle.js': ('app.bundle.js', 'text/javascript; charset=utf-8'),
     '/app.bundle.css': ('app.bundle.css', 'text/css; charset=utf-8'),
+    '/metadata-v1.json': ('metadata-v1.json', 'application/json'),
     '/vendors.json': ('vendors.json', 'application/json'),
     '/manifest.webmanifest': ('manifest.webmanifest', 'application/manifest+json'),
     '/sw.js': ('sw.js', 'text/javascript; charset=utf-8'),
     **{f'/icons/nanoscope-{n}.png': (f'icons/nanoscope-{n}.png', 'image/png') for n in (180, 192, 512)},
 }
-CSP = "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; worker-src 'self'; manifest-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'none'"
+CSP = "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; media-src 'self' blob:; connect-src 'self' http: https:; worker-src 'self'; manifest-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'none'"
 
 
 def board_target(value):

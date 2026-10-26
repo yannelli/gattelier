@@ -106,7 +106,7 @@ const NanoGattValues = (() => {
         field('Description code', hex16(data.getUint16(5, true)))
       ];
     } catch { return []; }
-    return [];
+    return typeof NanoMetadata !== 'undefined' ? NanoMetadata.decode(uuid, hex) : [];
   }
   return { decode, sources: () => sourceList.map(source => ({ ...source })) };
 })();

@@ -1,10 +1,11 @@
 const CACHE_PREFIX = 'nanoscope-shell-';
 const CACHE_NAME = `${CACHE_PREFIX}__NANO_BUILD__`;
 const SHELL = ['/', '/app.bundle.js', '/app.bundle.css', '/manifest.webmanifest',
-  '/vendors.json', '/icons/nanoscope-180.png', '/icons/nanoscope-192.png', '/icons/nanoscope-512.png'];
+  '/vendors.json', '/metadata-v1.json', '/icons/nanoscope-180.png', '/icons/nanoscope-192.png', '/icons/nanoscope-512.png'];
 
 function shellPath(request) {
   const url = new URL(request.url);
+  if (url.pathname === '/metadata-v1.json' && request.cache === 'no-store') return null;
   return request.method === 'GET' && url.origin === self.location.origin && SHELL.includes(url.pathname)
     ? url.pathname : null;
 }

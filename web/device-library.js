@@ -87,13 +87,13 @@ const NanoDeviceLibrary = (() => {
       capabilities: [read('identity', 'Device information at /api/v2/', 'external-transport')], recipes: ['device-manufacturer', 'device-model'], sources: [sources.samsung]
     },
     {
-      id: 'radiacode', title: 'RadiaCode', category: 'sensor', transport: 'BLE', status: 'Read-only adapter', module: 'radiacode', services: ['e63215e5-7003-49d8-96b0-b024798fb901'],
+      id: 'radiacode', title: 'RadiaCode', category: 'sensor', transport: 'BLE', status: 'Spectrum and measurements', module: 'radiacode', services: ['e63215e5-7003-49d8-96b0-b024798fb901'],
       characteristics: ['e63215e6-7003-49d8-96b0-b024798fb901', 'e63215e7-7003-49d8-96b0-b024798fb901'],
       description: 'The documented BLE protocol supports firmware, serial number, buffered measurements, and spectrum queries.',
       models: 'Protocol and spectrum format depend on firmware. Confirm the returned firmware before decoding measurements.',
       authentication: 'The inspected BLE client connects and subscribes without an application credential exchange.',
-      limitations: 'Measurement decoding requires firmware 4.8 or later. Dose values retain device units. Spectrum decoding is not included.',
-      capabilities: [read('version', 'Firmware version', 'implemented', 'radiacode', 'identity'), read('serial', 'Serial number', 'implemented', 'radiacode', 'identity'), read('measurements', 'Buffered measurements', 'implemented', 'radiacode', 'measurements'), read('spectrum', 'Energy spectrum', 'adapter-required')],
+      limitations: 'Measurement decoding requires firmware 4.8 or later. Dose values retain device units. Spectrum formats 0 and 1 are supported; reset requires confirmation.',
+      capabilities: [read('version', 'Firmware version', 'implemented', 'radiacode', 'identity'), read('serial', 'Serial number', 'implemented', 'radiacode', 'identity'), read('measurements', 'Buffered measurements', 'implemented', 'radiacode', 'measurements'), read('spectrum', 'Energy spectrum', 'implemented', 'radiacode', 'spectrum')],
       recipes: ['device-manufacturer', 'device-model', 'battery-read'], sources: [sources.radiacode, sources.radiacodeBle]
     }
   ];

@@ -5,14 +5,14 @@ import { transform } from 'esbuild';
 const web = fileURLToPath(new URL('../web/', import.meta.url));
 const scripts = [
   'vendors', 'packets', 'pklg', 'recorders', 'sensor-profiles', 'profiles', 'device-library', 'scan-store', 'scan-query',
-  'gatt-values', 'analysis', 'console', 'traffic', 'api', 'lab', 'connection', 'pocket-protocol', 'plaud-crypto',
+  'metadata', 'gatt-values', 'analysis', 'console', 'traffic', 'api', 'lab', 'connection', 'pocket-protocol', 'plaud-crypto',
   'plaud-protocol', 'credentials', 'credentials-ui', 'pocket', 'plaud', 'sleep-number-protocol', 'sleep-number', 'browser-cache',
-  'sleep-mcr-protocol', 'sleep-mcr', 'sleep-router', 'radiacode-protocol', 'radiacode',
+  'sleep-mcr-protocol', 'sleep-mcr', 'sleep-router', 'radiacode-protocol', 'radiacode', 'dexcom-protocol', 'dexcom',
   'browser-ui', 'insights', 'workspace', 'inspector', 'network-ui', 'usb-mode', 'collection', 'theme', 'device-support', 'modules',
   'pairing-catalog', 'pairing-model', 'pairing', 'device-page',
-  'recipe-model', 'recipe-library', 'recipe-browser', 'recipes', 'snapshot-model', 'snapshots', 'guide', 'pwa', 'api-ui', 'app',
+  'recipe-model', 'recipe-library', 'recipe-browser', 'recipes', 'snapshot-model', 'snapshots', 'guide', 'pwa', 'access-ui', 'api-ui', 'metadata-ui', 'activity-led-ui', 'app',
 ];
-const styles = ['style', 'lab', 'pocket', 'plaud', 'workspace', 'insights', 'network', 'snapshots', 'analysis', 'shell', 'device-page', 'radiacode', 'credentials', 'usb-mode', 'pwa', 'collection', 'api-ui'];
+const styles = ['style', 'lab', 'pocket', 'plaud', 'workspace', 'insights', 'network', 'snapshots', 'analysis', 'shell', 'device-page', 'radiacode', 'dexcom', 'credentials', 'usb-mode', 'pwa', 'collection', 'api-ui'];
 const concatenate = async (names, extension, separator) => (await Promise.all(
   names.map(name => readFile(`${web}${name}.${extension}`, 'utf8'))
 )).join(separator);

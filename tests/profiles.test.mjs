@@ -48,3 +48,13 @@ test('advertisement metadata rejects incomplete structures and decodes signed TX
   assert.match(profiles.advertisement('07090102').errors[0], /Truncated/);
   assert.match(profiles.advertisement('xyz').errors[0], /Invalid/);
 });
+
+test('Eddystone EID exposes rotating bytes and power without resolving identity', () => {
+  const frame = hex => profiles.identify({ serviceData: [{ uuid: 'feaa', hex }] });
+  const result = frame('30c50011223344556677');
+  assert.equal(result.title, 'Eddystone EID');
+  assert.equal(fields(result)['Calibrated TX power'], '-59 dBm');
+  assert.equal(fields(result)['Ephemeral identifier'], '0011223344556677');
+  assert.match(result.limitations[0], /authorized resolver/);
+  assert.equal(frame('30c50011').title, 'Eddystone service');
+});

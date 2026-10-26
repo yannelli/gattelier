@@ -2,7 +2,7 @@
 
 const NanoWorkspace = (() => {
   const views = ['discover', 'apps', 'workbench', 'insights', 'settings', 'device'];
-  const modules = { plaud: 'PLAUD', pocket: 'Pocket', sleep: 'Sleep Number', tracker: 'BLE trackers', medical: 'Dexcom metadata', sensor: 'BLE sensors', radiacode: 'RadiaCode', thermometer: 'Thermometers', locks: 'Locks', resmed: 'ResMed CPAP', ge: 'GE appliances', samsung: 'Samsung TVs' };
+  const modules = { plaud: 'PLAUD', pocket: 'Pocket', sleep: 'Sleep Number', tracker: 'BLE trackers', medical: 'Dexcom G7', sensor: 'BLE sensors', radiacode: 'RadiaCode', thermometer: 'Thermometers', locks: 'Locks', resmed: 'ResMed CPAP', ge: 'GE appliances', samsung: 'Samsung TVs' };
   let active = 'discover', activeModule = '', tool = 'command', initialized = false;
   let preferences = {};
   const get = id => document.getElementById(id);
@@ -25,6 +25,7 @@ const NanoWorkspace = (() => {
     get('module-content').hidden = !activeModule;
     for (const key of Object.keys(modules)) { const panel = get(`${key}-panel`); if (panel) panel.hidden = key !== activeModule; }
     get('module-title').textContent = modules[activeModule] || 'Apps';
+    document.dispatchEvent(new CustomEvent('nanoscope:workspace', { detail: { view: active, module: activeModule } }));
   }
   function activate(view, catalog = true) {
     if (view === 'recordings') view = 'apps';
