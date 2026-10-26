@@ -7,8 +7,12 @@ const NanoDeviceApps = (() => {
   const vesync = load('vesync-protocol', typeof NanoVeSyncProtocol === 'undefined' ? null : NanoVeSyncProtocol);
   const sensors = load('sensor-profiles', typeof NanoSensorProfiles === 'undefined' ? null : NanoSensorProfiles);
   const samsung = load('samsung-protocol', typeof NanoSamsungProtocol === 'undefined' ? null : NanoSamsungProtocol);
+  const lg = load('lg-webos-protocol', typeof NanoLGWebOSProtocol === 'undefined' ? null : NanoLGWebOSProtocol);
+  const resmed = load('resmed-fig', typeof NanoResMedFIG === 'undefined' ? null : NanoResMedFIG);
   const entries = [
     { id: 'sensor', title: 'Environmental sensors', category: 'sensor', description: 'BTHome and Ruuvi readings, charts, browser history, and encrypted sensor decoding.', protocol: sensors },
+    { id: 'lg', title: 'LG webOS', category: 'appliance', description: 'LG device evidence, saved TV responses, and LAN request previews for apps, inputs, sound, and remote keys.', protocol: lg },
+    { id: 'resmed', title: 'ResMed Air11', category: 'medical', description: 'Inspect FIG captures, validate frames, and prepare authenticated request templates.', protocol: resmed },
     { id: 'samsung', title: 'Samsung devices', category: 'vendor', description: 'Samsung broadcasts and SmartTag status, battery bands, counters, and flags.', protocol: samsung, primary: ['Reported tag state', 'Battery band', 'Motion detection flag', 'UWB flag', 'Encryption flag', 'Activity tracking flag', 'Advertised name'] },
     { id: 'apple', title: 'Apple & AirPods', category: 'vendor', description: 'Headphone battery levels, Continuity messages, and broadcast changes.', protocol: apple, primary: ['Headphone battery', 'Left battery', 'Right battery', 'Case battery', 'Model', 'AirPlay advertised IPv4', 'Reported activity code'] },
     { id: 'nespresso', title: 'Nespresso', category: 'appliance', description: 'Vertuo machine states, maintenance flags, and settings packet previews.', protocol: nespresso, primary: ['Vertuo machine state', 'Model candidate', 'Water tank empty', 'Cleaning needed', 'Descaling needed', 'Error reported'] },

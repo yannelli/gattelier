@@ -20,10 +20,12 @@ The board address is `http://nanoscope.local`. Existing NanoScope storage keys a
 - RadiaCode identity, status, measurements, calibrated spectrum plots, live refresh, and confirmed dose reset
 - Sleep Number Fuzion and MCR readers with passing unit tests; a live link has not been verified
 - Experimental Dexcom G7 authentication with the applicator code, saved sessions, latest/history requests, serial/firmware, and sensor states; sensor interoperability awaits manual testing
-- Environmental sensor readings, charts, browser history, and JSON/CSV exports for BTHome and Ruuvi; encrypted BTHome readings decode locally with a device key
+- Environmental sensor readings, charts, browser history, and JSON/CSV exports for BTHome, Ruuvi Tag, and Ruuvi Air formats 6/E1; encrypted BTHome readings decode locally with a device key
 - Optional browser-cached supplemental metadata from `https://gattelier.ryanyannelli.com`
 - 743 standard UUID names, named descriptors and units, plus readable GATT feature flags, service-change ranges, connection parameters, and descriptor values
-- Metadata and investigation helpers for locks, ResMed devices, GE appliances, and Samsung devices, including SmartTag broadcast state and battery bands
+- LG webOS saved-response inspection and offline LAN request previews for audio, apps, inputs, remote keys, and power-off
+- ResMed Air11 FIG capture inspection with CRC checks, fragment handling, plaintext RPC decoding, and authenticated request templates
+- Metadata and investigation helpers for locks, GE appliances, and Samsung devices, including SmartTag broadcast state and battery bands
 
 Gattelier does not include full TV or GE appliance control. [Device expansion research](docs/device-expansion.md) lists the next supported protocol paths and their source repositories.
 

@@ -24,12 +24,13 @@ const NanoProtocolApp = (() => {
     const history = el('details', 'protocol-details'), historyLabel = el('summary', '', 'Changes while this app is open'), historyList = el('ol', 'protocol-history'); history.append(historyLabel, historyList);
     const importer = el('details', 'protocol-details'), importLabel = el('summary', '', 'Inspect a saved value'), importBody = el('div', 'protocol-import'); importer.append(importLabel, importBody);
     const format = el('select'), formatLabel = el('label', '', 'Data format'); formatLabel.append(format);
-    for (const [value, text] of [['manufacturer', 'Manufacturer HEX'], ...(protocol.decode ? [['gatt', 'Characteristic HEX']] : []), ...(protocol.decodeService ? [['service', 'Service-data HEX']] : []), ...(protocol.decodeStatus ? [['status', 'VeSync status JSON']] : [])]) { const option = el('option', '', text); option.value = value; format.append(option); }
+    for (const [value, text] of [...(protocol.manufacturer === false ? [] : [['manufacturer', 'Manufacturer HEX']]), ...(protocol.decode ? [['gatt', protocol.captureLabel || 'Characteristic HEX']] : []), ...(protocol.decodeService ? [['service', 'Service-data HEX']] : []), ...(protocol.decodeStatus ? [['status', protocol.statusLabel || 'VeSync status JSON']] : []), ...(protocol.decodePlaintext ? [['plaintext', 'Decrypted JSON-RPC']] : [])]) { const option = el('option', '', text); option.value = value; format.append(option); }
     const uuidLabel = el('label', '', 'Characteristic UUID'), uuid = el('input'); uuid.type = 'text'; uuid.placeholder = protocol.characteristics?.status || '00002a19-0000-1000-8000-00805f9b34fb'; uuidLabel.append(uuid); uuidLabel.hidden = true;
     const valueLabel = el('label', '', 'Captured value'), value = el('textarea'); value.rows = 4; value.maxLength = 65536; value.spellcheck = false; valueLabel.append(value);
     const decode = el('button', 'button secondary', 'Decode locally'), imported = el('div', 'protocol-imported'); decode.type = 'button'; imported.setAttribute('aria-live', 'polite');
     importBody.append(el('p', 'vendor-note', 'Paste captured data to decode it in this browser. Imported values stay separate from live observations.'), formatLabel, uuidLabel, valueLabel, decode, imported);
-    format.addEventListener('change', () => { uuidLabel.hidden = !['gatt', 'service'].includes(format.value); uuidLabel.textContent = format.value === 'service' ? 'Service UUID' : 'Characteristic UUID'; uuidLabel.append(uuid); uuid.placeholder = format.value === 'service' ? protocol.service : protocol.characteristics?.status || '00002a19-0000-1000-8000-00805f9b34fb'; imported.replaceChildren(); });
+    function selectFormat() { uuidLabel.hidden = !['gatt', 'service'].includes(format.value); uuidLabel.textContent = format.value === 'service' ? 'Service UUID' : 'Characteristic UUID'; uuidLabel.append(uuid); uuid.placeholder = format.value === 'service' ? protocol.service : protocol.characteristics?.status || '00002a19-0000-1000-8000-00805f9b34fb'; imported.replaceChildren(); }
+    format.addEventListener('change', selectFormat); selectFormat();
     const composer = el('details', 'protocol-details'), composerLabel = el('summary', '', 'Prepare a command'), form = el('form', 'protocol-composer'); composer.append(composerLabel, form);
     const commandLabel = el('label', '', 'Operation'), command = el('select'); commandLabel.append(command);
     const inputs = el('div', 'protocol-inputs'), description = el('p', 'vendor-note'), preview = el('pre', 'protocol-preview protocol-command-preview'), message = el('p', 'protocol-message'); message.setAttribute('role', 'status');
@@ -76,6 +77,7 @@ const NanoProtocolApp = (() => {
         if (format.value === 'manufacturer') { const profile = protocol.identify({ ...(hooks.selected() || {}), manufacturer: value.value.replace(/\s/g, ''), payloadTruncated: false }); result = profile?.fields; }
         else if (format.value === 'gatt') result = protocol.decode(uuid.value.trim() || uuid.placeholder, value.value.trim(), { device: hooks.selected() });
         else if (format.value === 'service') result = protocol.decodeService(uuid.value.trim() || uuid.placeholder, value.value.trim());
+        else if (format.value === 'plaintext') result = protocol.decodePlaintext(value.value.trim()).fields;
         else result = protocol.decodeStatus(JSON.parse(value.value));
         if (!result?.length) throw new Error('No supported fields were found. Check the data format and selected device.');
         imported.append(el('h3', '', 'Imported value'), fields(result));

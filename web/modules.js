@@ -12,7 +12,6 @@ const NanoModules = (() => {
     { id: 'radiacode', title: 'RadiaCode', description: 'Read measurements and spectrum, refresh live, and reset accumulated dose.', category: 'sensor' },
     { id: 'thermometer', title: 'Thermometers', description: 'Read or capture standard temperature measurements.', category: 'sensor' },
     { id: 'locks', title: 'Locks', description: 'Inspect lock services, identity, and security requirements.', category: 'lock' },
-    { id: 'resmed', title: 'ResMed CPAP', description: 'Inspect Air11 transport and exposed device metadata.', category: 'medical' },
     { id: 'ge', title: 'GE appliances', description: 'Inspect BLE metadata and GEA transport requirements.', category: 'appliance' },
     { id: 'tracker', title: 'Trackers & beacons', description: 'Inspect Find My, Tile, iBeacon and Eddystone broadcasts.', category: 'tracker' },
     { id: 'medical', title: 'Dexcom G7', description: 'Authenticate G7 sensors and request readings, history, and identity.', category: 'medical' },
@@ -42,14 +41,14 @@ const NanoModules = (() => {
   }
   function mount(options) {
     hooks = options;
-    for (const id of ['tracker', 'medical', 'thermometer', 'locks', 'resmed', 'ge', ...deviceApps.entries.map(app => app.id)]) {
+    for (const id of ['tracker', 'medical', 'thermometer', 'locks', 'ge', ...deviceApps.entries.map(app => app.id)]) {
       const panel = document.createElement('section'); panel.id = `${id}-panel`; panel.className = 'panel metadata-module'; panel.hidden = true;
       panel.setAttribute('aria-label', catalog.find(item => item.id === id).title);
       document.getElementById('module-content').append(panel);
       if (id === 'medical') NanoDexcom.mount(panel, NanoLab, { getDevice: hooks.selected });
       if (Object.hasOwn(NanoDeviceSupport.families, id) && !deviceApps.get(id)) NanoDeviceSupport.mount(panel, id, NanoLab);
       if (deviceApps.get(id)) readers.set(id, id === 'sensor' ? NanoSensorApp.mount(panel, { selected: () => appDevice(id) }) : NanoProtocolApp.mount(panel, id, { selected: () => appDevice(id) }));
-      if (id === 'samsung' && NanoDeviceSupport.families.samsung) {
+      if (deviceApps.get(id) && Object.hasOwn(NanoDeviceSupport.families, id)) {
         const details = document.createElement('details'), summary = document.createElement('summary'); details.className = 'protocol-details'; summary.textContent = 'GATT metadata tools'; details.append(summary);
         panel.querySelector('.protocol-body').append(details);
         const broadcast = readers.get(id), gatt = NanoDeviceSupport.mount(details, id, NanoLab, { selected: () => appDevice(id) });

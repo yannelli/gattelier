@@ -6,6 +6,8 @@ const NanoSensorProfiles = (() => {
     encryption: { title: 'BTHome encryption', url: 'https://bthome.io/encryption/' },
     parser: { title: 'BTHome reference object definitions', url: 'https://github.com/Bluetooth-Devices/bthome-ble/blob/18e1c664c8595ac5f7e2daa63e9a90516ccd3800/src/bthome_ble/const.py' },
     ruuvi: { title: 'Ruuvi RAWv2 format', url: 'https://docs.ruuvi.com/communication/bluetooth-advertisements/data-format-5-rawv2' },
+    ruuvi6: { title: 'Ruuvi Air format 6', url: 'https://docs.ruuvi.com/communication/bluetooth-advertisements/data-format-6' },
+    ruuviE1: { title: 'Ruuvi Air extended format E1', url: 'https://docs.ruuvi.com/communication/bluetooth-advertisements/data-format-e1' },
   };
   const uuid = value => String(value || '').toLowerCase().replace(/^0x/, '').replace(/^0000([0-9a-f]{4})-0000-1000-8000-00805f9b34fb$/, '$1');
   const bytes = value => typeof value === 'string' && /^(?:[0-9a-f]{2})*$/i.test(value) ? Uint8Array.from(value.match(/../g) || [], pair => parseInt(pair, 16)) : null;
@@ -164,7 +166,37 @@ const NanoSensorProfiles = (() => {
     if (service || (Array.isArray(device.services) && device.services.some(item => uuid(item) === 'fcd2'))) return bthome(service?.hex);
     const manufacturer = bytes(device.manufacturer);
     if (manufacturer?.length >= 3 && manufacturer[0] === 0x99 && manufacturer[1] === 4 && manufacturer[2] === 5) return ruuvi(manufacturer);
+    if (manufacturer?.length >= 3 && manufacturer[0] === 0x99 && manufacturer[1] === 4 && [6, 0xe1].includes(manufacturer[2])) return ruuviAir(manufacturer, device.payloadTruncated === true);
     return null;
+  }
+  function ruuviAir(data, truncated) {
+    const extended = data[2] === 0xe1, format = extended ? 'E1' : '6', length = extended ? 42 : 22;
+    const result = profile(`Ruuvi Air · format ${format}`, `Manufacturer company 0x0499 with data format ${format}.`, 'ruuvi');
+    result.sources = [{ ...sources[extended ? 'ruuviE1' : 'ruuvi6'] }];
+    if (truncated || data.length !== length) { result.confidence = 'Malformed frame'; result.limitations.push(`Format ${format} requires ${length} complete manufacturer-data bytes including the company ID; received ${data.length}${truncated ? ' with a truncation flag' : ''}.`); return result; }
+    const payload = data.subarray(2), view = new DataView(payload.buffer, payload.byteOffset, payload.byteLength), flags = payload[extended ? 28 : 16];
+    const u16 = (label, offset, factor, adjustment, unit) => view.getUint16(offset) === 65535 ? field(result, label, 'Not available') : measurement(result, label, view.getUint16(offset) * factor + adjustment, unit);
+    const u24 = offset => payload[offset] * 65536 + payload[offset + 1] * 256 + payload[offset + 2];
+    const temperature = view.getInt16(1);
+    temperature === -32768 ? field(result, 'Temperature', 'Not available') : measurement(result, 'Temperature', temperature * .005, '°C');
+    u16('Humidity', 3, .0025, 0, '%'); u16('Pressure', 5, 1, 50000, 'Pa');
+    for (const [label, offset] of extended ? [['PM1', 7], ['PM2.5', 9], ['PM4', 11], ['PM10', 13]] : [['PM2.5', 7]]) u16(label, offset, .1, 0, 'µg/m³');
+    u16('CO2', extended ? 15 : 9, 1, 0, 'ppm');
+    for (const [label, offset, bit] of [['VOC index', extended ? 17 : 11, 6], ['NOX index', extended ? 18 : 12, 7]]) {
+      const value = payload[offset] * 2 + ((flags >> bit) & 1);
+      value === 511 ? field(result, label, 'Not available') : measurement(result, label, value);
+    }
+    const light = extended ? u24(19) : payload[13];
+    light === (extended ? 16777215 : 255) ? field(result, 'Illuminance', 'Not available') : measurement(result, 'Illuminance', extended ? light * .01 : Math.round(Math.expm1(light * Math.log(65536) / 254) * 100) / 100, 'lx');
+    const sequence = extended ? u24(25) : payload[15];
+    field(result, 'Measurement sequence', extended && sequence === 16777215 ? 'Not available' : sequence);
+    field(result, 'Calibration', flags & 1 ? 'In progress' : 'Complete');
+    const mac = payload.subarray(extended ? 34 : 17);
+    field(result, extended ? 'Sensor MAC' : 'Sensor MAC suffix', mac.every(value => value === 255) ? 'Not available' : Array.from(mac, value => value.toString(16).padStart(2, '0')).join(':'));
+    if (flags & 1) result.limitations.push('Calibration is in progress; sensor readings have not settled.');
+    if (extended) result.limitations.push('Format E1 needs a complete extended advertisement. Live reception depends on the controller and firmware.');
+    else result.limitations.push('The three-byte MAC suffix is not a complete address. Format 6 carries fewer measurements than E1.');
+    result.confidence = 'Decoded format'; return result;
   }
   async function identifyDecrypted(device, key) {
     const service = device?.serviceData?.find(item => uuid(item?.uuid) === 'fcd2');

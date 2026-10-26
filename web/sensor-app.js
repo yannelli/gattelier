@@ -5,7 +5,7 @@ const NanoSensorApp = (() => {
   const el = (tag, cls, text) => { const node = document.createElement(tag); if (cls) node.className = cls; if (text !== undefined) node.textContent = text; return node; };
   const button = (text, action) => { const node = el('button', 'button secondary', text); node.type = 'button'; node.addEventListener('click', action); return node; };
   const number = value => Number(value.toFixed(3)).toLocaleString();
-  const measurementOrder = ['Temperature', 'Humidity', 'CO2', 'Pressure', 'Illuminance', 'Battery'];
+  const measurementOrder = ['Temperature', 'Humidity', 'CO2', 'PM2.5', 'PM10', 'PM1', 'PM4', 'VOC index', 'NOX index', 'Pressure', 'Illuminance', 'Battery'];
   const rank = label => measurementOrder.includes(label) ? measurementOrder.indexOf(label) : measurementOrder.length;
   function download(device, history, csv) {
     const blob = new Blob([csv ? history.csv(device) : JSON.stringify(history.exportDevice(device), null, 2)], { type: csv ? 'text/csv' : 'application/json' });
@@ -41,14 +41,24 @@ const NanoSensorApp = (() => {
     const storage = el('p', 'vendor-note'), clearDetails = el('details', 'protocol-details'); clearDetails.append(el('summary', '', 'Clear this sensor’s history'));
     clearDetails.append(el('p', 'vendor-note', 'Removes saved and session readings for this address. Export a copy first if you need them.'), button('Clear readings', async () => { const device = session.status().device; if (device) await history.clear(device); paint(); }));
     const meta = el('details', 'protocol-details'), metaBody = el('div'); meta.append(el('summary', '', 'Advertisement details & sources'), metaBody);
-    body.append(context, status, keyForm, readings, toolbar, plot, statistics, actions, storage, clearDetails, meta); container.append(heading, body);
+    const imported = el('details', 'protocol-details'), importBody = el('div', 'protocol-import'), importFormatLabel = el('label', '', 'Captured data format'), importFormat = el('select'); importFormatLabel.append(importFormat);
+    for (const [value, text] of [['manufacturer', 'Ruuvi manufacturer HEX'], ['bthome', 'BTHome service-data HEX']]) { const option = el('option', '', text); option.value = value; importFormat.append(option); }
+    const importLabel = el('label', '', 'Captured advertisement HEX'), importValue = el('textarea'), importResult = el('div'); importValue.rows = 3; importValue.maxLength = 3300; importValue.spellcheck = false; importLabel.append(importValue); importResult.setAttribute('aria-live', 'polite');
+    const inspect = button('Inspect locally', () => {
+      importResult.replaceChildren(); const hex = importValue.value.replace(/\s/g, '');
+      const profile = NanoSensorProfiles.identify(importFormat.value === 'bthome' ? { serviceData: [{ uuid: 'fcd2', hex }] } : { manufacturer: hex });
+      if (!profile) { importResult.append(el('p', 'protocol-message', 'No supported sensor frame was found. Ruuvi data starts with company bytes 9904. BTHome data starts with the device-info byte, without the FCD2 UUID.')); return; }
+      importResult.append(NanoInsights.profileCard(profile));
+    });
+    imported.append(el('summary', '', 'Inspect a saved advertisement'), importBody); importBody.append(el('p', 'vendor-note', 'Decode captured data in this browser. Imported readings stay separate from device history. Encrypted BTHome captures show encryption metadata here.'), importFormatLabel, importLabel, inspect, importResult);
+    body.append(context, status, keyForm, readings, toolbar, plot, statistics, actions, storage, clearDetails, imported, meta); container.append(heading, body);
     const history = NanoSensorHistory.create(), session = NanoSensorSession.create(history, { change: paint }); controller = session;
     let lastFields = '', lastChart = '', optionsKey = '';
     function paint() {
       const state = session.status(), device = state.device, profile = state.profile;
       context.textContent = device ? `${device.label || device.name || device.address} · ${device.rssi} dBm · ${NanoInsights.age(device.lastSeenMs)}` : 'Choose a BTHome or Ruuvi sensor from Apps or Discover.';
       badge.textContent = state.pending ? 'Checking authentication' : profile?.authenticated ? 'Authenticated payload' : device?.streamLive || device?.liveId != null ? 'Broadcast readings' : 'Saved observation';
-      status.textContent = state.message || (state.encrypted && !state.hasKey ? 'This sensor encrypts its readings. Enter its key to decode them locally.' : '');
+      status.textContent = state.message || (state.encrypted && !state.hasKey ? 'This sensor encrypts its readings. Enter its key to decode them locally.' : profile?.fields.some(field => field.label === 'Calibration' && field.value === 'In progress') ? 'Sensor calibration is in progress. Readings have not settled.' : '');
       keyForm.hidden = !state.encrypted; forget.disabled = !state.hasKey; unlock.disabled = state.pending;
       pause.disabled = !profile; pause.textContent = state.recording ? 'Pause history' : 'Resume history';
       const samples = device ? history.samples(device) : [], numeric = (profile?.fields.filter(field => Number.isFinite(field.numericValue)) || []).sort((a, b) => rank(a.label) - rank(b.label));
@@ -60,7 +70,7 @@ const NanoSensorApp = (() => {
       if (fieldsKey !== lastFields) {
         lastFields = fieldsKey; readings.replaceChildren(); metaBody.replaceChildren();
         for (const field of numeric) { const item = el('div'); item.append(el('dt', '', field.label), el('dd', '', String(field.value))); readings.append(item); }
-        if (profile) { metaBody.append(NanoInsights.profileCard(profile)); for (const text of profile.limitations || []) metaBody.append(el('p', 'vendor-note', text)); }
+        if (profile) metaBody.append(NanoInsights.profileCard(profile));
       }
       readings.hidden = !numeric.length;
       const points = device ? history.series(device, metric.value, Number(range.value) ? Date.now() - Number(range.value) : 0) : [];
@@ -74,7 +84,7 @@ const NanoSensorApp = (() => {
     }
     metric.addEventListener('change', paint); range.addEventListener('change', paint);
     keyForm.addEventListener('submit', async event => { event.preventDefault(); const value = keyInput.value.trim(); keyInput.value = ''; try { await session.unlock(value); } catch (error) { status.textContent = error.message; } });
-    document.addEventListener('nanoscope:workspace', () => { if (NanoWorkspace.view() !== 'apps' || NanoWorkspace.module() !== 'sensor') { keyInput.value = ''; session.lock(); } });
+    document.addEventListener('nanoscope:workspace', () => { if (NanoWorkspace.view() !== 'apps' || NanoWorkspace.module() !== 'sensor') { keyInput.value = ''; importValue.value = ''; importResult.replaceChildren(); session.lock(); } });
     history.init().then(paint); paint();
     return { render(device) { session.select(device); paint(); } };
   }

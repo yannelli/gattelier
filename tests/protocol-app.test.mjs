@@ -68,3 +68,24 @@ test('Samsung packet fields sit under a collapsed disclosure', () => {
   assert.match(details.textContent, /Rotating privacy ID/); assert.doesNotMatch(details.textContent, /Battery band/);
   assert.match(h.container.textContent, /Reported tag stateOffline/); assert.equal(h.calls(), 0);
 });
+test('LG JSON inspection and volume previews remain separate from live device state', () => {
+  const h = harness('lg', { name: 'LG TV (fixture)', address: '02:00:00:00:00:06', addressType: 0, services: ['feb9'] });
+  const operation = h.label('Operation'); operation.value = 'volume'; operation.listeners.change(); h.label('Volume (0 to 100)').value = '25'; h.submit();
+  const plan = JSON.parse(h.all().find(node => node.className?.includes('protocol-command-preview')).textContent);
+  assert.equal(plan.request.uri, 'ssap://audio/setVolume'); assert.equal(plan.request.payload.volume, 25); assert.equal(plan.steps, undefined);
+  const format = h.label('Data format'); format.value = 'status'; format.listeners.change();
+  h.label('Captured value').value = '{"type":"response","payload":{"volumeStatus":{"volume":33,"muteStatus":true}}}'; h.button('Decode locally').click();
+  assert.match(h.container.textContent, /Volume33MutedYes/); assert.equal(h.calls(), 0);
+  h.events['nanoscope:workspace'](); assert.equal(h.label('Captured value').value, '');
+});
+test('ResMed importer starts with FIG captures and accepts explicitly decrypted JSON', () => {
+  const h = harness('resmed', { name: 'ResMed_FIXTURE', address: '02:00:00:00:00:07', addressType: 0, services: ['fd56'] });
+  assert.equal(h.label('Data format').value, 'gatt'); assert.equal(h.label('Characteristic UUID').placeholder, apps.get('resmed').protocol.characteristics.rx);
+  h.label('Captured value').value = 'bebafeca960320008a7e2691474ed422000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f';
+  h.button('Decode locally').click(); assert.match(h.container.textContent, /Encrypted JSON/);
+  const format = h.label('Data format'); format.value = 'plaintext'; format.listeners.change();
+  h.label('Captured value').value = '{"jsonrpc":"2.0","id":7,"result":{"DeviceControl":{"FGState":"Standby"}}}'; h.button('Decode locally').click();
+  assert.match(h.container.textContent, /Standby/); h.submit();
+  const plan = JSON.parse(h.all().find(node => node.className?.includes('protocol-command-preview')).textContent);
+  assert.equal(plan.request.method, 'GetVersion'); assert.equal(plan.offlineOnly, true); assert.equal(plan.steps, undefined); assert.equal(h.calls(), 0);
+});

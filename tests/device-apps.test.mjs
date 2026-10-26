@@ -5,6 +5,15 @@ import modules from '../web/modules.js';
 import profiles from '../web/profiles.js';
 const purifier = { address: '02:00:00:00:00:01', addressType: 0, name: 'Core200S', manufacturer: 'd006010000000000000000000000', services: [] };
 const coffee = { address: '02:00:00:00:00:02', addressType: 0, name: 'Vertuo_CV6_020000000002', manufacturer: '0225000900000000', services: ['06aa1910-f22a-11e3-9daa-0002a5d5c51b'] };
+test('LG and ResMed route to their dedicated apps without changing scan evidence', () => {
+  const tv = { name: 'LG TV (fixture)', services: ['0xfeb9'], manufacturer: 'c4000000' };
+  assert.deepEqual(modules.matches(tv), ['lg']); assert.equal(profiles.identify(tv).category, 'appliance');
+  assert.equal(profiles.identify({ manufacturer: 'c4000000' }).category, 'vendor');
+  assert.deepEqual(modules.matches({ name: 'ResMed_FIXTURE', services: ['fd56'] }), ['resmed']);
+  assert.equal(modules.catalog.filter(item => item.id === 'resmed').length, 1);
+  assert.equal(modules.catalog.filter(item => item.id === 'lg').length, 1);
+  assert.equal(apps.get('resmed').protocol.manufacturer, false);
+});
 test('new apps match current protocol evidence and participate in discovery profiles', () => {
   assert.deepEqual(modules.matches(purifier), ['vesync']); assert.deepEqual(modules.matches(coffee), ['nespresso']);
   assert.equal(profiles.identify(purifier).category, 'appliance');

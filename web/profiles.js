@@ -117,8 +117,8 @@ const NanoProfiles = (() => {
       { category: 'sleep', title: 'Sleep Number', description: 'Fuzion and MCR identification; paired Fuzion queries.' },
       { category: 'sensor', title: 'Environmental sensors', description: 'BTHome v2 and Ruuvi measurements from broadcasts.' },
       { category: 'recorder', title: 'Recorders', description: 'PLAUD and Pocket protocol identification.' },
-      { category: 'vendor', title: 'Apple & Samsung', description: 'Manufacturer evidence, AirPods battery levels, and Continuity messages.' },
-      { category: 'appliance', title: 'Home appliances', description: 'Nespresso Vertuo and Levoit Core 200S identification and decoded state.' },
+      { category: 'vendor', title: 'Vendor broadcasts', description: 'Apple, Samsung, and LG manufacturer evidence and decoded broadcast fields.' },
+      { category: 'appliance', title: 'Home appliances', description: 'Nespresso, Levoit, and LG device identification, saved responses, and command previews.' },
       { category: 'other', title: 'BLE metadata', description: 'Advertising structures and unclassified devices.' }
     ];
   }
