@@ -1,6 +1,7 @@
 #include "scan_stream.h"
 #include "scan_retention.h"
 #include "scan_encoding.h"
+#include "collection.h"
 #include <WebServer.h>
 #include <esp_random.h>
 #include <algorithm>
@@ -9,6 +10,8 @@ static ScanJournal<ScanJournalCapacity> journal;
 static String bootId;
 static uint32_t nextId = 1;
 static uint64_t evicted = 0;
+static uint64_t cacheSkipped = 0;
+static ScanOffloadLease offloadLease;
 
 void startScanStream() { if (bootId.isEmpty()) bootId = String(esp_random(), HEX); }
 
@@ -71,6 +74,10 @@ void recordAdvertisement(const NimBLEAdvertisedDevice* advertised) {
   if (advertised->haveName()) { const auto name = advertised->getName(); memcpy(record.name, name.data(), std::min(name.size(), sizeof(record.name) - 1)); }
   record.ms = millis(); record.rssi = advertised->getRSSI(); record.connectable = advertised->isConnectable(); record.advType = advertised->getAdvType();
   record.hasTxPower = advertised->haveTXPower(); record.txPower = record.hasTxPower ? advertised->getTXPower() : 0;
+  if (offloadLease.active(record.ms, collectionEnabled())) {
+    record.id = nextId++; if (!nextId) ++nextId;
+    journal.append(record); ++cacheSkipped; return;
+  }
   auto found = std::find_if(state.devices.begin(), state.devices.end(), [&](const DeviceInfo& device) { return device.address == address && device.addressType == record.addressType; });
   record.id = found == state.devices.end() ? nextId++ : found->id;
   if (!nextId) ++nextId;
@@ -113,6 +120,9 @@ void addScanStreamState(cJSON* ble) {
   cJSON_AddNumberToObject(ble, "scanCacheBytes", cacheBytes());
   cJSON_AddNumberToObject(ble, "scanCacheLimitBytes", ScanCacheLimitBytes);
   cJSON_AddNumberToObject(ble, "scanCacheEvicted", double(evicted));
+  cJSON_AddBoolToObject(ble, "browserOffload", offloadLease.active(millis(), collectionEnabled()));
+  cJSON_AddNumberToObject(ble, "browserOffloadLeaseMs", ScanOffloadLeaseMs);
+  cJSON_AddNumberToObject(ble, "scanCacheSkipped", double(cacheSkipped));
   cJSON_AddNumberToObject(ble, "advertisementCapacity", ScanJournalCapacity);
   cJSON_AddNumberToObject(ble, "advertisementJournalBytes", sizeof(journal));
   cJSON_AddNumberToObject(ble, "advertisementJournalLimitBytes", ScanJournalLimitBytes);
@@ -133,16 +143,26 @@ cJSON* scanDeviceJson(const DeviceInfo& device) {
   return item;
 }
 
-void sendAdvertisements(WebServer& server, uint64_t after, const String& expectedBoot, bool raw) {
+void sendAdvertisements(WebServer& server, uint64_t after, const String& expectedBoot, bool raw, bool compact, bool offload) {
   uint64_t end, oldest, dropped, overwritten, truncated; String header;
   {
     StateLock lock;
     startScanStream();
+    if (raw && offload && !collectionEnabled()) {
+      for (size_t index = 0; index < state.devices.size();) {
+        const auto& device = state.devices[index];
+        if ((state.connected || state.busy) && device.address == state.address && device.addressType == state.addressType) ++index;
+        else eraseScanCache(index);
+      }
+      if (state.devices.capacity() != state.devices.size()) state.devices.shrink_to_fit();
+      offloadLease.renew(millis());
+    }
     const bool reset = !expectedBoot.isEmpty() && expectedBoot != bootId;
     if (reset) after = 0;
     end = journal.next(); oldest = journal.oldest(); dropped = journal.dropped(after); overwritten = journal.overwritten(); truncated = journal.truncated();
     header = "{\"bootId\":\"" + bootId + "\",\"reset\":" + (reset ? "true" : "false") + ",\"uptime\":" + String(millis() / 1000) + ",\"oldestSeq\":" + String(oldest) + ",\"nextSeq\":" + String(end) + ",\"cursor\":" + String(end) + ",\"capacity\":" + String(ScanJournalCapacity) + ",\"journalBytes\":" + String(sizeof(journal)) + ",\"cacheCapacity\":" + String(ScanCacheCapacity) + ",\"cacheBytes\":" + String(cacheBytes()) + ",\"cacheLimitBytes\":" + String(ScanCacheLimitBytes) + ",\"droppedTotal\":" + String(overwritten) + ",\"truncatedTotal\":" + String(truncated) + ",\"cacheIds\":[";
     for (size_t i = 0; i < state.devices.size(); ++i) { if (i) header += ','; header += String(state.devices[i].id); }
+    header += "],\"browserOffload\":" + String(offloadLease.active(millis(), collectionEnabled()) ? "true" : "false") + ",\"offloadLeaseMs\":" + String(ScanOffloadLeaseMs) + ",\"cacheSkippedTotal\":" + String(cacheSkipped);
   }
   server.sendHeader("Cache-Control", "no-store"); server.sendHeader("X-Content-Type-Options", "nosniff"); server.setContentLength(CONTENT_LENGTH_UNKNOWN); server.send(200, "application/json", "");
   String chunk; chunk.reserve(3072);
@@ -154,7 +174,7 @@ void sendAdvertisements(WebServer& server, uint64_t after, const String& expecte
       if (chunk.length() == 3072) { server.sendContent(chunk); chunk = ""; }
     }
   };
-  append(header.c_str()); append(raw ? "],\"format\":\"raw-v1\",\"devices\":[" : "],\"devices\":["); bool first = true;
+  append(header.c_str()); append(raw ? compact ? ",\"format\":\"raw-v2\",\"devices\":[" : ",\"format\":\"raw-v1\",\"devices\":[" : ",\"devices\":["); bool first = true;
   const uint64_t begin = after >= end ? end + 1 : std::max(after + 1, oldest);
   for (uint64_t seq = begin; seq <= end; ++seq) {
     ScanAdvertisement record; bool available;
@@ -162,7 +182,7 @@ void sendAdvertisements(WebServer& server, uint64_t after, const String& expecte
     if (!available) { ++dropped; continue; }
     if (raw) {
       char encoded[ScanJsonCapacity];
-      if (!rawAdvertisementJson(record, encoded, sizeof(encoded))) { ++dropped; continue; }
+      if (!rawAdvertisementJson(record, encoded, sizeof(encoded), compact)) { ++dropped; continue; }
       if (!first) append(","); append(encoded); first = false;
       continue;
     }

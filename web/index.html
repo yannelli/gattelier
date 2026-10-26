@@ -41,7 +41,7 @@
           <div class="panel-heading"><div><h2 id="nearby-title">Devices <span id="count" class="count">0</span></h2><p id="scan-status" role="status">Waiting for board</p></div><span id="scan-indicator" class="activity" hidden aria-hidden="true"></span></div>
           <div class="search-wrap"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M16 16l5 5"/></svg><input id="search" type="search" placeholder="Name, address or vendor" aria-label="Search devices by name, address or vendor" autocomplete="off" spellcheck="false"></div>
           <div class="discovery-options">
-            <label>Source<select id="filter-source"><option value="live">Observed this session</option><option value="all">Browser history</option><option value="history">Previously seen only</option></select></label>
+            <label>Source<select id="filter-source"><option value="live">This session</option><option value="all">All history</option><option value="history">Past sessions</option></select></label>
             <label>Sort by<select id="sort"><option value="strength">Strongest signal</option><option value="recent">Recently seen</option><option value="name">Name</option><option value="first">First seen</option><option value="observations">Most observations</option></select></label>
           </div>
           <details class="device-filters">
@@ -104,15 +104,8 @@
       <div class="view-heading"><div><h2>Workspace settings</h2><p>Control what this browser remembers and collects.</p></div></div>
       <div class="settings-layout">
         <section id="api-panel" class="panel" aria-label="Board connection"></section>
-        <section id="activity-led-panel" class="panel" aria-label="Activity LED"></section>
-        <section id="metadata-panel" class="panel" aria-label="Device metadata"></section>
-        <section id="network-panel" class="panel" aria-label="Wi-Fi and hotspot settings"></section>
-        <section id="credentials-panel" class="panel" aria-label="Saved credentials"></section>
-        <section id="usb-panel" class="panel" aria-label="USB controller"></section>
-        <section id="pwa-panel" class="panel" aria-label="Offline app"></section>
-        <section id="collection-panel" class="panel" aria-label="Onboard collection"></section>
-        <section class="panel settings-card" aria-labelledby="history-settings-title">
-          <div class="panel-heading"><div><h2 id="history-settings-title">History &amp; collection</h2><p id="storage-status" role="status">Checking browser storage…</p></div></div>
+        <section id="history-panel" class="panel settings-card" aria-labelledby="history-settings-title">
+          <div class="panel-heading"><div><h2 id="history-settings-title">Browser storage</h2><p id="storage-status" role="status">Checking browser storage…</p></div></div>
           <div class="scan-offload-info"><strong>Browser offload</strong><p id="scan-offload-status" role="status">Waiting for the board.</p><p id="scan-offload-detail">Discovery history stays in this browser. The board uses a bounded RAM buffer without writing scan history to flash.</p></div>
           <label class="setting-row" for="persist-history"><span><strong>Remember device history</strong><small>Keep observations and favorites in this browser between visits.</small></span><input id="persist-history" class="setting-switch" type="checkbox" role="switch"></label>
           <label class="setting-row" for="background-scan"><span><strong>Collect in the background</strong><small>Continue polling the board while another browser tab or app is active.</small></span><input id="background-scan" class="setting-switch" type="checkbox" role="switch"></label>
@@ -120,9 +113,16 @@
           <p id="history-import-status" class="vendor-note" role="status"></p>
           <div class="settings-actions"><button id="export-history" class="button secondary" type="button">Export history</button><button id="clear-history" class="button destructive" type="button">Clear saved history</button></div>
         </section>
+        <section id="activity-led-panel" class="panel" aria-label="Activity LED"></section>
+        <section id="metadata-panel" class="panel" aria-label="Device metadata"></section>
+        <section id="network-panel" class="panel" aria-label="Wi-Fi and hotspot settings"></section>
+        <section id="credentials-panel" class="panel" aria-label="Saved credentials"></section>
+        <section id="usb-panel" class="panel" aria-label="USB controller"></section>
+        <section id="pwa-panel" class="panel" aria-label="Offline app"></section>
+        <section id="collection-panel" class="panel" aria-label="Onboard collection"></section>
         <aside class="panel settings-explainer" aria-labelledby="collection-title">
           <span class="settings-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="14" rx="3"/><path d="M8 9h8m-8 4h5"/></svg></span>
-          <h2 id="collection-title">Your board scans. This tab collects.</h2>
+          <h2 id="collection-title">How discovery storage works</h2>
           <p>The NanoC6 scans Bluetooth devices. API scan collection keeps history, matching, sorting, and signal analysis in this browser. Use Source to switch between live devices and browser history.</p>
           <p>Browser history keeps up to 10,000 previously observed addresses and reports evictions. Address changes remain separate observations.</p>
           <p>Keep the page open to collect data. Browsers reduce background polling; keep this tab visible for high-rate captures.</p>

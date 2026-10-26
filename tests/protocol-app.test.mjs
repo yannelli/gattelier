@@ -89,3 +89,25 @@ test('ResMed importer starts with FIG captures and accepts explicitly decrypted 
   const plan = JSON.parse(h.all().find(node => node.className?.includes('protocol-command-preview')).textContent);
   assert.equal(plan.request.method, 'GetVersion'); assert.equal(plan.offlineOnly, true); assert.equal(plan.steps, undefined); assert.equal(h.calls(), 0);
 });
+
+test('beacon imports isolate pasted manufacturer data from selected service data', () => {
+  const h = harness('tracker', { address: '02:00:00:00:00:08', addressType: 0, services: ['feaa'], serviceData: [{ uuid: 'feaa', hex: '20' + '00'.repeat(13) }] });
+  h.label('Captured value').value = '4c000215' + '11'.repeat(16) + '00010002c5';
+  h.button('Decode locally').click();
+  const imported = h.all().find(node => node.className === 'protocol-imported');
+  assert.match(imported.textContent, /Beacon UUID/); assert.doesNotMatch(imported.textContent, /Battery/);
+  const operation = h.label('Operation'); operation.value = 'interval'; operation.listeners.change(); h.submit();
+  const plan = JSON.parse(h.all().find(node => node.className?.includes('protocol-command-preview')).textContent);
+  assert.equal(plan.writes[1].hex, '03e8'); assert.equal(plan.steps, undefined); assert.equal(h.calls(), 0);
+  h.select({ address: '02:00:00:00:00:09', addressType: 0, services: ['feed'] });
+  assert.equal(h.all().find(node => node.tag === 'details' && node.children[0].textContent === 'Prepare a command').hidden, true);
+});
+test('Bose capture JSON decodes locally and reference preview requires product evidence', () => {
+  const h = harness('bose', { name: 'QC Ultra', address: '02:00:00:00:00:10', addressType: 0, services: ['febe'] });
+  const format = h.label('Data format'); format.value = 'status'; format.listeners.change();
+  h.label('Captured value').value = '{"format":"bmap","hex":"00030303406601"}'; h.button('Decode locally').click();
+  assert.match(h.container.textContent, /QC Ultra Gen 1 reference/);
+  h.label('Captured raw BMAP product-ID response (QC Ultra Gen1 0x4066)').value = '00030303406601'; h.submit();
+  const plan = JSON.parse(h.all().find(node => node.className?.includes('protocol-command-preview')).textContent);
+  assert.equal(plan.hex, '00030100'); assert.equal(plan.steps, undefined); assert.equal(h.calls(), 0);
+});

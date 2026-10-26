@@ -182,6 +182,19 @@ test('advertisement deltas preserve previous devices and clear only evicted boar
   store.ingest(board([], 101), 1001000); assert.ok(store.devices().every(item => item.streamLive));
   assert.equal(store.status().stream.received, 2);
 });
+test('browser offload retains names and observations without board cache IDs', async () => {
+  const storage = memoryStorage(), store = create({ storage }); await store.init();
+  store.ingestAdvertisements(streamBatch([streamed(1, { name: 'Saved name' })], { cacheIds: [], format: 'raw-v2', browserOffload: true, offloadLeaseMs: 15000, cacheSkippedTotal: 1 }), 1000000);
+  store.ingestAdvertisements(streamBatch([streamed(2, { name: '', id: 13 })], { cacheIds: [], format: 'raw-v2', browserOffload: true, offloadLeaseMs: 15000, cacheSkippedTotal: 2 }), 1000100);
+  const device = store.devices()[0];
+  assert.equal(device.name, 'Saved name'); assert.equal(device.observations, 2);
+  assert.equal(device.liveId, null); assert.equal(device.streamLive, true);
+  assert.equal(device.address, streamed(1).address.toLowerCase()); assert.equal(device.addressType, 0);
+  assert.equal(store.status().stream.browserOffload, true); assert.equal(store.status().stream.cacheSkippedTotal, 2);
+  await store.flush(); assert.equal(storage.value.records[0].observations, 2);
+  store.ingestAdvertisements(streamBatch([streamed(3, { id: 14 })], { cacheIds: [14], browserOffload: false }), 1000200);
+  assert.equal(store.devices()[0].liveId, 14); assert.equal(store.status().stream.browserOffload, false);
+});
 test('stream sequences count same-second observations once and preserve precise receive time', async () => {
   const storage = memoryStorage(), store = create({ storage }); await store.init();
   const batch = streamBatch([streamed(1), streamed(2, { rssi: -40 })]);

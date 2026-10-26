@@ -11,6 +11,16 @@ constexpr size_t ScanCacheLimitBytes = 16 * 1024;
 constexpr size_t ScanJournalCapacity = 96;
 constexpr size_t ScanPayloadCapacity = 128;
 constexpr size_t ScanJournalLimitBytes = 25 * 1024;
+constexpr uint32_t ScanOffloadLeaseMs = 15000;
+
+class ScanOffloadLease {
+ public:
+  void renew(uint32_t now) { renewed_ = now; enabled_ = true; }
+  bool active(uint32_t now, bool boardCollection = false) const { return enabled_ && !boardCollection && uint32_t(now - renewed_) < ScanOffloadLeaseMs; }
+ private:
+  uint32_t renewed_ = 0;
+  bool enabled_ = false;
+};
 
 struct ScanAdvertisement {
   uint64_t seq = 0;

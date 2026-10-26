@@ -24,6 +24,7 @@ test('opening or selecting a passive app preserves an active G7 operation and gl
     NanoWorkspace: { module: () => active, openModule: id => { active = id; } },
     NanoConnection: { describe: () => ({}), controls: () => new Element('div') }, NanoDexcom: { mount() {} }, NanoDeviceSupport: { families: {} },
     NanoProtocolApp: { mount: (_panel, _id, hooks) => ({ render(device) { renderedTarget = device; assert.equal(hooks.selected(), device); } }) },
+    NanoBeaconApp: { mount: () => ({ render() {} }) },
     NanoSensorApp: { mount: () => ({ render() {} }) },
     replacePreservingFocus: (element, content) => element.replaceChildren(content),
     document: { createElement: tag => new Element(tag), createDocumentFragment: () => new Element('fragment'), getElementById: get }

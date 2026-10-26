@@ -15,8 +15,8 @@ const NanoProtocolApp = (() => {
   function mount(container, id, hooks) {
     const app = NanoDeviceApps.get(id), protocol = app.protocol;
     container.classList.add('protocol-panel');
-    const heading = el('div', 'panel-heading'), title = el('h2', '', app.title), mode = el('span', 'badge', 'Broadcast updates'); heading.append(title, mode);
-    const body = el('div', 'protocol-body'), context = el('p', 'vendor-note'), readings = el('div'), evidence = el('div');
+    const heading = el('div', 'panel-heading'), title = el('h2', '', 'Observed data'), mode = el('span', 'badge', 'Broadcast updates'); heading.append(title, mode);
+    const body = el('div', 'protocol-body'), context = el('p', 'vendor-note'), readings = el('div'), evidence = el('div', 'protocol-evidence');
     const packetDetails = el('details', 'protocol-details'), packetFields = el('div'); packetDetails.append(el('summary', '', 'Packet details'), packetFields); packetDetails.hidden = true;
     const actions = el('div', 'protocol-actions'), exportSnapshot = el('button', 'button secondary', 'Export snapshot'), inspect = el('button', 'button secondary', 'Show advertisement');
     const raw = el('pre', 'protocol-preview'); raw.hidden = true;
@@ -29,7 +29,7 @@ const NanoProtocolApp = (() => {
     const valueLabel = el('label', '', 'Captured value'), value = el('textarea'); value.rows = 4; value.maxLength = 65536; value.spellcheck = false; valueLabel.append(value);
     const decode = el('button', 'button secondary', 'Decode locally'), imported = el('div', 'protocol-imported'); decode.type = 'button'; imported.setAttribute('aria-live', 'polite');
     importBody.append(el('p', 'vendor-note', 'Paste captured data to decode it in this browser. Imported values stay separate from live observations.'), formatLabel, uuidLabel, valueLabel, decode, imported);
-    function selectFormat() { uuidLabel.hidden = !['gatt', 'service'].includes(format.value); uuidLabel.textContent = format.value === 'service' ? 'Service UUID' : 'Characteristic UUID'; uuidLabel.append(uuid); uuid.placeholder = format.value === 'service' ? protocol.service : protocol.characteristics?.status || '00002a19-0000-1000-8000-00805f9b34fb'; imported.replaceChildren(); }
+    function selectFormat() { uuidLabel.hidden = !['gatt', 'service'].includes(format.value); uuidLabel.textContent = format.value === 'service' ? 'Service UUID' : 'Characteristic UUID'; uuidLabel.append(uuid); value.placeholder = format.value === 'status' ? protocol.captureExample || '' : ''; uuid.placeholder = format.value === 'service' ? protocol.service : protocol.characteristics?.status || '00002a19-0000-1000-8000-00805f9b34fb'; imported.replaceChildren(); }
     format.addEventListener('change', selectFormat); selectFormat();
     const composer = el('details', 'protocol-details'), composerLabel = el('summary', '', 'Prepare a command'), form = el('form', 'protocol-composer'); composer.append(composerLabel, form);
     const commandLabel = el('label', '', 'Operation'), command = el('select'); commandLabel.append(command);
@@ -74,7 +74,7 @@ const NanoProtocolApp = (() => {
       imported.replaceChildren();
       try {
         let result;
-        if (format.value === 'manufacturer') { const profile = protocol.identify({ ...(hooks.selected() || {}), manufacturer: value.value.replace(/\s/g, ''), payloadTruncated: false }); result = profile?.fields; }
+        if (format.value === 'manufacturer') { const profile = protocol.identify({ ...(hooks.selected() || {}), manufacturer: value.value.replace(/\s/g, ''), services: [], serviceData: [], payloadHex: '', payloadTruncated: false }); result = profile?.fields; }
         else if (format.value === 'gatt') result = protocol.decode(uuid.value.trim() || uuid.placeholder, value.value.trim(), { device: hooks.selected() });
         else if (format.value === 'service') result = protocol.decodeService(uuid.value.trim() || uuid.placeholder, value.value.trim());
         else if (format.value === 'plaintext') result = protocol.decodePlaintext(value.value.trim()).fields;
@@ -91,6 +91,7 @@ const NanoProtocolApp = (() => {
     function render(device, state) {
       const key = device ? `${device.address}/${device.addressType}` : '';
       if (key !== currentKey) { currentKey = key; before = null; samples = []; lastSignature = ''; clearTransient(); buildInputs(); raw.hidden = true; inspect.textContent = 'Show advertisement'; }
+      composer.hidden = !protocol.commands?.length || Boolean(protocol.canPrepare && !protocol.canPrepare(device));
       currentSnapshot = device && NanoDeviceApps.snapshot(id, device, state);
       exportSnapshot.disabled = !currentSnapshot; inspect.disabled = !currentSnapshot; prepare.disabled = !currentSnapshot;
       raw.textContent = currentSnapshot ? JSON.stringify({ address: device.address, addressType: device.addressType, manufacturer: device.manufacturer, services: device.services, serviceData: device.serviceData, payloadHex: device.payloadHex }, null, 2) : '';

@@ -7,9 +7,9 @@
 .protocol-values dt { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.4; }
 .protocol-values dd { margin: 0; font-size: 17px; font-weight: 550; overflow-wrap: anywhere; }
 .protocol-actions { display: flex; flex-wrap: wrap; gap: var(--control-gap); align-items: center; }
-.protocol-details { border-top: 1px solid var(--line); padding-top: 18px; min-width: 0; }
+.protocol-details { border-top: 1px solid var(--line); padding-top: 8px; min-width: 0; }
 .protocol-details summary { cursor: pointer; font-size: 14px; font-weight: 550; }
-.protocol-details[open] > summary { margin-bottom: 18px; }
+.protocol-details[open] > summary { margin-bottom: 12px; }
 .protocol-import, .protocol-composer { display: grid; gap: 16px; min-width: 0; }
 .protocol-inputs { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: 12px; }
 .protocol-body label { display: grid; gap: 8px; font-size: 12px; color: var(--muted); min-width: 0; }
@@ -37,4 +37,5 @@
   .protocol-values dd { font-size: 16px; }
   .protocol-values { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .protocol-values > div { padding: 14px; }
+  .protocol-values > div:last-child:nth-child(odd) { grid-column: 1 / -1; }
 }

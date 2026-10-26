@@ -153,13 +153,13 @@ const NanoScanStore = (() => {
       for (const value of boardState.devices) {
         const advertised = advertisement(value);
         if (!advertised) continue;
-        const current = records.get(advertised.key), before = current && JSON.stringify(savedRecord(current));
+        const current = records.get(advertised.key), before = !incremental && current && JSON.stringify(savedRecord(current));
         const seen = Number.isFinite(value.lastSeen) ? Math.max(0, Math.min(uptime, value.lastSeen)) : null;
         const at = seen === null ? receivedAtMs : Math.min(receivedAtMs, boardStartedMs + seen * 1000);
         const sameBoot = current && !reboot && Math.abs(current.boardStartedMs - boardStartedMs) < 2500;
         const observed = incremental || !current || (seen !== null && (!sameBoot || current.boardSeenSeconds < seen));
         const fields = sameBoot && seen !== null && current.boardSeenSeconds > seen ? advertisement(current) : advertised;
-        const record = { ...fields, firstSeenMs: current?.firstSeenMs ?? at, lastSeenMs: current?.lastSeenMs ?? at,
+        const record = { ...fields, name: fields.name || current?.name || '', firstSeenMs: current?.firstSeenMs ?? at, lastSeenMs: current?.lastSeenMs ?? at,
           observations: current?.observations ?? 0, history: current?.history || [], favorite: current?.favorite || false,
           label: current?.label || '', boardSeenSeconds: current?.boardSeenSeconds ?? -1, boardStartedMs: current?.boardStartedMs ?? boardStartedMs,
           liveId: Number.isInteger(value.id) && value.id > 0 ? value.id : incremental ? current?.liveId ?? null : null,
@@ -173,7 +173,7 @@ const NanoScanStore = (() => {
           if (!record.history.some(item => item.at === preciseAt)) record.history = [...record.history, { at: preciseAt, rssi: record.rssi }].slice(-60);
         }
         records.set(record.key, record);
-        if (before !== JSON.stringify(savedRecord(record))) dirty = true;
+        if (incremental || before !== JSON.stringify(savedRecord(record))) dirty = true;
       }
       const count = records.size; trim();
       if (dirty || count !== records.size) changed();
@@ -199,7 +199,8 @@ const NanoScanStore = (() => {
         if (record) { record.liveId = cache.has(value.id) ? value.id : null; record.streamLive = true; }
       }
       stream = { bootId: batch.bootId, cursor: batch.cursor, received: stream.received + fresh.length, gaps: stream.gaps + Math.max(missing, batch.cursor > before ? batch.dropped : 0), reboots: stream.reboots + Number(reboot), active: true, error: '',
-        format: batch.format, capacity: batch.capacity, cacheCapacity: batch.cacheCapacity, cacheBytes: batch.cacheBytes, cacheLimitBytes: batch.cacheLimitBytes, journalBytes: batch.journalBytes, droppedTotal: batch.droppedTotal, truncatedTotal: batch.truncatedTotal };
+        format: batch.format, capacity: batch.capacity, cacheCapacity: batch.cacheCapacity, cacheBytes: batch.cacheBytes, cacheLimitBytes: batch.cacheLimitBytes, journalBytes: batch.journalBytes, droppedTotal: batch.droppedTotal, truncatedTotal: batch.truncatedTotal,
+        browserOffload: batch.browserOffload === true, offloadLeaseMs: batch.offloadLeaseMs, cacheSkippedTotal: batch.cacheSkippedTotal };
       return { received: fresh.length, dropped: Math.max(missing, batch.cursor > before ? batch.dropped : 0), reboot, cursor: stream.cursor };
     }
     function devices() { return [...records.values()].map(clone); }

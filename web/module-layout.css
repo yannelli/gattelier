@@ -47,3 +47,25 @@ details.credential-controls > * + * { margin-top: 10px; }
 .scan-offload-info p { color: var(--muted); font-size: 12px; line-height: 1.6; margin-top: 6px; }
 
 .pocket-controls select { min-width: 160px; }
+
+.search-wrap { margin-inline: var(--panel-inset); }
+.discovery-options { padding-inline: var(--panel-inset); }
+.device-filters { margin-inline: var(--panel-inset); }
+.history-status { margin-inline: var(--panel-inset); padding-inline: 0; }
+.panel-foot { padding-inline: var(--panel-inset); }
+.settings-layout { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--section-gap); }
+.settings-layout > * { min-width: 0; }
+.setting-row:has(input[type="file"]) { flex-wrap: wrap; gap: var(--control-gap); }
+.setting-row > input[type="file"] { width: 100%; max-width: 100%; }
+.settings-layout input[type="range"] { padding: 0; min-height: 32px; }
+:is(.protocol-details, .settings-layout details, .raw-details) > summary { display: flex; align-items: center; gap: 12px; min-height: 44px; list-style: none; }
+:is(.protocol-details, .settings-layout details, .raw-details) > summary::-webkit-details-marker { display: none; }
+:is(.protocol-details, .settings-layout details, .raw-details) > summary::after { content: ''; flex-shrink: 0; width: 16px; height: 16px; margin-left: auto; background: var(--select-arrow) center / 16px no-repeat; }
+:is(.protocol-details, .settings-layout details, .raw-details)[open] > summary::after { transform: rotate(180deg); }
+.settings-layout details[open] > summary { margin-bottom: 12px; }
+.beacon-signal, .protocol-evidence { display: grid; gap: 12px; min-width: 0; }
+.beacon-signal:empty, .protocol-evidence:empty { display: none; }
+@media (max-width: 1000px) { .settings-layout { grid-template-columns: minmax(0, 1fr); } }
+
+input[type="file"] { padding: 6px; font-size: 12px; }
+input[type="file"]::file-selector-button { min-height: 32px; padding: 6px 12px; margin-right: 12px; border: 0; border-radius: 6px; color: var(--accent); background: var(--accent-soft); font: inherit; cursor: pointer; }

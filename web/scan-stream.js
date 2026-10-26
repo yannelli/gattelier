@@ -18,7 +18,7 @@ const NanoScanStream = (() => {
       const current = controller = new AbortController();
       const timer = setTimeout(() => current.abort(), options.timeoutMs ?? 8000);
       try {
-        const response = await fetcher(`advertisements?after=${after}${bootId ? `&bootId=${encodeURIComponent(bootId)}` : ''}&format=raw`, { signal: current.signal });
+        const response = await fetcher(`advertisements?after=${after}${bootId ? `&bootId=${encodeURIComponent(bootId)}` : ''}&format=raw&compact=1&offload=1`, { signal: current.signal });
         if (token !== generation) return null;
         if (response.status === 404) { supported = false; failure = ''; return null; }
         if (!response.ok) throw new Error(`Advertisement stream request failed (${response.status}).`);

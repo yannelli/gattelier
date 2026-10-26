@@ -4,12 +4,12 @@ import { transform } from 'esbuild';
 
 const web = fileURLToPath(new URL('../web/', import.meta.url));
 const scripts = [
-  'vendors', 'packets', 'pklg', 'recorders', 'bthome-crypto', 'sensor-profiles', 'apple-continuity', 'nespresso-protocol', 'vesync-protocol', 'samsung-protocol', 'lg-webos-protocol', 'resmed-fig', 'device-apps', 'profiles', 'device-library', 'scan-store', 'scan-query',
+  'vendors', 'packets', 'pklg', 'btsnoop', 'recorders', 'bthome-crypto', 'sensor-profiles', 'apple-continuity', 'nespresso-protocol', 'vesync-protocol', 'samsung-protocol', 'lg-webos-protocol', 'resmed-fig', 'beacon-protocol', 'bose-protocol', 'device-apps', 'profiles', 'device-library', 'scan-store', 'scan-query',
   'metadata', 'gatt-values', 'analysis', 'console', 'traffic', 'api', 'advertisement', 'scan-stream', 'lab', 'connection', 'pocket-protocol', 'plaud-crypto',
   'plaud-protocol', 'credentials', 'credentials-ui', 'pocket', 'plaud', 'sleep-number-protocol', 'sleep-number', 'browser-cache',
   'sleep-mcr-protocol', 'sleep-mcr', 'sleep-router', 'radiacode-protocol', 'radiacode', 'dexcom-crypto', 'dexcom-protocol', 'dexcom-commands', 'dexcom-transport', 'dexcom-session',
   'dexcom-storage', 'dexcom-view', 'dexcom',
-  'browser-ui', 'insights', 'workspace', 'inspector', 'network-ui', 'usb-mode', 'collection', 'theme', 'device-support', 'protocol-app', 'sensor-history', 'sensor-session', 'sensor-app', 'modules',
+  'browser-ui', 'insights', 'workspace', 'inspector', 'network-ui', 'usb-mode', 'collection', 'theme', 'device-support', 'protocol-app', 'beacon-app', 'sensor-history', 'sensor-session', 'sensor-app', 'modules',
   'pairing-catalog', 'pairing-model', 'pairing', 'device-page',
   'recipe-model', 'recipe-library', 'recipe-browser', 'recipes', 'snapshot-model', 'snapshots', 'guide', 'pwa', 'access-ui', 'api-ui', 'metadata-ui', 'activity-led-ui', 'app',
 ];

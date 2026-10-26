@@ -151,3 +151,23 @@ test('imported PLAUD signatures are removed after characteristic discovery', () 
   assert.equal(result.events[0].hex, ''); assert.equal(result.events[0].redacted, true);
   assert.equal(result.counts.redacted, 1); assert.deepEqual(result.pocketKeys, []);
 });
+
+test('imported G7 TX authentication UUIDs redact every payload and preserve RX readings', () => {
+  for (const suffix of ['3535', '3538']) {
+    const characteristic = `f808${suffix}-849e-531c-c594-30f1f86a4ea5`, value = Buffer.from(characteristic.replaceAll('-', ''), 'hex').reverse();
+    const result = parse(join(packet(2, [8, 1, 0, 255, 255, 3, 0x28]),
+      packet(3, Buffer.concat([Buffer.from([9, 21, 0x10, 0, 8, 0x11, 0]), value])),
+      packet(2, [0x52, 0x11, 0, 0xaa, 0xbb, 0xcc]), packet(3, [0x1b, 0x11, 0, 0x22])));
+    assert.equal(result.events[0].uuid, characteristic); assert.equal(result.events[0].hex, ''); assert.equal(result.events[0].redacted, true);
+    assert.equal(result.events[0].message, 'Authentication payload redacted'); assert.equal(result.events[0].length, 3); assert.equal(result.counts.redacted, 1);
+    assert.equal(result.events[1].hex, '22'); assert.equal(result.events[1].redacted, undefined); assert.equal(JSON.stringify(result.events).includes('aabbcc'), false);
+  }
+});
+
+test('PacketLogger detection validates framing and retains absolute microseconds', () => {
+  const data = packet(3, [0x1b, 8, 0, 1], { seconds: 100, micros: 123456 });
+  assert.equal(parse(data).events[0].timestampMicros, '100123456'); assert.equal(parse(data).events[0].elapsedMicros, '0');
+  const { matches } = createRequire(import.meta.url)('../web/pklg.js');
+  assert.equal(matches(data), true); assert.equal(matches(packet(2, [0x52, 8, 0, 1], { little: true })), true);
+  for (const input of [Buffer.from('ordinary log text'), Buffer.from('btsnoop\0'), Buffer.alloc(0), new Uint8Array(13)]) assert.equal(matches(input), false);
+});

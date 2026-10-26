@@ -4,7 +4,7 @@
 
 constexpr size_t ScanJsonCapacity = 1536;
 
-inline bool rawAdvertisementJson(const ScanAdvertisement& record, char* output, size_t capacity) {
+inline bool rawAdvertisementJson(const ScanAdvertisement& record, char* output, size_t capacity, bool compact = false) {
   char name[(sizeof(record.name) - 1) * 6 + 1], payload[ScanPayloadCapacity * 2 + 1], power[8];
   size_t at = 0;
   const char* digits = "0123456789abcdef";
@@ -21,7 +21,11 @@ inline bool rawAdvertisementJson(const ScanAdvertisement& record, char* output, 
   payload[record.length() * 2] = 0;
   if (record.hasTxPower) snprintf(power, sizeof(power), "%d", int(record.txPower));
   else memcpy(power, "null", 5);
-  const int length = snprintf(output, capacity,
+  const int length = compact ? snprintf(output, capacity,
+    "[%llu,%lu,%lu,\"%.17s\",%u,%d,%u,%u,%s,%u,\"%s\",\"%s\"]",
+    static_cast<unsigned long long>(record.seq), static_cast<unsigned long>(record.id), static_cast<unsigned long>(record.ms),
+    record.address, unsigned(record.addressType), int(record.rssi), unsigned(record.advType),
+    unsigned(record.connectable) | (unsigned(record.truncated()) << 1), power, unsigned(record.payloadBytes), name, payload) : snprintf(output, capacity,
     "{\"seq\":%llu,\"id\":%lu,\"ms\":%lu,\"address\":\"%.17s\",\"name\":\"%s\",\"addressType\":%u,\"rssi\":%d,\"connectable\":%s,\"advType\":%u,\"txPower\":%s,\"payloadTruncated\":%s,\"payloadBytes\":%u,\"payloadHex\":\"%s\"}",
     static_cast<unsigned long long>(record.seq), static_cast<unsigned long>(record.id), static_cast<unsigned long>(record.ms),
     record.address, name, unsigned(record.addressType), int(record.rssi), record.connectable ? "true" : "false", unsigned(record.advType),

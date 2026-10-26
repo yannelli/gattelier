@@ -32,3 +32,14 @@ test('raw format is explicit and malformed batches do not partially decode', () 
   assert.throws(() => batch(raw), /Invalid raw/); assert.equal(raw.devices[0].services, undefined);
   assert.throws(() => batch({ format: 'raw-v1', devices: Array(4097) }), /Invalid raw/);
 });
+test('compact rows restore advertisement metadata and browser-decode their payload', () => {
+  const row = [7, 9, 1234, '02:00:00:00:00:01', 1, -61, 4, 3, null, 129, 'Saved name', '03030f1803ff7500'];
+  const value = batch({ format: 'raw-v2', browserOffload: true, devices: [row] });
+  assert.deepEqual(value.devices[0], { seq: 7, id: 9, ms: 1234, address: row[3], addressType: 1, rssi: -61, advType: 4,
+    connectable: true, payloadTruncated: true, txPower: null, payloadBytes: 129, name: 'Saved name', payloadHex: row[11], manufacturer: '7500', services: ['0x180f'], serviceData: [] });
+  assert.equal(value.browserOffload, true); assert.equal(row.length, 12);
+  assert.equal(batch({ format: 'raw-v2', devices: [[...row.slice(0, 7), 0, -10, ...row.slice(9)]] }).devices[0].txPower, -10);
+  for (const invalid of [row.slice(1), [...row, 1], { payloadHex: '' }, row.map((value, index) => index === 7 ? 4 : value), row.map((value, index) => index === 5 ? 'bad' : value), row.map((value, index) => index === 11 ? 'odd' : value)]) {
+    assert.throws(() => batch({ format: 'raw-v2', devices: [invalid] }), /Invalid/);
+  }
+});

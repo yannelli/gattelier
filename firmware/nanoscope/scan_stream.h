@@ -9,4 +9,4 @@ void clearScanCache();
 void eraseScanCache(size_t index);
 void addScanStreamState(cJSON* ble);
 cJSON* scanDeviceJson(const DeviceInfo& device);
-void sendAdvertisements(WebServer& server, uint64_t after, const String& bootId, bool raw = false);
+void sendAdvertisements(WebServer& server, uint64_t after, const String& bootId, bool raw = false, bool compact = false, bool offload = false);

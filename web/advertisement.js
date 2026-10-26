@@ -31,9 +31,15 @@ const NanoAdvertisement = (() => {
     return decoded;
   }
   function batch(value) {
-    if (value?.format !== 'raw-v1') return value;
+    if (!['raw-v1', 'raw-v2'].includes(value?.format)) return value;
     if (!Array.isArray(value.devices) || value.devices.length > 4096) throw new Error('Invalid raw advertisement batch.');
-    return { ...value, devices: value.devices.map(decode) };
+    return { ...value, devices: value.devices.map(record => {
+      if (value.format === 'raw-v1') return decode(record);
+      if (!Array.isArray(record) || record.length !== 12 || !Number.isInteger(record[7]) || record[7] < 0 || record[7] > 3) throw new Error('Invalid compact advertisement row.');
+      const [seq, id, ms, address, addressType, rssi, advType, flags, txPower, payloadBytes, name, payloadHex] = record;
+      if (![seq, id, ms, addressType, advType, payloadBytes].every(Number.isSafeInteger) || seq < 1 || id < 1 || id > 0xffffffff || ms < 0 || ms > 0xffffffff || addressType < 0 || addressType > 3 || advType < 0 || advType > 255 || payloadBytes < 0 || payloadBytes > 65535 || typeof address !== 'string' || !/^(?:[\da-f]{2}:){5}[\da-f]{2}$/i.test(address) || typeof name !== 'string' || name.length > 80 || !Number.isInteger(rssi) || rssi < -128 || rssi > 127 || txPower !== null && (!Number.isInteger(txPower) || txPower < -128 || txPower > 127)) throw new Error('Invalid compact advertisement row.');
+      return decode({ seq, id, ms, address, addressType, rssi, advType, connectable: Boolean(flags & 1), payloadTruncated: Boolean(flags & 2), txPower, payloadBytes, name, payloadHex });
+    }) };
   }
   return { decode, batch };
 })();

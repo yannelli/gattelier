@@ -37,7 +37,7 @@ function renderInspector() {
 }
 function buildDeviceDetail(device, fullPage = false) {
   if (!device) return empty('Discover something nearby.', 'Select a device to view its advertisement. Connect to inspect services and read values.', 'inspector-empty');
-  const live = state.devices.find(item => deviceKey(item) === deviceKey(device));
+  const live = device.streamLive === true || device.liveId != null || state.devices.some(item => deviceKey(item) === deviceKey(device));
   const connected = Boolean(state.ble.connected && state.ble.address === device.address);
   const detail = node('div', 'detail');
   const top = node('div', 'detail-top');

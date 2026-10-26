@@ -157,7 +157,7 @@ void startHttp() {
     for (size_t i = 0; i < cursor.length(); ++i) if (!isDigit(cursor[i])) { sendError(400, "Invalid advertisement cursor."); return; }
     const uint64_t after = strtoull(cursor.c_str(), nullptr, 10);
     if (after > 9007199254740991ULL) { sendError(400, "Invalid advertisement cursor."); return; }
-    sendAdvertisements(server, after, boot, server.arg("format") == "raw");
+    sendAdvertisements(server, after, boot, server.arg("format") == "raw", server.arg("compact") == "1", server.arg("offload") == "1");
   });
   server.on("/api/scan", HTTP_POST, [] { submit(Action::Scan); });
   server.on("/api/stop-scan", HTTP_POST, [] { submit(Action::StopScan); });

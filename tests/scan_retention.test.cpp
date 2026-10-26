@@ -17,6 +17,16 @@ struct RetainingEntry {
 };
 
 int main() {
+  ScanOffloadLease lease;
+  assert(!lease.active(0));
+  lease.renew(1000);
+  assert(lease.active(1000) && lease.active(1000 + ScanOffloadLeaseMs - 1));
+  assert(!lease.active(1000 + ScanOffloadLeaseMs));
+  assert(!lease.active(1001, true));
+  lease.renew(UINT32_MAX - 10);
+  assert(lease.active(20));
+  assert(!lease.active(ScanOffloadLeaseMs));
+
   ScanJournal<3> journal;
   ScanAdvertisement record, copied;
   assert(journal.next() == 0);
@@ -88,12 +98,20 @@ int main() {
   assert(strstr(json, "\"txPower\":null"));
   assert(strstr(json, "\"payloadHex\":\"00abff\""));
   assert(strstr(json, "\"payloadTruncated\":false"));
+  const size_t expandedLength = strlen(json);
+  assert(rawAdvertisementJson(record, json, sizeof(json), true));
+  assert(strstr(json, "[18446744073709551615,4294967295,4294967295,\"02:00:00:00:00:01\",0,-128,0,0,null,3,"));
+  assert(strstr(json, "\"a\\\"b\\\\c\\u000a\\u0009\\u0001\",\"00abff\"]"));
+  assert(strlen(json) + 140 < expandedLength);
   record.hasTxPower = true; record.txPower = INT8_MIN; record.payloadBytes = UINT16_MAX;
   memset(record.name, 1, sizeof(record.name) - 1);
   memset(record.payload, 0xff, sizeof(record.payload));
   assert(rawAdvertisementJson(record, json, sizeof(json)));
   assert(strstr(json, "\"txPower\":-128"));
   assert(strstr(json, "\"payloadTruncated\":true,\"payloadBytes\":65535"));
+  record.connectable = true;
+  assert(rawAdvertisementJson(record, json, sizeof(json), true));
+  assert(strstr(json, ",0,-128,0,3,-128,65535,"));
   assert(!rawAdvertisementJson(record, json, 64));
   assert(!rawAdvertisementJson(record, nullptr, 0));
 

@@ -9,7 +9,11 @@ const NanoDeviceApps = (() => {
   const samsung = load('samsung-protocol', typeof NanoSamsungProtocol === 'undefined' ? null : NanoSamsungProtocol);
   const lg = load('lg-webos-protocol', typeof NanoLGWebOSProtocol === 'undefined' ? null : NanoLGWebOSProtocol);
   const resmed = load('resmed-fig', typeof NanoResMedFIG === 'undefined' ? null : NanoResMedFIG);
+  const beacons = load('beacon-protocol', typeof NanoBeaconProtocol === 'undefined' ? null : NanoBeaconProtocol);
+  const bose = load('bose-protocol', typeof NanoBoseProtocol === 'undefined' ? null : NanoBoseProtocol);
   const entries = [
+    { id: 'tracker', title: 'Trackers & beacons', category: 'tracker', description: 'Signal history, Find My, Tile, iBeacon, and Eddystone broadcasts and configuration previews.', protocol: beacons },
+    { id: 'bose', title: 'Bose audio', category: 'vendor', description: 'Inspect saved BMAP traffic and prepare QC Ultra Gen1 reference commands. SoundLink Max support is unconfirmed.', protocol: bose },
     { id: 'sensor', title: 'Environmental sensors', category: 'sensor', description: 'BTHome and Ruuvi readings, charts, browser history, and encrypted sensor decoding.', protocol: sensors },
     { id: 'lg', title: 'LG webOS', category: 'appliance', description: 'LG device evidence, saved TV responses, and LAN request previews for apps, inputs, sound, and remote keys.', protocol: lg },
     { id: 'resmed', title: 'ResMed Air11', category: 'medical', description: 'Inspect FIG captures, validate frames, and prepare authenticated request templates.', protocol: resmed },
@@ -29,7 +33,7 @@ const NanoDeviceApps = (() => {
       try { fields.push(...app.protocol.decode(characteristic.uuid, characteristic.valueHex, { device, family: profile.family })); }
       catch (error) { limitations.push(`Saved ${characteristic.uuid} value: ${error.message}`); }
     }
-    return { ...profile, fields, limitations, address: device.address, addressType: device.addressType, name: device.name, manufacturer: device.manufacturer || '', payloadHex: device.payloadHex || '', lastSeenMs: device.lastSeenMs, rssi: device.rssi };
+    return { ...profile, fields, limitations, address: device.address, addressType: device.addressType, name: device.name, manufacturer: device.manufacturer || '', payloadHex: device.payloadHex || '', lastSeenMs: device.lastSeenMs, rssi: device.rssi, ...(id === 'tracker' ? { firstSeenMs: device.firstSeenMs, observations: device.observations, signalHistory: (device.history || []).map(sample => ({ at: sample.at, rssi: sample.rssi })) } : {}) };
   }
   function changes(before, after) {
     const previous = new Map((before?.fields || []).map(field => [field.label, String(field.value)]));

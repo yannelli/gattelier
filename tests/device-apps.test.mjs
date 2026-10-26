@@ -36,3 +36,12 @@ test('field changes distinguish additions, removals and changed values', () => {
     { label: 'Power', before: 'Off', after: 'On' }, { label: 'New', before: 'Not observed', after: '0' }, { label: 'Old', before: '1', after: 'Not present in latest observation' }
   ]);
 });
+
+test('beacon and Bose apps match without duplicate catalog entries', () => {
+  const beacon = { address: '02:00:00:00:00:08', addressType: 0, services: ['feaa'], history: [{ at: 1000, rssi: -70 }], observations: 3 };
+  assert.deepEqual(modules.matches(beacon), ['tracker']);
+  assert.equal(modules.catalog.filter(item => item.id === 'tracker').length, 1);
+  assert.deepEqual(apps.snapshot('tracker', beacon).signalHistory, beacon.history);
+  assert.equal(apps.snapshot('tracker', beacon).observations, 3);
+  assert.deepEqual(modules.matches({ name: 'Bose SoundLink Max', services: ['febe'], manufacturer: '9e00' }), ['bose']);
+});
