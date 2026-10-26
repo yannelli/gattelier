@@ -16,7 +16,6 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm test
-      - run: npm run build:cloud
       - run: python3 tests/pwa_bridge_test.py
       - run: npx wrangler deploy --dry-run
   deploy:

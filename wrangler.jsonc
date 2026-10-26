@@ -3,6 +3,10 @@
   "name": "gattelier",
   "compatibility_date": "2026-10-25",
   "workers_dev": true,
+  "build": {
+    "command": "npm run build:cloud",
+    "watch_dir": ["scripts"]
+  },
   "assets": {
     "directory": "./dist",
     "not_found_handling": "404-page"

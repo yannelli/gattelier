@@ -3,6 +3,8 @@
 > [!WARNING]
 > **Work in progress.** Interfaces and stored data formats can change, and hardware support varies by device.
 
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/yannelli/gattelier)
+
 Gattelier is a Bluetooth Low Energy workbench for the M5Stack NanoC6. The board scans nearby BLE devices and serves a browser interface for inspection, GATT operations, capture, and repeatable device workflows.
 
 The board address is `http://nanoscope.local`. Existing NanoScope storage keys and backup formats still work.
@@ -67,7 +69,13 @@ npm run build:cloud
 
 The hosted app runs on Cloudflare Workers. On iPhone, open its HTTPS URL in Safari and choose Share > Add to Home Screen. The app caches its files for offline launch; live tools wait for the board connection. Settings includes a manual cache refresh.
 
-The GitHub workflow tests each update and deploys successful pushes to `main`. Deployment needs two repository settings:
+Use the **Deploy to Cloudflare** button above. Cloudflare copies the repository into your GitHub account and opens its Worker setup page. It reads the build configuration, publishes the app at a `workers.dev` URL, and connects the new repository to Workers Builds for automatic deployment on pushes. You choose the account and Worker name during setup.
+
+The app needs no Cloudflare bindings or application secrets. Recorder credentials and board addresses are configured in your own browser after deployment. Cloudflare documents the setup flow in its [deploy button guide](https://developers.cloudflare.com/workers/platform/deploy-buttons/).
+
+### Deploy the existing repository with GitHub Actions
+
+For deployment directly from this repository, the GitHub workflow tests each update and deploys successful pushes to `main`. Add these two repository settings:
 
 | Setting | GitHub location |
 | --- | --- |
