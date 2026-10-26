@@ -1,0 +1,13 @@
+.sensor-key-form { display: grid; gap: 14px; padding: 16px; border: 1px solid var(--line); border-radius: var(--radius-small); background: var(--surface-secondary); }
+.sensor-key-form input { min-height: 44px; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius-small); background: var(--surface); color: var(--text); }
+.sensor-chart-controls { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
+.sensor-chart { padding: 12px; border: 1px solid var(--line); border-radius: var(--radius-small); min-height: 130px; }
+.sensor-chart svg { display: block; width: 100%; height: auto; max-height: 260px; }
+.sensor-chart path { fill: none; stroke: var(--accent); stroke-width: 2; }
+.sensor-chart circle { fill: var(--accent); }
+.sensor-chart-axis { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; color: var(--muted); font-size: 11px; }
+.sensor-statistics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin: 0; }
+.sensor-statistics:empty { display: none; }
+.sensor-statistics dt { font-size: 12px; color: var(--muted); }
+.sensor-statistics dd { margin: 6px 0 0; font-size: 15px; overflow-wrap: anywhere; }
+@media (max-width: 600px) { .sensor-statistics { grid-template-columns: repeat(2, minmax(0, 1fr)); } .sensor-chart-controls { grid-template-columns: 1fr; } }

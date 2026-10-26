@@ -17,18 +17,19 @@ const NanoProtocolApp = (() => {
     container.classList.add('protocol-panel');
     const heading = el('div', 'panel-heading'), title = el('h2', '', app.title), mode = el('span', 'badge', 'Broadcast updates'); heading.append(title, mode);
     const body = el('div', 'protocol-body'), context = el('p', 'vendor-note'), readings = el('div'), evidence = el('div');
+    const packetDetails = el('details', 'protocol-details'), packetFields = el('div'); packetDetails.append(el('summary', '', 'Packet details'), packetFields); packetDetails.hidden = true;
     const actions = el('div', 'protocol-actions'), exportSnapshot = el('button', 'button secondary', 'Export snapshot'), inspect = el('button', 'button secondary', 'Show advertisement');
     const raw = el('pre', 'protocol-preview'); raw.hidden = true;
     exportSnapshot.type = inspect.type = 'button'; actions.append(exportSnapshot, inspect);
     const history = el('details', 'protocol-details'), historyLabel = el('summary', '', 'Changes while this app is open'), historyList = el('ol', 'protocol-history'); history.append(historyLabel, historyList);
     const importer = el('details', 'protocol-details'), importLabel = el('summary', '', 'Inspect a saved value'), importBody = el('div', 'protocol-import'); importer.append(importLabel, importBody);
     const format = el('select'), formatLabel = el('label', '', 'Data format'); formatLabel.append(format);
-    for (const [value, text] of [['manufacturer', 'Manufacturer HEX'], ...(protocol.decode ? [['gatt', 'Characteristic HEX']] : []), ...(protocol.decodeStatus ? [['status', 'VeSync status JSON']] : [])]) { const option = el('option', '', text); option.value = value; format.append(option); }
+    for (const [value, text] of [['manufacturer', 'Manufacturer HEX'], ...(protocol.decode ? [['gatt', 'Characteristic HEX']] : []), ...(protocol.decodeService ? [['service', 'Service-data HEX']] : []), ...(protocol.decodeStatus ? [['status', 'VeSync status JSON']] : [])]) { const option = el('option', '', text); option.value = value; format.append(option); }
     const uuidLabel = el('label', '', 'Characteristic UUID'), uuid = el('input'); uuid.type = 'text'; uuid.placeholder = protocol.characteristics?.status || '00002a19-0000-1000-8000-00805f9b34fb'; uuidLabel.append(uuid); uuidLabel.hidden = true;
     const valueLabel = el('label', '', 'Captured value'), value = el('textarea'); value.rows = 4; value.maxLength = 65536; value.spellcheck = false; valueLabel.append(value);
     const decode = el('button', 'button secondary', 'Decode locally'), imported = el('div', 'protocol-imported'); decode.type = 'button'; imported.setAttribute('aria-live', 'polite');
     importBody.append(el('p', 'vendor-note', 'Paste captured data to decode it in this browser. Imported values stay separate from live observations.'), formatLabel, uuidLabel, valueLabel, decode, imported);
-    format.addEventListener('change', () => { uuidLabel.hidden = format.value !== 'gatt'; imported.replaceChildren(); });
+    format.addEventListener('change', () => { uuidLabel.hidden = !['gatt', 'service'].includes(format.value); uuidLabel.textContent = format.value === 'service' ? 'Service UUID' : 'Characteristic UUID'; uuidLabel.append(uuid); uuid.placeholder = format.value === 'service' ? protocol.service : protocol.characteristics?.status || '00002a19-0000-1000-8000-00805f9b34fb'; imported.replaceChildren(); });
     const composer = el('details', 'protocol-details'), composerLabel = el('summary', '', 'Prepare a command'), form = el('form', 'protocol-composer'); composer.append(composerLabel, form);
     const commandLabel = el('label', '', 'Operation'), command = el('select'); commandLabel.append(command);
     const inputs = el('div', 'protocol-inputs'), description = el('p', 'vendor-note'), preview = el('pre', 'protocol-preview protocol-command-preview'), message = el('p', 'protocol-message'); message.setAttribute('role', 'status');
@@ -74,6 +75,7 @@ const NanoProtocolApp = (() => {
         let result;
         if (format.value === 'manufacturer') { const profile = protocol.identify({ ...(hooks.selected() || {}), manufacturer: value.value.replace(/\s/g, ''), payloadTruncated: false }); result = profile?.fields; }
         else if (format.value === 'gatt') result = protocol.decode(uuid.value.trim() || uuid.placeholder, value.value.trim(), { device: hooks.selected() });
+        else if (format.value === 'service') result = protocol.decodeService(uuid.value.trim() || uuid.placeholder, value.value.trim());
         else result = protocol.decodeStatus(JSON.parse(value.value));
         if (!result?.length) throw new Error('No supported fields were found. Check the data format and selected device.');
         imported.append(el('h3', '', 'Imported value'), fields(result));
@@ -81,7 +83,7 @@ const NanoProtocolApp = (() => {
     });
     const sourceDetails = el('details', 'protocol-details'), sourceLabel = el('summary', '', 'Protocol support & sources'), sources = el('div', 'protocol-sources'); sourceDetails.append(sourceLabel, sources);
     for (const source of protocol.sources) { const link = el('a', '', source.title); link.href = source.url; link.target = '_blank'; link.rel = 'noopener noreferrer'; sources.append(link); }
-    body.append(context, readings, actions, raw, history, importer, composer, evidence, sourceDetails); container.append(heading, body);
+    body.append(context, readings, actions, raw, packetDetails, history, importer, composer, evidence, sourceDetails); container.append(heading, body);
     function clearTransient() { resetPreview(); for (const input of controls.values()) if (input.type === 'password') input.value = ''; value.value = ''; imported.replaceChildren(); }
     document.addEventListener('nanoscope:workspace', () => { if (NanoWorkspace.view() !== 'apps' || NanoWorkspace.module() !== id) clearTransient(); });
     function render(device, state) {
@@ -90,7 +92,7 @@ const NanoProtocolApp = (() => {
       currentSnapshot = device && NanoDeviceApps.snapshot(id, device, state);
       exportSnapshot.disabled = !currentSnapshot; inspect.disabled = !currentSnapshot; prepare.disabled = !currentSnapshot;
       raw.textContent = currentSnapshot ? JSON.stringify({ address: device.address, addressType: device.addressType, manufacturer: device.manufacturer, services: device.services, serviceData: device.serviceData, payloadHex: device.payloadHex }, null, 2) : '';
-      if (!currentSnapshot) { context.textContent = 'Choose a matching device from Apps or Discover.'; readings.replaceChildren(); evidence.replaceChildren(); historyList.replaceChildren(); return; }
+      if (!currentSnapshot) { context.textContent = 'Choose a matching device from Apps or Discover.'; readings.replaceChildren(); packetFields.replaceChildren(); packetDetails.hidden = true; evidence.replaceChildren(); historyList.replaceChildren(); return; }
       context.textContent = `${currentSnapshot.title} · ${Number.isFinite(device.rssi) ? `${device.rssi} dBm · ` : ''}${device.lastSeenMs ? NanoInsights.age(device.lastSeenMs) : 'Saved observation'}`;
       mode.textContent = device.streamLive || device.liveId != null ? 'Broadcast updates' : 'Saved observation';
       const signature = JSON.stringify([currentSnapshot.fields, currentSnapshot.limitations]);
@@ -98,7 +100,9 @@ const NanoProtocolApp = (() => {
       const delta = NanoDeviceApps.changes(before, currentSnapshot);
       if (before && delta.length) samples.unshift({ at: new Date(device.lastSeenMs || Date.now()).toISOString(), fields: delta });
       samples = samples.slice(0, 80); before = currentSnapshot;
-      readings.replaceChildren(fields(currentSnapshot.fields, app.primary)); evidence.replaceChildren();
+      const prominent = id === 'samsung' ? currentSnapshot.fields.filter(field => app.primary.includes(field.label)) : [];
+      const secondary = prominent.length ? currentSnapshot.fields.filter(field => !app.primary.includes(field.label)) : [];
+      readings.replaceChildren(fields(prominent.length ? prominent : currentSnapshot.fields, app.primary)); packetDetails.hidden = !secondary.length; packetFields.replaceChildren(...(secondary.length ? [fields(secondary)] : [])); evidence.replaceChildren();
       for (const text of [...currentSnapshot.evidence, ...currentSnapshot.limitations]) evidence.append(el('p', 'vendor-note', text));
       historyList.replaceChildren(); historyLabel.textContent = `Changes while this app is open${samples.length ? ` (${samples.length})` : ''}`;
       if (!samples.length) historyList.append(el('li', 'vendor-note', 'Waiting for a decoded field to change. Up to 80 changes are kept for this selected device.'));

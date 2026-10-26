@@ -92,6 +92,8 @@ const NanoProfiles = (() => {
     if (recorder) { Object.assign(result, { category: 'recorder', title: recorder.product, confidence: 'Protocol match', evidence: [recorder.summary], fields: [], sources: [], limitations: ['Open the matching app for authenticated file access.'] }); }
     const sensors = typeof NanoSensorProfiles !== 'undefined' ? NanoSensorProfiles : typeof module !== 'undefined' ? require('./sensor-profiles.js') : null;
     const sensor = sensors?.identify(device); if (sensor && result.category === 'other') return sensor;
+    const samsungProtocol = typeof NanoSamsungProtocol !== 'undefined' ? NanoSamsungProtocol : typeof module !== 'undefined' ? require('./samsung-protocol.js') : null;
+    const samsungProfile = samsungProtocol?.identify(device); if (samsungProfile && result.category === 'other') return samsungProfile;
     if (result.category === 'other') {
       const library = typeof NanoDeviceLibrary !== 'undefined' ? NanoDeviceLibrary : typeof module !== 'undefined' ? require('./device-library.js') : null;
       const samsung = library?.match(device).find(entry => entry.id === 'samsung-device');

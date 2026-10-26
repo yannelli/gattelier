@@ -1,0 +1,83 @@
+'use strict';
+
+const NanoSensorApp = (() => {
+  let controller;
+  const el = (tag, cls, text) => { const node = document.createElement(tag); if (cls) node.className = cls; if (text !== undefined) node.textContent = text; return node; };
+  const button = (text, action) => { const node = el('button', 'button secondary', text); node.type = 'button'; node.addEventListener('click', action); return node; };
+  const number = value => Number(value.toFixed(3)).toLocaleString();
+  const measurementOrder = ['Temperature', 'Humidity', 'CO2', 'Pressure', 'Illuminance', 'Battery'];
+  const rank = label => measurementOrder.includes(label) ? measurementOrder.indexOf(label) : measurementOrder.length;
+  function download(device, history, csv) {
+    const blob = new Blob([csv ? history.csv(device) : JSON.stringify(history.exportDevice(device), null, 2)], { type: csv ? 'text/csv' : 'application/json' });
+    const url = URL.createObjectURL(blob), link = el('a'); link.href = url; link.download = `gattelier-sensor-${device.address.replaceAll(':', '')}.${csv ? 'csv' : 'json'}`; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+  function chart(points, label) {
+    const section = el('div', 'sensor-chart');
+    if (!points.length) { section.append(el('p', 'vendor-note', 'Waiting for readings in this time range.')); return section; }
+    const low = Math.min(...points.map(point => point.value)), high = Math.max(...points.map(point => point.value));
+    const span = Math.max(high - low, 1), start = points[0].at, duration = Math.max(points.at(-1).at - start, 1000);
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); svg.setAttribute('viewBox', '0 0 640 200'); svg.setAttribute('role', 'img'); svg.setAttribute('aria-label', `${label}: ${number(low)} to ${number(high)} ${points[0].unit}, ${points.length} observations`);
+    const path = document.createElementNS(svg.namespaceURI, 'path');
+    path.setAttribute('d', points.map((point, index) => `${!index || point.at - points[index - 1].at > 60000 ? 'M' : 'L'}${20 + (point.at - start) / duration * 600},${170 - (point.value - low + (high === low ? .5 : 0)) / span * 140}`).join(' '));
+    svg.append(path);
+    for (const point of points) { const circle = document.createElementNS(svg.namespaceURI, 'circle'); circle.setAttribute('cx', 20 + (point.at - start) / duration * 600); circle.setAttribute('cy', 170 - (point.value - low + (high === low ? .5 : 0)) / span * 140); circle.setAttribute('r', points.length > 100 ? 1 : 2.5); svg.append(circle); }
+    const axis = el('div', 'sensor-chart-axis'); axis.append(el('span', '', new Date(start).toLocaleTimeString()), el('span', '', `${number(low)}–${number(high)} ${points[0].unit}`), el('span', '', new Date(points.at(-1).at).toLocaleTimeString())); section.append(svg, axis); return section;
+  }
+  function mount(container, hooks) {
+    container.classList.add('protocol-panel');
+    const heading = el('div', 'panel-heading'), badge = el('span', 'badge', 'Broadcast readings'); heading.append(el('h2', '', 'Environmental sensors'), badge);
+    const body = el('div', 'protocol-body'), context = el('p', 'vendor-note'), readings = el('dl', 'protocol-values'), status = el('p', 'protocol-message'); status.setAttribute('role', 'status');
+    const keyForm = el('form', 'sensor-key-form'), keyLabel = el('label', '', 'BTHome encryption key'), keyInput = el('input'); keyInput.type = 'password'; keyInput.autocomplete = 'off'; keyInput.spellcheck = false; keyInput.maxLength = 32; keyLabel.append(keyInput);
+    const unlock = el('button', 'button secondary', 'Decode with key'); unlock.type = 'submit';
+    const forget = button('Forget key', () => { keyInput.value = ''; session.lock(); });
+    const keyActions = el('div', 'protocol-actions'); keyActions.append(unlock, forget);
+    keyForm.append(keyLabel, keyActions, el('p', 'vendor-note', 'The key stays in memory and clears when you leave this app. Decrypted history stays in memory unless you export it.'));
+    const toolbar = el('div', 'sensor-chart-controls'), metricLabel = el('label', '', 'Measurement'), metric = el('select'), rangeLabel = el('label', '', 'Time range'), range = el('select'); metricLabel.append(metric); rangeLabel.append(range);
+    for (const [value, text] of [['900000', 'Last 15 minutes'], ['3600000', 'Last hour'], ['0', 'All saved readings']]) { const option = el('option', '', text); option.value = value; range.append(option); }
+    toolbar.append(metricLabel, rangeLabel); const plot = el('div'), statistics = el('dl', 'sensor-statistics');
+    const actions = el('div', 'protocol-actions'), pause = button('Pause history', () => session.toggle());
+    const json = button('Export JSON', () => { const device = session.status().device; if (device) download(device, history, false); });
+    const csv = button('Export CSV', () => { const device = session.status().device; if (device) download(device, history, true); }); actions.append(pause, json, csv);
+    const storage = el('p', 'vendor-note'), clearDetails = el('details', 'protocol-details'); clearDetails.append(el('summary', '', 'Clear this sensor’s history'));
+    clearDetails.append(el('p', 'vendor-note', 'Removes saved and session readings for this address. Export a copy first if you need them.'), button('Clear readings', async () => { const device = session.status().device; if (device) await history.clear(device); paint(); }));
+    const meta = el('details', 'protocol-details'), metaBody = el('div'); meta.append(el('summary', '', 'Advertisement details & sources'), metaBody);
+    body.append(context, status, keyForm, readings, toolbar, plot, statistics, actions, storage, clearDetails, meta); container.append(heading, body);
+    const history = NanoSensorHistory.create(), session = NanoSensorSession.create(history, { change: paint }); controller = session;
+    let lastFields = '', lastChart = '', optionsKey = '';
+    function paint() {
+      const state = session.status(), device = state.device, profile = state.profile;
+      context.textContent = device ? `${device.label || device.name || device.address} · ${device.rssi} dBm · ${NanoInsights.age(device.lastSeenMs)}` : 'Choose a BTHome or Ruuvi sensor from Apps or Discover.';
+      badge.textContent = state.pending ? 'Checking authentication' : profile?.authenticated ? 'Authenticated payload' : device?.streamLive || device?.liveId != null ? 'Broadcast readings' : 'Saved observation';
+      status.textContent = state.message || (state.encrypted && !state.hasKey ? 'This sensor encrypts its readings. Enter its key to decode them locally.' : '');
+      keyForm.hidden = !state.encrypted; forget.disabled = !state.hasKey; unlock.disabled = state.pending;
+      pause.disabled = !profile; pause.textContent = state.recording ? 'Pause history' : 'Resume history';
+      const samples = device ? history.samples(device) : [], numeric = (profile?.fields.filter(field => Number.isFinite(field.numericValue)) || []).sort((a, b) => rank(a.label) - rank(b.label));
+      const labels = [...new Set([...numeric.map(field => field.label), ...samples.flatMap(sample => sample.fields.map(field => field.label))])].sort((a, b) => rank(a) - rank(b));
+      const currentOptions = JSON.stringify(labels);
+      if (currentOptions !== optionsKey) { const selected = metric.value; optionsKey = currentOptions; metric.replaceChildren(); for (const label of labels) { const option = el('option', '', label); option.value = label; metric.append(option); } if (labels.includes(selected)) metric.value = selected; }
+      metric.disabled = !labels.length; json.disabled = csv.disabled = !samples.length;
+      const fieldsKey = JSON.stringify(profile?.fields);
+      if (fieldsKey !== lastFields) {
+        lastFields = fieldsKey; readings.replaceChildren(); metaBody.replaceChildren();
+        for (const field of numeric) { const item = el('div'); item.append(el('dt', '', field.label), el('dd', '', String(field.value))); readings.append(item); }
+        if (profile) { metaBody.append(NanoInsights.profileCard(profile)); for (const text of profile.limitations || []) metaBody.append(el('p', 'vendor-note', text)); }
+      }
+      readings.hidden = !numeric.length;
+      const points = device ? history.series(device, metric.value, Number(range.value) ? Date.now() - Number(range.value) : 0) : [];
+      const chartKey = JSON.stringify([metric.value, points]);
+      if (chartKey !== lastChart) {
+        lastChart = chartKey; plot.replaceChildren(chart(points, metric.value)); statistics.replaceChildren(); const summary = history.summary(points);
+        if (summary) for (const [label, value] of [['Latest', summary.latest], ['Minimum', summary.minimum], ['Maximum', summary.maximum], ['Average', summary.average]]) { const item = el('div'); item.append(el('dt', '', label), el('dd', '', `${number(value)} ${summary.unit}`)); statistics.append(item); }
+      }
+      const stored = history.status();
+      storage.textContent = `${samples.length} of ${stored.limit} readings for this sensor. ${state.encrypted && !state.hasKey ? 'Enter the key in this app to collect encrypted readings.' : state.recording ? 'Collecting while this tab is open, including other views.' : 'History paused.'} ${stored.available ? 'Unencrypted readings are saved in this browser.' : `History is in memory. ${stored.error}`} Up to 32 sensors are retained. Repeated unchanged readings are sampled every 5 seconds.`;
+    }
+    metric.addEventListener('change', paint); range.addEventListener('change', paint);
+    keyForm.addEventListener('submit', async event => { event.preventDefault(); const value = keyInput.value.trim(); keyInput.value = ''; try { await session.unlock(value); } catch (error) { status.textContent = error.message; } });
+    document.addEventListener('nanoscope:workspace', () => { if (NanoWorkspace.view() !== 'apps' || NanoWorkspace.module() !== 'sensor') { keyInput.value = ''; session.lock(); } });
+    history.init().then(paint); paint();
+    return { render(device) { session.select(device); paint(); } };
+  }
+  function update(devices) { const selected = controller?.status().device; if (selected) controller.observe(devices.find(device => device.address === selected.address && device.addressType === selected.addressType)); }
+  return { mount, update };
+})();

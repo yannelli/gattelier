@@ -14,10 +14,8 @@ const NanoModules = (() => {
     { id: 'locks', title: 'Locks', description: 'Inspect lock services, identity, and security requirements.', category: 'lock' },
     { id: 'resmed', title: 'ResMed CPAP', description: 'Inspect Air11 transport and exposed device metadata.', category: 'medical' },
     { id: 'ge', title: 'GE appliances', description: 'Inspect BLE metadata and GEA transport requirements.', category: 'appliance' },
-    { id: 'samsung', title: 'Samsung devices', description: 'Recognize Samsung broadcasts and inspect available device metadata.', category: 'appliance' },
     { id: 'tracker', title: 'Trackers & beacons', description: 'Inspect Find My, Tile, iBeacon and Eddystone broadcasts.', category: 'tracker' },
     { id: 'medical', title: 'Dexcom G7', description: 'Authenticate G7 sensors and request readings, history, and identity.', category: 'medical' },
-    { id: 'sensor', title: 'Environmental sensors', description: 'Decode BTHome and Ruuvi broadcast measurements.', category: 'sensor' },
     ...deviceApps.entries.map(({ id, title, description, category }) => ({ id, title, description, category }))
   ];
   function matches(device) {
@@ -44,13 +42,19 @@ const NanoModules = (() => {
   }
   function mount(options) {
     hooks = options;
-    for (const id of ['tracker', 'medical', 'sensor', 'thermometer', 'locks', 'resmed', 'ge', 'samsung', ...deviceApps.entries.map(app => app.id)]) {
+    for (const id of ['tracker', 'medical', 'thermometer', 'locks', 'resmed', 'ge', ...deviceApps.entries.map(app => app.id)]) {
       const panel = document.createElement('section'); panel.id = `${id}-panel`; panel.className = 'panel metadata-module'; panel.hidden = true;
       panel.setAttribute('aria-label', catalog.find(item => item.id === id).title);
       document.getElementById('module-content').append(panel);
       if (id === 'medical') NanoDexcom.mount(panel, NanoLab, { getDevice: hooks.selected });
-      if (Object.hasOwn(NanoDeviceSupport.families, id)) NanoDeviceSupport.mount(panel, id, NanoLab);
-      if (deviceApps.get(id)) readers.set(id, NanoProtocolApp.mount(panel, id, { selected: () => appDevice(id) }));
+      if (Object.hasOwn(NanoDeviceSupport.families, id) && !deviceApps.get(id)) NanoDeviceSupport.mount(panel, id, NanoLab);
+      if (deviceApps.get(id)) readers.set(id, id === 'sensor' ? NanoSensorApp.mount(panel, { selected: () => appDevice(id) }) : NanoProtocolApp.mount(panel, id, { selected: () => appDevice(id) }));
+      if (id === 'samsung' && NanoDeviceSupport.families.samsung) {
+        const details = document.createElement('details'), summary = document.createElement('summary'); details.className = 'protocol-details'; summary.textContent = 'GATT metadata tools'; details.append(summary);
+        panel.querySelector('.protocol-body').append(details);
+        const broadcast = readers.get(id), gatt = NanoDeviceSupport.mount(details, id, NanoLab, { selected: () => appDevice(id) });
+        readers.set(id, { render(device, state) { broadcast.render(device, state); gatt.render(); } });
+      }
     }
   }
   function render(device, devices) {
@@ -104,7 +108,7 @@ const NanoModules = (() => {
     if (!visible.length) { const empty = document.createElement('p'); empty.className = 'hint'; empty.textContent = 'No apps match these filters. Try another search or show all apps.'; fragment.append(empty); }
     replacePreservingFocus(root, fragment);
     }
-    for (const id of ['tracker', 'sensor']) {
+    for (const id of ['tracker']) {
       const panel = document.getElementById(`${id}-panel`); if (active !== id) continue;
       const heading = document.createElement('h2'); heading.textContent = catalog.find(item => item.id === id).title;
       const content = [heading];

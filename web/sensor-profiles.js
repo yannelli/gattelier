@@ -4,35 +4,71 @@ const NanoSensorProfiles = (() => {
   const sources = {
     bthome: { title: 'BTHome v2 format', url: 'https://bthome.io/format/' },
     encryption: { title: 'BTHome encryption', url: 'https://bthome.io/encryption/' },
+    parser: { title: 'BTHome reference object definitions', url: 'https://github.com/Bluetooth-Devices/bthome-ble/blob/18e1c664c8595ac5f7e2daa63e9a90516ccd3800/src/bthome_ble/const.py' },
     ruuvi: { title: 'Ruuvi RAWv2 format', url: 'https://docs.ruuvi.com/communication/bluetooth-advertisements/data-format-5-rawv2' },
   };
   const uuid = value => String(value || '').toLowerCase().replace(/^0x/, '').replace(/^0000([0-9a-f]{4})-0000-1000-8000-00805f9b34fb$/, '$1');
   const bytes = value => typeof value === 'string' && /^(?:[0-9a-f]{2})*$/i.test(value) ? Uint8Array.from(value.match(/../g) || [], pair => parseInt(pair, 16)) : null;
   const formatted = (value, unit = '') => unit ? `${Number(value.toFixed(6))} ${unit}` : Number(value.toFixed(6));
-  const field = (profile, label, value) => profile.fields.push({ label, value });
-  const profile = (title, evidence, source) => ({ category: 'sensor', title, confidence: 'Format match', evidence: [evidence], fields: [], limitations: [], sources: [{ ...sources[source] }] });
+  const field = (profile, label, value, numericValue, unit = '') => profile.fields.push({ label, value, ...(Number.isFinite(numericValue) ? { numericValue: Number(numericValue.toFixed(6)), unit } : {}) });
+  const measurement = (profile, label, value, unit = '') => field(profile, label, formatted(value, unit), value, unit);
+  const profile = (title, evidence, source) => ({ category: 'sensor', protocol: source, title, confidence: 'Format match', evidence: [evidence], fields: [], limitations: [], sources: [{ ...sources[source] }] });
   const objects = {
     0x00: ['Packet ID', 1, false, 1, ''], 0x01: ['Battery', 1, false, 1, '%'],
     0x02: ['Temperature', 2, true, 0.01, '°C'], 0x03: ['Humidity', 2, false, 0.01, '%'],
     0x04: ['Pressure', 3, false, 0.01, 'hPa'], 0x05: ['Illuminance', 3, false, 0.01, 'lx'],
+    0x06: ['Mass', 2, false, 0.01, 'kg'], 0x07: ['Mass', 2, false, 0.01, 'lb'],
+    0x08: ['Dewpoint', 2, true, 0.01, '°C'],
     0x09: ['Count', 1, false, 1, ''], 0x0b: ['Power', 3, false, 0.01, 'W'],
     0x0a: ['Energy', 3, false, 0.001, 'kWh'], 0x12: ['CO2', 2, false, 1, 'ppm'],
     0x43: ['Current', 2, false, 0.001, 'A'], 0x4d: ['Energy', 4, false, 0.001, 'kWh'],
     0x0c: ['Voltage', 2, false, 0.001, 'V'], 0x2e: ['Humidity', 1, false, 1, '%'],
+    0x0d: ['PM2.5', 2, false, 1, 'µg/m³'], 0x0e: ['PM10', 2, false, 1, 'µg/m³'],
+    0x13: ['TVOC', 2, false, 1, 'µg/m³'], 0x14: ['Moisture', 2, false, 0.01, '%'],
+    0x2f: ['Moisture', 1, false, 1, '%'],
     0x3d: ['Count', 2, false, 1, ''], 0x3e: ['Count', 4, false, 1, ''],
     0x45: ['Temperature', 2, true, 0.1, '°C'], 0x4a: ['Voltage', 2, false, 0.1, 'V'],
+    0x3f: ['Rotation', 2, true, 0.1, '°'], 0x40: ['Distance', 2, false, 1, 'mm'],
+    0x41: ['Distance', 2, false, 0.1, 'm'], 0x42: ['Duration', 3, false, 0.001, 's'],
+    0x44: ['Speed', 2, false, 0.01, 'm/s'], 0x46: ['UV index', 1, false, 0.1, ''],
+    0x47: ['Volume', 2, false, 0.1, 'L'], 0x48: ['Volume', 2, false, 1, 'mL'],
+    0x49: ['Volume flow rate', 2, false, 0.001, 'm³/hr'],
+    0x4b: ['Gas', 3, false, 0.001, 'm³'], 0x4c: ['Gas', 4, false, 0.001, 'm³'],
+    0x4e: ['Volume', 4, false, 0.001, 'L'], 0x4f: ['Water', 4, false, 0.001, 'L'],
+    0x50: ['Timestamp', 4, false, 1, ''], 0x51: ['Acceleration', 2, false, 0.001, 'm/s²'],
+    0x52: ['Gyroscope', 2, false, 0.001, '°/s'],
+    0x55: ['Volume storage', 4, false, 0.001, 'L'], 0x56: ['Conductivity', 2, false, 1, 'µS/cm'],
     0x57: ['Temperature', 1, true, 1, '°C'], 0x58: ['Temperature', 1, true, 0.35, '°C'],
     0x59: ['Count', 1, true, 1, ''], 0x5a: ['Count', 2, true, 1, ''],
     0x5b: ['Count', 4, true, 1, ''], 0x5c: ['Power', 4, true, 0.01, 'W'],
+    0x5d: ['Current', 2, true, 0.001, 'A'], 0x5e: ['Direction', 2, false, 0.01, '°'],
+    0x5f: ['Precipitation', 2, false, 0.1, 'mm'], 0x60: ['Channel', 1, false, 1, ''],
+    0x61: ['Rotational speed', 2, false, 1, 'rpm'], 0x62: ['Speed', 4, true, 0.000001, 'm/s'],
+    0x63: ['Acceleration', 4, true, 0.000001, 'm/s²'], 0x64: ['Light level', 1, false, 1, ''],
+    0x65: ['Settings revision', 1, false, 1, ''],
+    0xf0: ['Device type ID', 2, false, 1, ''], 0xf1: ['Firmware version', 4, false, 1, ''],
+    0xf2: ['Firmware version', 3, false, 1, ''],
   };
   const binary = {
     0x0f: ['Boolean', 'Off', 'On'], 0x10: ['Power state', 'Off', 'On'],
     0x11: ['Opening', 'Closed', 'Open'], 0x15: ['Battery state', 'Normal', 'Low'],
     0x16: ['Charging', 'Not charging', 'Charging'], 0x1a: ['Door', 'Closed', 'Open'],
+    0x17: ['Carbon monoxide', 'Clear', 'Detected'], 0x18: ['Cold', 'Normal', 'Cold'],
+    0x19: ['Connectivity', 'Disconnected', 'Connected'],
     0x1b: ['Garage door', 'Closed', 'Open'], 0x21: ['Motion', 'Clear', 'Detected'],
+    0x1c: ['Gas detected', 'Clear', 'Detected'], 0x1d: ['Heat', 'Normal', 'Hot'],
+    0x1e: ['Light', 'No light', 'Light detected'], 0x1f: ['Lock', 'Locked', 'Unlocked'],
+    0x20: ['Moisture state', 'Dry', 'Wet'],
     0x22: ['Moving', 'Not moving', 'Moving'], 0x23: ['Occupancy', 'Clear', 'Detected'],
     0x2d: ['Window', 'Closed', 'Open'],
+    0x24: ['Plug', 'Unplugged', 'Plugged in'], 0x25: ['Presence', 'Away', 'Home'],
+    0x26: ['Problem', 'OK', 'Problem'], 0x27: ['Running', 'Not running', 'Running'],
+    0x28: ['Safety', 'Unsafe', 'Safe'], 0x29: ['Smoke', 'Clear', 'Detected'],
+    0x2a: ['Sound', 'Clear', 'Detected'], 0x2b: ['Tamper', 'Off', 'On'],
+    0x2c: ['Vibration', 'Clear', 'Detected'],
   };
+  const metadataIDs = new Set([0x00, 0x50, 0x60, 0x64, 0x65, 0xf0, 0xf1, 0xf2]);
+  const buttonEvents = { 0: 'None', 1: 'Press', 2: 'Double press', 3: 'Triple press', 4: 'Long press', 5: 'Long double press', 6: 'Long triple press', 128: 'Hold press' };
   function littleEndian(data, offset, size, signed = false) {
     let value = 0;
     for (let i = 0; i < size; i++) value += data[offset + i] * 256 ** i;
@@ -40,6 +76,7 @@ const NanoSensorProfiles = (() => {
   }
   function bthome(hex) {
     const result = profile('BTHome service', 'Service UUID 0xFCD2 is advertised.', 'bthome');
+    result.sources.push({ ...sources.parser });
     const data = bytes(hex);
     if (!data?.length) {
       result.confidence = hex === undefined ? 'Service match' : 'Malformed frame';
@@ -68,15 +105,35 @@ const NanoSensorProfiles = (() => {
       const id = data[offset++], label = `0x${id.toString(16).padStart(2, '0')}`;
       if (id < previous) { stop(`Object ${label} is out of ascending ID order; decoding stopped.`); return result; }
       previous = id;
-      const object = objects[id], bit = binary[id];
-      if (!object && !bit) { result.confidence = decoded ? 'Partial decode' : 'Format match'; result.limitations.push(`Unsupported object ${label}; remaining bytes were not interpreted.`); return result; }
-      const size = bit ? 1 : object[1];
+      const object = objects[id], bit = binary[id], variable = id === 0x53 || id === 0x54 || id === 0x3b;
+      const event = id === 0x3a || id === 0x3b || id === 0x3c;
+      if (!object && !bit && !variable && !event) { result.confidence = decoded ? 'Partial decode' : 'Format match'; result.limitations.push(`Unsupported object ${label}; remaining bytes were not interpreted.`); return result; }
+      if (variable && offset === data.length) { stop(`Truncated object ${label}: missing length byte.`); return result; }
+      if (id === 0x3b && data[offset] & 0xe0) { stop('Command object has reserved argument-length bits set.'); return result; }
+      const size = variable ? data[offset] + (id === 0x3b ? 2 : 1) : event ? (id === 0x3a ? 1 : 2) : bit ? 1 : object[1];
       if (offset + size > data.length) { stop(`Truncated object ${label}: expected ${size} value bytes, received ${data.length - offset}.`); return result; }
       if (bit && data[offset] > 1) { stop(`Binary object ${label} has invalid value ${data[offset]}; expected 0 or 1.`); return result; }
-      const name = bit ? bit[0] : object[0], count = (counts.get(name) || 0) + 1;
+      const name = variable ? ({ 0x53: 'Text', 0x54: 'Raw', 0x3b: 'Command' })[id] : event ? (id === 0x3a ? 'Button' : 'Dimmer') : bit ? bit[0] : object[0], count = (counts.get(name) || 0) + 1;
       counts.set(name, count);
-      const value = bit ? bit[data[offset] + 1] : formatted(littleEndian(data, offset, size, object[2]) * object[3], object[4]);
-      field(result, count === 1 ? name : `${name} ${count}`, value);
+      const fieldName = count === 1 ? name : `${name} ${count}`, rawHex = value => Array.from(value, byte => byte.toString(16).padStart(2, '0')).join('');
+      if (id === 0x53) {
+        try { field(result, fieldName, new TextDecoder('utf-8', { fatal: true }).decode(data.subarray(offset + 1, offset + size))); }
+        catch { stop('Text object contains invalid UTF-8.'); return result; }
+      } else if (id === 0x54) field(result, fieldName, rawHex(data.subarray(offset + 1, offset + size)));
+      else if (id === 0x3a) field(result, fieldName, buttonEvents[data[offset]] || `Unknown event ${data[offset]}`);
+      else if (id === 0x3b) {
+        const opcode = data[offset + 1], command = ['Off', 'On', 'Toggle', 'Step up', 'Step down'][opcode] || `Opcode ${opcode}`;
+        field(result, fieldName, `${command}${data[offset] ? ` (arguments ${rawHex(data.subarray(offset + 2, offset + size))})` : ''}`);
+      } else if (id === 0x3c) field(result, fieldName, `${['None', 'Rotate left', 'Rotate right'][data[offset]] || `Unknown event ${data[offset]}`} (${data[offset + 1]} steps)`);
+      else if (bit) field(result, fieldName, bit[data[offset] + 1], data[offset], '');
+      else {
+        const value = littleEndian(data, offset, size, object[2]) * object[3];
+        if (id === 0x50) field(result, fieldName, new Date(value * 1000).toISOString());
+        else if (id === 0xf1 || id === 0xf2) field(result, fieldName, Array.from(data.subarray(offset, offset + size)).reverse().join('.'));
+        else if (id === 0x64) field(result, fieldName, ['Dark', 'Twilight', 'Bright'][value] || `Unknown level ${value}`);
+        else if (metadataIDs.has(id)) field(result, fieldName, value);
+        else measurement(result, fieldName, value, object[4]);
+      }
       offset += size; decoded++;
     }
     result.confidence = decoded ? 'Decoded format' : 'Format match';
@@ -87,15 +144,15 @@ const NanoSensorProfiles = (() => {
     const result = profile('Ruuvi RAWv2 sensor', 'Manufacturer company 0x0499 with data format 5.', 'ruuvi');
     if (data.length !== 26) { result.confidence = 'Malformed frame'; result.limitations.push(`RAWv2 requires 26 manufacturer-data bytes including the company ID; received ${data.length}.`); return result; }
     const payload = new DataView(data.buffer, data.byteOffset + 2, 24);
-    const signed = (label, offset, factor, unit) => field(result, label, payload.getInt16(offset) === -32768 ? 'Not available' : formatted(payload.getInt16(offset) * factor, unit));
-    const unsigned = (label, offset, factor, adjustment, unit) => field(result, label, payload.getUint16(offset) === 65535 ? 'Not available' : formatted(payload.getUint16(offset) * factor + adjustment, unit));
+    const signed = (label, offset, factor, unit) => payload.getInt16(offset) === -32768 ? field(result, label, 'Not available') : measurement(result, label, payload.getInt16(offset) * factor, unit);
+    const unsigned = (label, offset, factor, adjustment, unit) => payload.getUint16(offset) === 65535 ? field(result, label, 'Not available') : measurement(result, label, payload.getUint16(offset) * factor + adjustment, unit);
     signed('Temperature', 1, 0.005, '°C'); unsigned('Humidity', 3, 0.0025, 0, '%'); unsigned('Pressure', 5, 1, 50000, 'Pa');
     signed('Acceleration X', 7, 0.001, 'g'); signed('Acceleration Y', 9, 0.001, 'g'); signed('Acceleration Z', 11, 0.001, 'g');
     const power = payload.getUint16(13), voltage = power >> 5, tx = power & 31;
-    field(result, 'Battery voltage', voltage === 2047 ? 'Not available' : formatted((voltage + 1600) / 1000, 'V'));
-    field(result, 'TX power', tx === 31 ? 'Not available' : formatted(tx * 2 - 40, 'dBm'));
-    field(result, 'Movement counter', payload.getUint8(15) === 255 ? 'Not available' : payload.getUint8(15));
-    unsigned('Measurement sequence', 16, 1, 0, '');
+    voltage === 2047 ? field(result, 'Battery voltage', 'Not available') : measurement(result, 'Battery voltage', (voltage + 1600) / 1000, 'V');
+    tx === 31 ? field(result, 'TX power', 'Not available') : measurement(result, 'TX power', tx * 2 - 40, 'dBm');
+    payload.getUint8(15) === 255 ? field(result, 'Movement counter', 'Not available') : measurement(result, 'Movement counter', payload.getUint8(15));
+    field(result, 'Measurement sequence', payload.getUint16(16) === 65535 ? 'Not available' : payload.getUint16(16));
     const mac = data.slice(20, 26);
     field(result, 'Sensor MAC', mac.every(value => value === 255) ? 'Not available' : Array.from(mac, value => value.toString(16).padStart(2, '0')).join(':'));
     result.confidence = 'Decoded format';
@@ -109,6 +166,20 @@ const NanoSensorProfiles = (() => {
     if (manufacturer?.length >= 3 && manufacturer[0] === 0x99 && manufacturer[1] === 4 && manufacturer[2] === 5) return ruuvi(manufacturer);
     return null;
   }
-  return { identify };
+  async function identifyDecrypted(device, key) {
+    const service = device?.serviceData?.find(item => uuid(item?.uuid) === 'fcd2');
+    const original = identify(device);
+    if (original?.protocol !== 'bthome' || original.confidence === 'Malformed frame' || !service?.hex || !(bytes(service.hex)[0] & 1)) throw new Error('An encrypted BTHome v2 service-data frame is required.');
+    const decoder = typeof NanoBTHomeCrypto !== 'undefined' ? NanoBTHomeCrypto : typeof require === 'function' ? require('./bthome-crypto.js') : null;
+    if (!decoder) throw new Error('BTHome cryptography is unavailable.');
+    const decrypted = await decoder.decrypt({ hex: service.hex, mac: device.address, key });
+    const result = bthome(decrypted.hex);
+    result.title = 'BTHome v2 encrypted sensor'; result.authenticated = true; result.counter = decrypted.counter;
+    result.fields.find(item => item.label === 'Encryption').value = 'Encrypted';
+    field(result, 'Authentication', 'Verified MIC'); field(result, 'Advertised counter', decrypted.counter);
+    result.sources.push({ ...sources.encryption });
+    return result;
+  }
+  return { identify, identifyDecrypted, sources };
 })();
 if (typeof module !== 'undefined') module.exports = NanoSensorProfiles;

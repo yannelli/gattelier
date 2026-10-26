@@ -2,7 +2,7 @@
 
 const NanoWorkspace = (() => {
   const views = ['discover', 'apps', 'workbench', 'insights', 'settings', 'device'];
-  const modules = { plaud: 'PLAUD', pocket: 'Pocket', sleep: 'Sleep Number', tracker: 'BLE trackers', medical: 'Dexcom G7', sensor: 'BLE sensors', radiacode: 'RadiaCode', thermometer: 'Thermometers', locks: 'Locks', resmed: 'ResMed CPAP', ge: 'GE appliances', samsung: 'Samsung devices', apple: 'Apple & AirPods', nespresso: 'Nespresso', vesync: 'Levoit air purifiers' };
+  const modules = { plaud: 'PLAUD', pocket: 'Pocket', sleep: 'Sleep Number', tracker: 'BLE trackers', medical: 'Dexcom G7', sensor: 'Environmental sensors', radiacode: 'RadiaCode', thermometer: 'Thermometers', locks: 'Locks', resmed: 'ResMed CPAP', ge: 'GE appliances', samsung: 'Samsung devices', apple: 'Apple & AirPods', nespresso: 'Nespresso', vesync: 'Levoit air purifiers' };
   let active = 'discover', activeModule = '', tool = 'command', initialized = false;
   let preferences = {};
   const get = id => document.getElementById(id);

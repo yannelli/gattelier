@@ -121,6 +121,7 @@ function renderList() {
 }
 function render() {
   lastRender = Date.now();
+  NanoSensorApp.update(browseDevices());
   NanoLab.update(state, online);
   NanoLab.setBackgroundCapture(scanStore?.getPreference('backgroundScan', false));
   const scanning = state.ble.scanning;

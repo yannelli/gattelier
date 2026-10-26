@@ -55,3 +55,16 @@ test('cloud command preview and imported purifier status stay local', () => {
   const format = h.label('Data format'); format.value = 'status'; format.listeners.change(); h.label('Captured value').value = '{"enabled":true,"level":2,"mode":"manual","filter_life":83}';
   h.button('Decode locally').click(); assert.match(h.container.textContent, /83%/); assert.equal(h.calls(), 0);
 });
+test('Samsung saved service data decodes locally without device requests', () => {
+  const h = harness('samsung', { manufacturer: '750042040180', address: '02:00:00:00:00:04', addressType: 0 });
+  const format = h.label('Data format'); format.value = 'service'; format.listeners.change();
+  h.label('Service UUID').value = '0xfd5a'; h.label('Captured value').value = '120102030405060708090a0b0380000001020304';
+  h.button('Decode locally').click(); assert.match(h.container.textContent, /Battery bandFull/); assert.equal(h.calls(), 0);
+});
+test('Samsung packet fields sit under a collapsed disclosure', () => {
+  const h = harness('samsung', { address: '02:00:00:00:00:05', addressType: 0, serviceData: [{ uuid: 'fd5a', hex: '120102030405060708090a0b0380000001020304' }] });
+  const details = h.all().find(node => node.tag === 'details' && node.children[0].textContent === 'Packet details');
+  assert.equal(details.hidden, false); assert.notEqual(details.open, true);
+  assert.match(details.textContent, /Rotating privacy ID/); assert.doesNotMatch(details.textContent, /Battery band/);
+  assert.match(h.container.textContent, /Reported tag stateOffline/); assert.equal(h.calls(), 0);
+});

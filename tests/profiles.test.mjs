@@ -44,9 +44,9 @@ test('Sleep Number matches documented services and avoids name-only claims', () 
 });
 test('Samsung advertisements show company evidence without inventing a device type', () => {
   const result = profiles.identify({ manufacturer: '750042040000' });
-  assert.equal(result.title, 'Samsung device'); assert.equal(result.category, 'vendor'); assert.equal(result.confidence, 'Manufacturer match');
-  assert.equal(fields(result)['Assigned company'], 'Samsung Electronics'); assert.match(result.limitations[0], /does not establish a TV/);
-  assert.equal(profiles.identify({ services: ['fd5a'] }).title, 'Samsung device');
+  assert.equal(result.title, 'Samsung BLE broadcast'); assert.equal(result.category, 'vendor'); assert.equal(result.confidence, 'Manufacturer match');
+  assert.equal(fields(result)['Company identifier'], '0x0075'); assert.match(result.limitations[0], /without assigning a model/);
+  assert.equal(profiles.identify({ services: ['fd5a'] }).title, 'Samsung Offline Finding');
   assert.equal(profiles.identify({ name: 'Samsung synthetic speaker' }).confidence, 'Name candidate');
   assert.equal(profiles.identify({ manufacturer: '0075' }).category, 'other');
   assert.equal(profiles.identify({ manufacturer: '7500zz' }).category, 'other');
