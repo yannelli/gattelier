@@ -24,7 +24,7 @@ const NanoModules = (() => {
     const mapping = { 'sleep-fuzion': 'sleep', 'sleep-mcr': 'sleep', radiacode: 'radiacode', 'health-thermometer': 'thermometer', 'environmental-sensor': 'thermometer', 'nuki-lock': 'locks', 'resmed-air11': 'resmed', 'ge-appliance': 'ge', 'samsung-tv': 'samsung', 'samsung-device': 'samsung' };
     const ids = [...deviceApps.matches(device), ...found.map(item => mapping[item.id]).filter(Boolean)];
     if (/^(?:Schlage|Yale|August|Nuki)\b/i.test(device.name || '')) ids.push('locks');
-    if (!ids.length) ids.push(...(profile.category === 'beacon' ? ['tracker'] : ['tracker', 'medical', 'sleep', 'sensor'].includes(profile.category) ? [profile.category] : []));
+    if (!ids.length && !profile.external) ids.push(...(profile.category === 'beacon' ? ['tracker'] : ['tracker', 'medical', 'sleep', 'sensor'].includes(profile.category) ? [profile.category] : []));
     return [...new Set(ids)];
   }
   let hooks, signature = '', connectionSignature = '', appQuery = '', appScope = 'all';

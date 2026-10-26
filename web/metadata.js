@@ -1,6 +1,7 @@
 'use strict';
 
 const NanoMetadata = (() => {
+  const catalogs = typeof module !== 'undefined' ? require('./catalogs.js') : NanoCatalogs;
   const DEFAULT_ORIGIN = 'https://gattelier.ryanyannelli.com', KEY = 'nanoscope.metadata.v1';
   const uuid = value => String(value || '').toLowerCase().replace(/^0x/, '').replace(/^0000([\da-f]{4})-0000-1000-8000-00805f9b34fb$/, '$1');
   const uuidPattern = /^(?:[\da-f]{4}|[\da-f]{8}-(?:[\da-f]{4}-){3}[\da-f]{12})$/;
@@ -53,7 +54,7 @@ const NanoMetadata = (() => {
     }
     function lookup(id) {
       id = uuid(id);
-      return bundled?.entries.find(entry => entry.uuid === id) || (enabled ? supplemental?.entries.find(entry => entry.uuid === id) : null);
+      return bundled?.entries.find(entry => entry.uuid === id) || (enabled ? supplemental?.entries.find(entry => entry.uuid === id) : null) || catalogs.lookupUUID(id) || null;
     }
     async function download(url, fresh = false) {
       const controller = new AbortController(), timer = setTimeout(() => controller.abort(), 10000);

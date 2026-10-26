@@ -20,7 +20,9 @@ const NanoInsights = (() => {
     for (const text of profile.limitations || []) card.append(el('p', 'vendor-note', text));
     const links = el('div', 'profile-sources');
     for (const source of profile.sources || []) { const link = el('a', '', source.title); link.href = source.url; link.target = '_blank'; link.rel = 'noopener noreferrer'; links.append(link); }
-    card.append(links); return card;
+    card.append(links);
+    if (profile.revision) card.append(el('p', 'vendor-note', `Library: ${profile.library} · ${profile.revision}`));
+    return card;
   }
   function signalChart(device) {
     const section = el('section', 'signal-card'), samples = (device.history || []).filter(item => Number.isFinite(item.rssi));

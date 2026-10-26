@@ -24,7 +24,9 @@ const NanoScanQuery = (() => {
       const names = typeof vendor === 'string' ? vendor : [vendor?.search, vendor?.manufacturer, vendor?.addressVendor, vendor?.name, vendor?.vendor].filter(Boolean).join(' ');
       const services = [...(device.services || []), ...(device.serviceData || []).map(item => item.uuid)].join(' ');
       const profile = context.profile?.(device);
-      return `${device.name || ''} ${device.address || ''} ${device.label || ''} ${names} ${services} ${profile?.title || ''} ${profile?.category || ''}`.toLowerCase().includes(query);
+      const libraryNames = [...(device.services || []), ...(device.serviceData || []).map(item => item.uuid)].map(id => context.lookupUUID?.(id)?.name || '').join(' ');
+      const protocols = (context.protocolMatches?.(device) || []).map(item => item.title).join(' ');
+      return `${device.name || ''} ${device.address || ''} ${device.label || ''} ${names} ${services} ${profile?.title || ''} ${profile?.category || ''} ${libraryNames} ${protocols}`.toLowerCase().includes(query);
     });
     const compare = {
       strength: (a, b) => number(b.rssi, -Infinity) - number(a.rssi, -Infinity),

@@ -267,7 +267,10 @@ async function boot() {
   NanoCredentialsUI.mount($('credentials-panel'));
   NanoAPIUI.mount($('api-panel'));
   NanoActivityLedUI.mount($('activity-led-panel'), NanoLab);
+  NanoCatalogs.init({ hosted: Boolean(document.querySelector('meta[name="nanoscope-hosted"]')) });
   NanoMetadataUI.mount($('metadata-panel'));
+  NanoCatalogUI.mount($('metadata-panel'));
+  globalThis.addEventListener('nanoscope:catalogs', () => { listSignature = ''; detailSignature = ''; render(); });
   NanoMetadata.init();
   globalThis.addEventListener('nanoscope:metadata', () => { detailSignature = ''; render(); });
   NanoPocket.mount($('pocket-panel'), NanoLab);

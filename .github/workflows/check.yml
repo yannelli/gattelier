@@ -24,6 +24,7 @@ jobs:
           done
       - run: python3 tests/pwa_bridge_test.py
       - run: python3 tests/metadata_catalog_test.py
+      - run: python3 tests/bluetooth_catalogs_test.py
       - run: npx wrangler deploy --dry-run
   deploy:
     needs: app

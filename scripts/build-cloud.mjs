@@ -1,3 +1,4 @@
+import { buildCatalogs } from './build-catalogs.mjs';
 import { createHash } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
@@ -6,9 +7,11 @@ const root = fileURLToPath(new URL('../', import.meta.url));
 const assets = ['index.html', 'app.bundle.js', 'app.bundle.css', 'vendors.json', 'metadata-v1.json',
   'manifest.webmanifest', 'icons/nanoscope-180.png', 'icons/nanoscope-192.png', 'icons/nanoscope-512.png'];
 const hash = createHash('sha256');
+const catalogs = await buildCatalogs(root, `${root}dist`);
+hash.update(JSON.stringify(catalogs));
 await mkdir(`${root}dist/icons`, { recursive: true });
 await mkdir(`${root}dist/licenses`, { recursive: true });
-for (const name of ['DEXCOM-CRYPTO-NOTICE.md', 'licenses/GPL-3.0-or-later.txt']) {
+for (const name of ['DEXCOM-CRYPTO-NOTICE.md', 'licenses/GPL-3.0-or-later.txt', 'catalogs/vendor-uuids-LICENSE.txt', 'catalogs/vendor-uuids-Polar-LICENSE.txt']) {
   const content = await readFile(`${root}${name}`); hash.update(name).update(content);
   await writeFile(`${root}dist/${name}`, content);
 }
@@ -27,6 +30,9 @@ await writeFile(`${root}dist/_headers`, `/*
   Referrer-Policy: no-referrer
   Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self' http: https:; worker-src 'self'; manifest-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'none'
   Cache-Control: no-cache
+/catalogs/*
+  Access-Control-Allow-Origin: *
+  Cache-Control: public, max-age=300
 /metadata-v1.json
   Access-Control-Allow-Origin: *
   Cache-Control: public, max-age=300

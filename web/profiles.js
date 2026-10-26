@@ -1,6 +1,7 @@
 'use strict';
 
 const NanoProfiles = (() => {
+  const catalogs = typeof module !== 'undefined' ? require('./catalogs.js') : NanoCatalogs;
   const references = {
     ad: { title: 'Bluetooth advertising data', url: 'https://www.bluetooth.com/wp-content/uploads/Files/Specification/HTML/CSS_v11/out/en/supplement-to-the-bluetooth-core-specification/data-types-specification.html' },
     findmy: { title: 'Find My envelope reference', url: 'https://github.com/seemoo-lab/openhaystack/blob/main/Firmware/ESP32/main/openhaystack_main.c' },
@@ -23,11 +24,12 @@ const NanoProfiles = (() => {
       const length = data[offset++]; if (!length) break;
       if (offset + length > data.length) { errors.push(`Truncated AD structure at byte ${offset - 1}.`); break; }
       const type = data[offset], part = data.slice(offset + 1, offset + length); offset += length;
-      let label = `AD type 0x${type.toString(16).padStart(2, '0')}`, result = hex(part);
+      const names = catalogs.adType(type).map(entry => entry.name);
+      let label = names.length ? names.join(' / ') : `AD type 0x${type.toString(16).padStart(2, '0')}`, result = hex(part);
       if (type === 1 && part.length === 1) { label = 'Flags'; result = `${hex(part)} · ${part[0] & 2 ? 'General discoverable' : part[0] & 1 ? 'Limited discoverable' : 'Discovery mode unspecified'}${part[0] & 4 ? ' · LE only' : ''}`; }
       if ([8, 9].includes(type)) { label = type === 9 ? 'Complete local name' : 'Shortened local name'; result = new TextDecoder().decode(part); }
       if (type === 10 && part.length === 1) { label = 'Advertised TX power'; result = `${signed(part[0])} dBm`; }
-      if (type === 25 && part.length === 2) { label = 'Appearance code'; result = String(part[0] | part[1] << 8); }
+      if (type === 25 && part.length === 2) { label = 'Appearance code'; const code = part[0] | part[1] << 8; result = catalogs.appearance(code)?.name ? `${catalogs.appearance(code).name} (${code})` : String(code); }
       if ([2, 3].includes(type) && part.length % 2 === 0) { label = '16-bit service UUIDs'; result = Array.from({ length: part.length / 2 }, (_, i) => `0x${hex(part.slice(i * 2, i * 2 + 2).reverse())}`).join(', '); }
       if ([6, 7].includes(type) && part.length % 16 === 0) { label = '128-bit service UUIDs'; result = Array.from({ length: part.length / 16 }, (_, i) => uuid128(part.slice(i * 16, i * 16 + 16).reverse())).join(', '); }
       if (type === 255 && part.length >= 2) { label = 'Manufacturer data'; result = `Company 0x${hex(part.slice(0, 2).reverse())} · ${hex(part.slice(2))}`; }
@@ -105,6 +107,9 @@ const NanoProfiles = (() => {
     if (result.category === 'other') {
       const apps = typeof NanoDeviceApps !== 'undefined' ? NanoDeviceApps : typeof module !== 'undefined' ? require('./device-apps.js') : null;
       const profile = apps?.identify(device); if (profile) return profile;
+      const protocol = catalogs.match(device)[0]; if (protocol) return protocol;
+      const assigned = services.map(id => catalogs.lookupUUID(id)).find(entry => ['member-service', 'sdo-service'].includes(entry?.kind));
+      if (assigned) return { category: 'vendor', title: assigned.name, confidence: 'Service assignment', evidence: [`Advertised service 0x${assigned.uuid} is registered to ${assigned.name}.`], fields: [], limitations: ['A service registration does not confirm a product model or supported operations.'], sources: [{ title: 'Bluetooth SIG service assignment', url: assigned.source }], external: true };
       result.evidence.push('No supported device profile matched.'); field('Advertised services', services.join(', ') || 'None');
     }
     return result;

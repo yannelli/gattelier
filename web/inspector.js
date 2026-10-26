@@ -68,6 +68,13 @@ function buildDeviceDetail(device, fullPage = false) {
     const evidence = node('details', 'raw-details'); evidence.dataset.persist = 'identification';
     evidence.append(node('summary', '', 'Identification details'), NanoInsights.profileCard(profile)); detail.append(evidence);
   }
+  const protocols = NanoCatalogs.match(device, connected ? state.services || [] : []);
+  if (protocols.length) {
+    const matches = node('details', 'raw-details library-matches'); matches.dataset.persist = 'library-matches';
+    matches.append(node('summary', '', `Library matches · ${protocols.length}`));
+    for (const match of protocols) matches.append(NanoInsights.profileCard(match));
+    detail.append(matches);
+  }
   const actions = node('div', 'inspector-shortcuts');
   if (!fullPage) actions.append(button('Open device page', 'primary', () => NanoDevicePage.open(device), false, 'device-page'));
   if (connected) actions.append(button('Pair / security', 'secondary', () => NanoDevicePage.open(device, true), false, 'pair'));

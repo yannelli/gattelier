@@ -1,6 +1,7 @@
 'use strict';
 
 const NanoGattValues = (() => {
+  const catalogs = typeof module !== 'undefined' ? require('./catalogs.js') : NanoCatalogs;
   const strings = { '2a00': 'Device name', '2a29': 'Manufacturer', '2a24': 'Model', '2a25': 'Serial number', '2a26': 'Firmware revision', '2a27': 'Hardware revision', '2a28': 'Software revision', '2901': 'Characteristic description' };
   const temperatureTypes = ['Reserved', 'Armpit', 'Body', 'Ear', 'Finger', 'Gastrointestinal tract', 'Mouth', 'Rectum', 'Toe', 'Eardrum'];
   const appearances = {
@@ -111,6 +112,8 @@ const NanoGattValues = (() => {
       }
       if (key === '2a01' && bytes.length === 2) {
         const value = data.getUint16(0, true), category = value >>> 6;
+        const known = catalogs.appearance(value);
+        if (known) return [field('Appearance', `${known.name} (${hex16(value)})`), field('Appearance category', known.category), field('Appearance subcategory', known.subcategory)];
         return [field('Appearance', hex16(value)), field('Appearance category', appearances[category] || `Unassigned category ${hex16(category)}`), field('Appearance subcategory', value & 63)];
       }
       if (key === '2a6e' && bytes.length === 2) {

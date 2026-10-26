@@ -25,7 +25,7 @@ The board address is `http://nanoscope.local`. Existing NanoScope storage keys a
 - Experimental Dexcom G7 authentication with the applicator code, saved sessions, latest/history requests, serial/firmware, and sensor states; sensor interoperability awaits manual testing
 - Environmental sensor readings, charts, browser history, and JSON/CSV exports for BTHome, Ruuvi Tag, and Ruuvi Air formats 6/E1; encrypted BTHome readings decode locally with a device key
 - Optional browser-cached supplemental metadata from `https://gattelier.ryanyannelli.com`
-- 743 standard UUID names, named descriptors and units, plus readable GATT feature flags, service-change ranges, connection parameters, and descriptor values
+- 743 bundled UUID names and 1,734 names in hosted libraries, named descriptors and units, plus readable GATT feature flags, service-change ranges, connection parameters, and descriptor values
 - LG webOS saved-response inspection and offline LAN request previews for audio, apps, inputs, remote keys, and power-off
 - ResMed Air11 FIG capture inspection with CRC checks, fragment handling, plaintext RPC decoding, and authenticated request templates
 - Metadata and investigation helpers for locks, GE appliances, and Samsung devices, including SmartTag broadcast state and battery bands
@@ -111,8 +111,24 @@ NANOSCOPE_BOARD_URL=http://nanoscope.local \
 
 Open Settings in the hosted app and set the board connection URL to the private HTTPS address printed by the bridge. The bridge accepts requests from the app origin you allow. The computer running the bridge and the iPhone must both be connected to your Tailscale network.
 
-### Supplemental metadata
+### Metadata and discovery libraries
 
-Settings > Device metadata downloads `/metadata-v1.json` from `https://gattelier.ryanyannelli.com` by default. The Worker serves this public catalog alongside the app. Downloads contain UUID names and declarative value decoders; they contain no executable code. Device addresses, recordings, credentials, and health readings are excluded from metadata requests. Downloaded definitions stay in browser storage and can be disabled or removed.
+Settings > Metadata & libraries downloads public catalogs from `https://gattelier.ryanyannelli.com`. The hosted PWA downloads them on first launch and checks for updates after 24 hours. The embedded board UI downloads them when requested. Libraries stay in browser IndexedDB for offline use; each can be disabled or removed. Removing them also stops automatic downloads until you choose Download libraries again.
+
+| Catalog | Entries | Contents |
+| --- | ---: | --- |
+| Bluetooth UUIDs | 1,484 | Services, characteristics, descriptors, units, declarations, and member/SDO assignments |
+| Vendor UUIDs | 250 | Custom services and characteristics from Nordic’s database and Polar’s SDK definitions |
+| Appearance | 342 | Assigned device categories and subcategories |
+| Advertising data | 51 | AD type names, retaining context-specific duplicate assignments |
+| Protocol signatures | 36 | Meshtastic, Nordic, micro:bit, LEGO, Polar, GoPro, SwitchBot, Xiaomi, Victron, Adafruit, fitness profiles, and others |
+
+The library browser searches names, UUIDs, codes, and protocols. Discover also searches downloaded service names and protocol matches. Device pages show matching evidence from advertisements and discovered GATT services, source links, and limitations. A service or company match does not confirm a product model or enable device commands.
+
+The Worker serves `/catalogs/index.json` and the versioned catalogs listed in it. Requests download complete public files; device addresses, packets, recordings, credentials, and health readings stay local. Rules contain bounded field comparisons, with no downloaded executable code. The browser validates the complete set before replacing its cache and preserves existing libraries if a download fails. Catalog files are excluded from board firmware.
+
+Bluetooth assignments come from a pinned Bluetooth SIG registry commit. Regenerate them with `python3 scripts/update_bluetooth_catalogs.py`; `--source-dir` accepts a local assigned-numbers checkout. Regenerate custom UUID names with `python3 scripts/generate-vendor-uuids.py`. Two conflicting upstream experimental DFU definitions are excluded. Each protocol entry links to its source documentation or pinned repository revision. The distribution includes the [Nordic database license](catalogs/vendor-uuids-LICENSE.txt) and [Polar source notice](catalogs/vendor-uuids-Polar-LICENSE.txt). `npm run build:cloud` validates and publishes the catalogs and their manifest.
+
+Supplemental value decoders remain available under the same settings panel. They use `/metadata-v1.json` for declarative numeric and enumerated-value definitions. Built-in decoders continue to work without downloaded libraries.
 
 The repository does not have a project-wide license yet. Attributed G7 certificate material and captured crypto fixtures are GPL-3.0-or-later; see [G7 source notices](DEXCOM-CRYPTO-NOTICE.md) and the [license text](licenses/GPL-3.0-or-later.txt).
