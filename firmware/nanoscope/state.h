@@ -3,6 +3,7 @@
 #include <vector>
 #include <freertos/FreeRTOS.h>
 #include <freertos/semphr.h>
+#include "gatt_properties.h"
 
 struct ServiceDataInfo { String uuid, hex; };
 
@@ -28,7 +29,7 @@ struct CharacteristicInfo {
   uint16_t handle = 0;
   bool hasValue = false;
   String subscription = "off";
-  std::vector<String> properties;
+  uint8_t properties = 0;
   std::vector<DescriptorInfo> descriptors;
 };
 

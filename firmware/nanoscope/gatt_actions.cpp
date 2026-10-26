@@ -11,8 +11,8 @@ static CharacteristicInfo* findEntry(uint32_t handle) {
   return nullptr;
 }
 
-static bool hasProperty(const CharacteristicInfo& entry, const char* property) {
-  return std::find(entry.properties.begin(), entry.properties.end(), String(property)) != entry.properties.end();
+static bool hasProperty(const CharacteristicInfo& entry, GattProperty property) {
+  return (entry.properties & property) != 0;
 }
 
 bool validateGatt(const Command& command, String& error) {
@@ -21,18 +21,18 @@ bool validateGatt(const Command& command, String& error) {
   if (!entry) { error = "Characteristic handle is not part of the current connection."; return false; }
   switch (command.action) {
     case Action::Read:
-      if (!hasProperty(*entry, "read")) error = "This characteristic does not support reads.";
+      if (!hasProperty(*entry, GattRead)) error = "This characteristic does not support reads.";
       break;
     case Action::Write:
       if (command.length > sizeof(command.data)) error = "Write payload exceeds 512 bytes.";
       else if (command.mode > 1) error = "Write mode must select with or without response.";
-      else if (!hasProperty(*entry, command.mode ? "write" : "write-no-response")) error = "This characteristic does not support the selected write mode.";
+      else if (!hasProperty(*entry, command.mode ? GattWrite : GattWriteNoResponse)) error = "This characteristic does not support the selected write mode.";
       break;
     case Action::Subscribe:
       if (command.mode > 2) error = "Subscription mode must be off, notify, or indicate.";
-      else if (command.mode == 1 && !hasProperty(*entry, "notify")) error = "This characteristic does not support notifications.";
-      else if (command.mode == 2 && !hasProperty(*entry, "indicate")) error = "This characteristic does not support indications.";
-      else if (!command.mode && !hasProperty(*entry, "notify") && !hasProperty(*entry, "indicate")) error = "This characteristic does not support subscriptions.";
+      else if (command.mode == 1 && !hasProperty(*entry, GattNotify)) error = "This characteristic does not support notifications.";
+      else if (command.mode == 2 && !hasProperty(*entry, GattIndicate)) error = "This characteristic does not support indications.";
+      else if (!command.mode && !hasProperty(*entry, GattNotify) && !hasProperty(*entry, GattIndicate)) error = "This characteristic does not support subscriptions.";
       break;
     default: error = "Unsupported GATT operation.";
   }

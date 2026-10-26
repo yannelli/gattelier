@@ -1,5 +1,16 @@
 :root { --panel-inset: 24px; --section-gap: 18px; --control-gap: 10px; }
 input[type="checkbox"], input[type="radio"] { min-height: 0; padding: 0; }
+.panel > .panel-heading { padding: 20px var(--panel-inset) var(--section-gap); flex-wrap: wrap; }
+.panel-heading > div { min-width: 0; }
+.panel-heading :is(h2, p) { overflow-wrap: anywhere; }
+.panel > :is(.lab-body, .pocket-body, .plaud-body, .network-body, .snapshots-body, .credentials-body, .usb-body, .pwa-body, .collection-body) { padding: 0 var(--panel-inset) var(--panel-inset); }
+.panel > .detail, .setting-row, .settings-actions, .settings-explainer { padding-inline: var(--panel-inset); }
+:is(.lab-actions, .network-form-actions, .network-mode-actions, .snapshot-actions, .credentials-actions, .pwa-actions, .collection-actions, .settings-actions) { gap: var(--control-gap); }
+:is(.credentials-body, .collection-body) > :is(p, div):empty, :is(.lab-status, .usb-message, .pwa-body p, #history-import-status):empty { display: none; }
+.usb-body > p + p, .usb-help[open] > :not(summary) { margin-top: 12px; }
+.settings-card > #history-import-status:not(:empty) { padding: 0 var(--panel-inset) var(--section-gap); }
+.credential-row > div { min-width: 0; }
+.credential-row > .button { flex-shrink: 0; }
 #module-content .panel-heading { padding-inline: var(--panel-inset); }
 #module-content :is(.pocket-body, .plaud-body, .lab-body, .dexcom-body) { display: grid; gap: var(--section-gap); padding: 0 var(--panel-inset) var(--panel-inset); }
 #module-content :is(.pocket-body, .plaud-body) > * + * { margin-top: 0; }

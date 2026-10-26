@@ -1,15 +1,18 @@
 .api-settings .panel-heading { align-items: center; }
 .api-settings .badge.online { color: var(--success); }
-.api-form { display: grid; gap: 14px; padding: 0 24px 18px; }
+.api-form { display: grid; gap: var(--section-gap); padding: 0 var(--panel-inset) var(--panel-inset); }
 .api-form label { display: grid; gap: 7px; font-weight: 650; }
 .api-form input { width: 100%; }
-.api-actions { display: flex; flex-wrap: wrap; gap: 8px; }
-.api-message { min-height: 1.4em; margin: 0; padding: 0 24px 18px; color: var(--muted); }
-.api-help { margin: 0 24px 24px; }
+.api-actions { display: flex; flex-wrap: wrap; gap: var(--control-gap); }
+.api-message { margin: 0; padding: 0 var(--panel-inset) var(--section-gap); color: var(--muted); }
+.api-message:empty { display: none; }
+.api-help { margin: 0 var(--panel-inset) var(--panel-inset); }
 .api-help summary { cursor: pointer; font-weight: 650; }
+.api-help[open] > :not(summary) { margin-top: 12px; }
 .api-help pre { overflow-x: auto; white-space: pre-wrap; word-break: break-word; }
 
-.api-settings > .hint { padding: 0 24px 18px; margin: 0; }
+.api-settings > .hint { padding: 0 var(--panel-inset) var(--section-gap); margin: 0; background: none; border-radius: 0; }
 .api-form .metadata-enabled { display: flex; align-items: center; font-weight: 500; }
 .api-form .metadata-enabled input { width: 18px; height: 18px; flex: 0 0 auto; }
 .api-help .api-form { padding: 12px 0; }
+@media (max-width: 760px) { .api-form :is(input, select, textarea) { font-size: 16px; } }

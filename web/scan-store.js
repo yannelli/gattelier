@@ -199,7 +199,7 @@ const NanoScanStore = (() => {
         if (record) { record.liveId = cache.has(value.id) ? value.id : null; record.streamLive = true; }
       }
       stream = { bootId: batch.bootId, cursor: batch.cursor, received: stream.received + fresh.length, gaps: stream.gaps + Math.max(missing, batch.cursor > before ? batch.dropped : 0), reboots: stream.reboots + Number(reboot), active: true, error: '',
-        capacity: batch.capacity, cacheCapacity: batch.cacheCapacity, cacheBytes: batch.cacheBytes, cacheLimitBytes: batch.cacheLimitBytes, journalBytes: batch.journalBytes, droppedTotal: batch.droppedTotal, truncatedTotal: batch.truncatedTotal };
+        format: batch.format, capacity: batch.capacity, cacheCapacity: batch.cacheCapacity, cacheBytes: batch.cacheBytes, cacheLimitBytes: batch.cacheLimitBytes, journalBytes: batch.journalBytes, droppedTotal: batch.droppedTotal, truncatedTotal: batch.truncatedTotal };
       return { received: fresh.length, dropped: Math.max(missing, batch.cursor > before ? batch.dropped : 0), reboot, cursor: stream.cursor };
     }
     function devices() { return [...records.values()].map(clone); }

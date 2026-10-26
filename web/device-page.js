@@ -48,7 +48,8 @@ const NanoDevicePage = (() => {
     const next = JSON.stringify([device?.address, device?.name, device?.label, status.status, status.reason, status.enabled, status.label, state.security?.status]);
     if (next === headerSignature) return; headerSignature = next;
     const menu = node('details', 'header-connection'); menu.open = Boolean($('header-device').querySelector('details')?.open);
-    const summary = node('summary'); summary.append(node('span', 'header-device-name', device?.label || device?.name || device?.address || 'No device selected'), node('span', 'header-device-state', status.status));
+    const summary = node('summary'); summary.append(node('span', 'header-device-name', device?.label || device?.name || device?.address || 'No active device'));
+    if (device) summary.append(node('span', 'header-device-state', status.status));
     const actions = node('div', 'header-device-menu');
     if (device) {
       actions.append(node('p', 'mono', device.address), NanoConnection.controls(device, 'header-connect'), button('View device', 'secondary', () => { menu.open = false; open(device); }, false, 'header-view'));

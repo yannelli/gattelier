@@ -37,7 +37,7 @@ static void finishCancellation(uint32_t attempt) {
   {
     StateLock lock;
     state.connected = false;
-    state.services.clear();
+    std::vector<ServiceInfo>().swap(state.services);
     state.error = connectionTimedOut.load() ? "Connection timed out." : "Connection cancelled.";
     state.busy = false;
     state.operation = "idle";
@@ -105,7 +105,7 @@ class ClientCallbacks : public NimBLEClientCallbacks {
     StateLock lock;
     recordTrace("disconnect", state.address, "", 0, nullptr, 0, "BLE reason " + String(reason));
     state.connected = false;
-    state.services.clear();
+    std::vector<ServiceInfo>().swap(state.services);
     if (state.operation != "disconnecting" && state.operation != "cancelling") state.error = "Device disconnected (BLE code " + String(reason) + ").";
   }
 };
@@ -159,21 +159,24 @@ static void maintainScan() {
 static void connectDevice(const Command& command) {
   if (connectionCancellation.requested(command.connectionAttempt)) return;
   scanDevices(false);
-  DeviceInfo device;
+  const String address = reinterpret_cast<const char*>(command.data);
+  bool recorderOnly = command.length == 1;
   {
     StateLock lock;
-    for (const auto& candidate : state.devices) if (candidate.address == reinterpret_cast<const char*>(command.data) && candidate.addressType == command.mode) device = candidate;
-    device.address = reinterpret_cast<const char*>(command.data); device.addressType = command.mode;
-    state.address = device.address;
-    state.services.clear();
+    for (const auto& candidate : state.devices) {
+      if (candidate.address != address || candidate.addressType != command.mode) continue;
+      for (const auto& uuid : candidate.services) if (uuid == "0x504c") recorderOnly = true;
+      break;
+    }
+    state.address = address;
+    std::vector<ServiceInfo>().swap(state.services);
     clearScanCache();
   }
-  bool recorderOnly = command.length == 1 || std::find(device.services.begin(), device.services.end(), String("0x504c")) != device.services.end();
   if (connectionCancellation.requested(command.connectionAttempt)) return;
   connectionOutcome.store(0);
   connectionTimedOut.store(false);
   startedAttempt.store(command.connectionAttempt);
-  const bool started = device.address.length() == 17 && client->connect(NimBLEAddress(device.address.c_str(), device.addressType), true, true, false);
+  const bool started = address.length() == 17 && client->connect(NimBLEAddress(address.c_str(), command.mode), true, true, false);
   if (!started) connectionOutcome.store(-1);
   const uint32_t began = millis();
   while (started && connectionOutcome.load() == 0 && !connectionCancellation.requested(command.connectionAttempt) && uint32_t(millis() - began) < 35000) vTaskDelay(pdMS_TO_TICKS(10));
@@ -192,11 +195,10 @@ static void connectDevice(const Command& command) {
   {
     StateLock lock;
     state.connected = true;
-    for (auto& candidate : state.devices) if (candidate.address == device.address && candidate.addressType == device.addressType) candidate.remembered = true;
     if (!connectionCancellation.requested(command.connectionAttempt)) state.operation = "discovering";
     state.discoveryScope = recorderOnly ? "PLAUD recorder service 0x1910" : "all services";
   }
-  recordTrace("connect", device.address, "", 0, nullptr, 0, "Connected");
+  recordTrace("connect", address, "", 0, nullptr, 0, "Connected");
   discoverGatt(client, recorderOnly);
   if (client->isConnected() && !connectionCancellation.requested(command.connectionAttempt)) client->exchangeMTU();
 }
@@ -228,7 +230,7 @@ static void bleWorker(void*) {
         for (int i = 0; i < 500 && !connectionTornDown(command.connectionAttempt); ++i) vTaskDelay(pdMS_TO_TICKS(10));
         if (!connectionTornDown(command.connectionAttempt)) {
           deferredCancellation.store(true);
-          { StateLock lock; state.operation = "cancelling"; state.services.clear(); state.error = "Waiting for Bluetooth connection cancellation."; }
+          { StateLock lock; state.operation = "cancelling"; std::vector<ServiceInfo>().swap(state.services); state.error = "Waiting for Bluetooth connection cancellation."; }
           xSemaphoreGive(cancellationMutex);
           continue;
         }
@@ -238,10 +240,10 @@ static void bleWorker(void*) {
     {
       StateLock lock;
       state.connected = client->getConnHandle() != BLE_HS_CONN_HANDLE_NONE;
-      if (!state.connected) state.services.clear();
+      if (!state.connected) std::vector<ServiceInfo>().swap(state.services);
       if (command.action == Action::Disconnect && state.connected) state.error = "Disconnect did not complete. Try again.";
       if (command.action == Action::Connect && connectionCancellation.requested(command.connectionAttempt)) {
-        state.services.clear();
+        std::vector<ServiceInfo>().swap(state.services);
         state.error = connectionTimedOut.load() ? "Connection timed out." : "Connection cancelled.";
       }
       state.busy = false;

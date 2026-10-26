@@ -1,5 +1,6 @@
 #include "scan_stream.h"
 #include "scan_retention.h"
+#include "scan_encoding.h"
 #include <WebServer.h>
 #include <esp_random.h>
 #include <algorithm>
@@ -73,9 +74,22 @@ void recordAdvertisement(const NimBLEAdvertisedDevice* advertised) {
   auto found = std::find_if(state.devices.begin(), state.devices.end(), [&](const DeviceInfo& device) { return device.address == address && device.addressType == record.addressType; });
   record.id = found == state.devices.end() ? nextId++ : found->id;
   if (!nextId) ++nextId;
-  if (found != state.devices.end()) { if (!record.name[0]) strncpy(record.name, found->name.c_str(), sizeof(record.name) - 1); eraseScanCache(size_t(found - state.devices.begin())); }
+  if (found != state.devices.end() && !record.name[0]) strncpy(record.name, found->name.c_str(), sizeof(record.name) - 1);
   journal.append(record);
   if (ESP.getFreeHeap() < 98304) { evicted += state.devices.size(); state.devices.clear(); state.devices.shrink_to_fit(); return; }
+  if (found != state.devices.end()) {
+    if (scanPayloadMatches(record, found->payloadHex.c_str(), found->payloadHex.length())) {
+      found->rssi = record.rssi; found->lastSeen = record.ms / 1000;
+      found->connectable = record.connectable; found->advType = record.advType;
+      found->hasTxPower = record.hasTxPower; found->txPower = record.txPower;
+      if (found->name != record.name) {
+        found->name = record.name;
+        while (!state.devices.empty() && cacheBytes() > ScanCacheLimitBytes) { eraseScanCache(0); ++evicted; }
+      }
+      return;
+    }
+    eraseScanCache(size_t(found - state.devices.begin()));
+  }
   DeviceInfo device = deviceFrom(record); const size_t incoming = deviceBytes(device);
   while (!state.devices.empty() && !scanCacheFits(state.devices.size(), cacheBytes(), incoming)) {
     const auto oldest = std::min_element(state.devices.begin(), state.devices.end(), [](const DeviceInfo& left, const DeviceInfo& right) { return left.lastSeen < right.lastSeen || (left.lastSeen == right.lastSeen && left.id < right.id); });
@@ -119,7 +133,7 @@ cJSON* scanDeviceJson(const DeviceInfo& device) {
   return item;
 }
 
-void sendAdvertisements(WebServer& server, uint64_t after, const String& expectedBoot) {
+void sendAdvertisements(WebServer& server, uint64_t after, const String& expectedBoot, bool raw) {
   uint64_t end, oldest, dropped, overwritten, truncated; String header;
   {
     StateLock lock;
@@ -140,12 +154,18 @@ void sendAdvertisements(WebServer& server, uint64_t after, const String& expecte
       if (chunk.length() == 3072) { server.sendContent(chunk); chunk = ""; }
     }
   };
-  append(header.c_str()); append("],\"devices\":["); bool first = true;
+  append(header.c_str()); append(raw ? "],\"format\":\"raw-v1\",\"devices\":[" : "],\"devices\":["); bool first = true;
   const uint64_t begin = after >= end ? end + 1 : std::max(after + 1, oldest);
   for (uint64_t seq = begin; seq <= end; ++seq) {
     ScanAdvertisement record; bool available;
     { StateLock lock; available = journal.read(seq, record); }
     if (!available) { ++dropped; continue; }
+    if (raw) {
+      char encoded[ScanJsonCapacity];
+      if (!rawAdvertisementJson(record, encoded, sizeof(encoded))) { ++dropped; continue; }
+      if (!first) append(","); append(encoded); first = false;
+      continue;
+    }
     auto json = scanDeviceJson(deviceFrom(record)); cJSON_AddNumberToObject(json, "seq", double(seq)); cJSON_AddNumberToObject(json, "ms", record.ms);
     cJSON_AddBoolToObject(json, "payloadTruncated", record.truncated()); cJSON_AddNumberToObject(json, "payloadBytes", record.payloadBytes);
     char* raw = cJSON_PrintUnformatted(json); cJSON_Delete(json);

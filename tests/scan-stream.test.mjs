@@ -13,15 +13,35 @@ test('stream polling applies backpressure and advances a boot-scoped cursor', as
   const f = fixture((path, options) => { calls.push({ path, options }); return new Promise(resolve => { finish = resolve; }); });
   const first = f.client.poll(); assert.equal(f.client.poll(), first); assert.equal(calls.length, 1);
   finish(response({ bootId: 'one', cursor: 5 })); await first; assert.equal(f.batches.length, 1);
-  const next = f.client.poll(); assert.equal(calls[1].path, 'advertisements?after=5&bootId=one');
+  const next = f.client.poll(); assert.equal(calls[1].path, 'advertisements?after=5&bootId=one&format=raw');
   finish(response({ bootId: 'one', cursor: 7 })); await next; assert.equal(f.client.status().cursor, 7); f.client.destroy();
 });
 test('a board reboot refetches the retained journal from zero before ingestion', async () => {
   const replies = [{ bootId: 'one', cursor: 5 }, { bootId: 'two', cursor: 20, devices: ['incomplete'] }, { bootId: 'two', cursor: 20, devices: ['retained'] }], paths = [];
   const f = fixture(async path => { paths.push(path); return response(replies.shift()); });
   await f.client.poll(); await f.client.poll();
-  assert.equal(paths[2], 'advertisements?after=0&bootId=one'); assert.equal(f.batches.length, 2);
+  assert.equal(paths[2], 'advertisements?after=0&bootId=one&format=raw'); assert.equal(f.batches.length, 2);
   assert.deepEqual(f.batches[1].batch.devices, ['retained']); f.client.destroy();
+});
+test('raw advertisement batches are decoded before storage and failures preserve the cursor', async () => {
+  const replies = [{ bootId: 'one', cursor: 1, format: 'raw-v1', devices: [{ payloadHex: '03030f1803ff7500' }] },
+    { bootId: 'one', cursor: 2, format: 'raw-v1', devices: [{ payloadHex: 'oops' }] }];
+  const f = fixture(async () => response(replies.shift()));
+  await f.client.poll();
+  assert.deepEqual(f.batches[0].batch.devices[0].services, ['0x180f']);
+  assert.equal(f.batches[0].batch.devices[0].manufacturer, '7500');
+  await f.client.poll();
+  assert.equal(f.client.status().cursor, 1); assert.equal(f.batches.length, 1);
+  assert.match(f.client.status().error, /Invalid raw/); f.client.destroy();
+});
+test('busy buffers drain sooner while normal polling accounts for transfer time', () => {
+  const { nextDelay } = require('../web/scan-stream.js');
+  assert.equal(nextDelay({ capacity: 96, devices: Array(48) }, 100), 50);
+  assert.equal(nextDelay({ capacity: 96, devices: [], dropped: 1 }, 100), 50);
+  assert.equal(nextDelay({ capacity: 96, devices: Array(24) }, 100), 150);
+  assert.equal(nextDelay({ capacity: 96, devices: [] }, 300), 200);
+  assert.equal(nextDelay({ capacity: 96, devices: [] }, 1000), 100);
+  assert.equal(nextDelay({}, 0), 500);
 });
 test('API changes abort the old request and reject late data from that endpoint', async () => {
   const calls = [];

@@ -11,6 +11,7 @@ const canConnect = (state, device, online, pending) => canScan(state, online, pe
 const canRead = (state, characteristic, online, pending) => online && !pending && !state.ble.busy && state.ble.connected && characteristic.properties.includes('read');
 const operationLabel = operation => ({ scanning: 'Scanning continuously', connecting: 'Connecting…', discovering: 'Discovering services…', reading: 'Reading value…', writing: 'Writing value…', subscribing: 'Updating subscription…', disconnecting: 'Disconnecting…' })[operation] || 'Working…';
 const scanAction = ble => ble.scanning ? 'stop-scan' : 'scan';
+const needsStatePoll = (state, online, pending, elapsed) => !online || pending || state.ble.busy || !state.ble.scanning || !state.ble.advertisementStream || elapsed >= 2000;
 const scanStatus = ble => ble.operation === 'usb-hci' ? 'USB controller mode' : ble.busy ? operationLabel(ble.operation) : ble.scanning ? 'Scanning continuously' : ble.connected && ble.scanEnabled ? 'Scanning paused while connected' : 'Scanning stopped';
 function lastSeenLabel(device, uptime) {
   if (!Number.isFinite(device.lastSeen) || !Number.isFinite(uptime)) return '';
@@ -37,9 +38,9 @@ function uuidName(uuid, fallback, serviceUuid = '') {
 }
 let state = { wifi: {}, ble: {}, devices: [], services: [] };
 let online = false, pending = false, selected = '', notice = '', transportError = '', pollPromise, timer, ticking = false;
-let listSignature = '', detailSignature = '';
+let listSignature = '', detailSignature = '', lastRender = 0;
 let vendorDatabase = null, vendorStatus = 'loading';
-let scanStore, scanStream, browserUI, stateController, apiGeneration = 0;
+let scanStore, scanStream, browserUI, stateController, apiGeneration = 0, lastStatePoll = 0;
 const browseDevices = () => scanStore ? scanStore.devices() : state.devices;
 const selectedDevice = () => browseDevices().find(item => deviceKey(item) === selected);
 function selectDevice(device) {
@@ -119,6 +120,7 @@ function renderList() {
   if ($('list-summary')) $('list-summary').textContent = `${devices.length} matching · ${browseDevices().length} in browser`;
 }
 function render() {
+  lastRender = Date.now();
   NanoLab.update(state, online);
   NanoLab.setBackgroundCapture(scanStore?.getPreference('backgroundScan', false));
   const scanning = state.ble.scanning;
@@ -129,7 +131,7 @@ function render() {
   $('scan-label').textContent = scanning ? 'Stop scan' : 'Scan';
   $('scan').setAttribute('aria-label', scanning ? 'Stop scanning' : 'Start scanning');
   $('scan-indicator').hidden = !scanning;
-  $('count').textContent = state.devices.length;
+  $('count').textContent = scanStore?.status().count ?? state.devices.length;
   $('scan-status').textContent = pending ? 'Sending request…' : state.collection?.enabled ? `${state.collection.active ? 'Active' : 'Passive'} collection · ${state.collection.status} · ${state.collection.recordCount} records` : scanStatus(state.ble);
   const error = transportError || notice || state.ble.error;
   $('notice').hidden = !error; $('notice-text').textContent = error || '';
@@ -156,16 +158,18 @@ async function request(path, options = {}) {
     return data;
   } finally { clearTimeout(timeout); options.signal?.removeEventListener('abort', cancel); }
 }
-function poll() {
+function poll({ streamOnly = false } = {}) {
   if (pollPromise) return pollPromise;
   const generation = apiGeneration;
   const pollingController = stateController = new AbortController();
   pollPromise = (async () => {
     try {
-      const next = await request('state?devices=0', { signal: pollingController.signal });
-      if (generation !== apiGeneration) return;
-      state = next; online = true;
-      scanStore?.ingest(state);
+      if (!streamOnly || needsStatePoll(state, online, pending, Date.now() - lastStatePoll)) {
+        const next = await request('state?devices=0', { signal: pollingController.signal });
+        if (generation !== apiGeneration) return;
+        state = next; online = true; lastStatePoll = Date.now();
+        scanStore?.ingest(state);
+      }
       if (state.ble.advertisementStream) {
         await scanStream.poll();
         if (generation !== apiGeneration) return;
@@ -185,7 +189,12 @@ function poll() {
       online = false;
       scanStore?.setOffline();
       transportError = error.name === 'AbortError' ? 'The board took too long to respond. Check its power and Wi-Fi connection.' : 'Cannot reach the board. Check its power and connect to the same Wi-Fi network.';
-    } finally { if (generation === apiGeneration) { NanoPWA.reportConnection(online); render(); } }
+    } finally {
+      if (generation === apiGeneration) {
+        NanoPWA.reportConnection(online);
+        if (!streamOnly || !document.hidden && Date.now() - lastRender >= 500) render();
+      }
+    }
   })().finally(() => { pollPromise = null; });
   return pollPromise;
 }
@@ -205,9 +214,10 @@ async function tick() {
   if ((document.hidden && !scanStore?.getPreference('backgroundScan', false)) || ticking) return;
   ticking = true;
   const generation = apiGeneration;
-  try { await poll(); } finally { ticking = false; }
+  try { await poll({ streamOnly: true }); } finally { ticking = false; }
   if (generation !== apiGeneration) return;
-  const delay = !document.hidden && state.ble.scanning && state.ble.advertisementStream ? 500 : NanoPWA.pollDelay({ background: scanStore?.getPreference('backgroundScan', false) });
+  const collecting = !document.hidden || scanStore?.getPreference('backgroundScan', false);
+  const delay = collecting && online && state.ble.scanning && state.ble.advertisementStream ? Math.max(document.hidden ? 1000 : 0, scanStream.status().delay) : NanoPWA.pollDelay({ background: scanStore?.getPreference('backgroundScan', false) });
   if (delay !== null) timer = setTimeout(tick, delay);
 }
 async function loadVendors() {
@@ -275,8 +285,8 @@ async function boot() {
   $('scan').addEventListener('click', () => mutate(scanAction(state.ble)));
   $('search').addEventListener('input', renderList);
   $('retry').addEventListener('click', tick);
-  document.addEventListener('visibilitychange', () => { clearTimeout(timer); if (!document.hidden) tick(); });
+  document.addEventListener('visibilitychange', () => { clearTimeout(timer); if (!document.hidden || scanStore?.getPreference('backgroundScan', false)) tick(); });
   tick(); loadVendors();
 }
-if (typeof module !== 'undefined') module.exports = { deviceKey, visibleDevices, canScan, canConnect, canRead, uuidName, operationLabel, scanAction, scanStatus, lastSeenLabel };
+if (typeof module !== 'undefined') module.exports = { deviceKey, visibleDevices, canScan, canConnect, canRead, uuidName, operationLabel, scanAction, scanStatus, lastSeenLabel, needsStatePoll };
 if (typeof document !== 'undefined') boot();

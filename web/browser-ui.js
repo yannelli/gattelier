@@ -41,12 +41,12 @@ const NanoBrowserUI = (() => {
     });
     function update() {
       const status = store.status(), stream = status.stream, text = status.persistent ? 'Saved in this browser' : 'In-memory session';
-      const offload = stream?.active ? ' · offload active' : '';
+      const offload = stream?.active ? stream.format === 'raw-v1' ? ' · browser decoding' : ' · offload active' : '';
       const gaps = stream?.gaps ? ` · ${stream.gaps} updates missed` : '';
       get('history-status').textContent = `${text} · ${status.count} devices${offload}${gaps}`;
       const offloadStatus = get('scan-offload-status'), detail = get('scan-offload-detail');
       if (offloadStatus) offloadStatus.textContent = stream?.error || (stream?.active ? `${stream.received} updates received. ${status.count} devices in this browser.${stream.gaps ? ` ${stream.gaps} updates missed while the board buffer filled.` : ''}` : 'Offload starts when the board advertisement stream is available.');
-      if (detail) detail.textContent = stream?.active ? `The board keeps a temporary RAM buffer; discovery history stays in this browser.${Number.isFinite(stream.cacheBytes) ? ` Device cache: ${Math.ceil(stream.cacheBytes / 1024)} KB.` : ''}${Number.isFinite(stream.journalBytes) ? ` Transfer buffer: ${Math.ceil(stream.journalBytes / 1024)} KB.` : ''}${stream.truncatedTotal ? ` ${stream.truncatedTotal} oversized advertisements were shortened.` : ''} Keep the app open to receive updates. Background collection is controlled below.` : 'Discovery history stays in this browser. The board uses a bounded RAM buffer without writing scan history to flash.';
+      if (detail) detail.textContent = stream?.active ? `${stream.format === 'raw-v1' ? 'This browser decodes raw advertisements and stores discovery history.' : 'Discovery history stays in this browser. Update board firmware to offload advertisement decoding too.'}${Number.isFinite(stream.cacheBytes) ? ` Board device cache: ${Math.ceil(stream.cacheBytes / 1024)} KB.` : ''}${Number.isFinite(stream.journalBytes) ? ` Transfer buffer: ${Math.ceil(stream.journalBytes / 1024)} KB.` : ''}${stream.truncatedTotal ? ` ${stream.truncatedTotal} oversized advertisements were shortened.` : ''} Keep the app open to receive updates. Background collection is controlled below.` : 'Discovery history stays in this browser. The board uses a bounded RAM buffer without writing scan history to flash.';
       get('storage-status').textContent = `${text}. ${status.count} devices retained.${status.evicted ? ` ${status.evicted} older records evicted.` : ''}${status.error ? ` ${status.error}` : ''}`;
     }
     return {

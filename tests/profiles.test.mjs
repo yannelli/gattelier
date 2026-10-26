@@ -9,13 +9,15 @@ test('Find My envelope is recognized without inferring an AirTag model', () => {
   const result = profiles.identify({ manufacturer: '4c001219' + '00'.repeat(25) });
   assert.equal(result.category, 'tracker');
   assert.equal(result.title, 'Find My-compatible broadcast');
-  for (const manufacturer of ['4c00', '4c001219', '5900' + '00'.repeat(27)]) assert.equal(profiles.identify({ manufacturer }).category, 'other');
+  for (const manufacturer of ['4c00', '4c001219']) assert.equal(profiles.identify({ manufacturer }).category, 'vendor');
+  assert.equal(profiles.identify({ manufacturer: '5900' + '00'.repeat(27) }).category, 'other');
 });
 test('iBeacon decodes UUID, big-endian identifiers, and signed calibrated power', () => {
   const result = profiles.identify({ manufacturer: '4c00021500112233445566778899aabbccddeeff00010002c5' });
   assert.equal(result.category, 'beacon');
   assert.deepEqual(fields(result), { 'Beacon UUID': '00112233-4455-6677-8899-aabbccddeeff', Major: 1, Minor: 2, 'Calibrated TX at 1 m': '-59 dBm' });
-  assert.equal(profiles.identify({ manufacturer: '4c00021500' }).category, 'other');
+  const incomplete = profiles.identify({ manufacturer: '4c00021500' });
+  assert.equal(incomplete.category, 'vendor'); assert.equal(incomplete.confidence, 'Partial advertisement');
 });
 test('Eddystone parses UID, URL and telemetry with unsupported and malformed frames retained as evidence', () => {
   const frame = hex => profiles.identify({ serviceData: [{ uuid: '0xfeaa', hex }] });

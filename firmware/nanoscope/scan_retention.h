@@ -50,6 +50,15 @@ template <size_t Capacity> class ScanJournal {
 
 static_assert(sizeof(ScanJournal<ScanJournalCapacity>) <= ScanJournalLimitBytes, "Advertisement journal exceeds its byte budget");
 
+inline bool scanPayloadMatches(const ScanAdvertisement& record, const char* hex, size_t length) {
+  if (length != record.length() * 2) return false;
+  const char* digits = "0123456789abcdef";
+  for (size_t i = 0; i < record.length(); ++i) {
+    if (hex[i * 2] != digits[record.payload[i] >> 4] || hex[i * 2 + 1] != digits[record.payload[i] & 15]) return false;
+  }
+  return true;
+}
+
 inline bool scanCacheFits(size_t count, size_t retainedBytes, size_t incomingBytes) {
   return count < ScanCacheCapacity && retainedBytes <= ScanCacheLimitBytes && incomingBytes <= ScanCacheLimitBytes - retainedBytes;
 }

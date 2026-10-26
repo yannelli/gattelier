@@ -100,7 +100,11 @@ const NanoProfiles = (() => {
         field(samsung.confidence === 'Name candidate' ? 'Manufacturer candidate' : 'Assigned company', 'Samsung Electronics'); field('Advertised services', services.join(', ') || 'None');
       }
     }
-    if (result.category === 'other') { result.evidence.push('No supported device profile matched.'); field('Advertised services', services.join(', ') || 'None'); }
+    if (result.category === 'other') {
+      const apps = typeof NanoDeviceApps !== 'undefined' ? NanoDeviceApps : typeof module !== 'undefined' ? require('./device-apps.js') : null;
+      const profile = apps?.identify(device); if (profile) return profile;
+      result.evidence.push('No supported device profile matched.'); field('Advertised services', services.join(', ') || 'None');
+    }
     return result;
   }
   function catalog() {
@@ -111,7 +115,8 @@ const NanoProfiles = (() => {
       { category: 'sleep', title: 'Sleep Number', description: 'Fuzion and MCR identification; paired Fuzion queries.' },
       { category: 'sensor', title: 'Environmental sensors', description: 'BTHome v2 and Ruuvi measurements from broadcasts.' },
       { category: 'recorder', title: 'Recorders', description: 'PLAUD and Pocket protocol identification.' },
-      { category: 'vendor', title: 'Samsung devices', description: 'Manufacturer and service evidence without assuming a TV or other model.' },
+      { category: 'vendor', title: 'Apple & Samsung', description: 'Manufacturer evidence, AirPods battery levels, and Continuity messages.' },
+      { category: 'appliance', title: 'Home appliances', description: 'Nespresso Vertuo and Levoit Core 200S identification and decoded state.' },
       { category: 'other', title: 'BLE metadata', description: 'Advertising structures and unclassified devices.' }
     ];
   }

@@ -22,6 +22,7 @@
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.5 var(--font); -webkit-font-smoothing: antialiased; }
 button, input, select, textarea { font: inherit; }
+input, select, textarea { min-width: 0; }
 button { cursor: pointer; }
 button:disabled { cursor: default; opacity: .45; }
 button, input, a { -webkit-tap-highlight-color: transparent; }
@@ -42,7 +43,7 @@ main { max-width: 1312px; padding: 45px 32px 24px; margin: auto; }
 .eyebrow { color: var(--muted); font-size: 11px; font-weight: 650; letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 8px; }
 h1 { font-size: clamp(25px, 2.65vw, 34px); letter-spacing: -1.1px; font-weight: 650; line-height: 1.2; }
 .intro-copy { color: var(--muted); font-size: 14px; margin-top: 12px; }
-.button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; border: 0; border-radius: var(--radius-small); min-height: 44px; padding: 10px 17px; font-size: 13px; font-weight: 600; white-space: nowrap; transition: background .15s; }
+.button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; border: 0; border-radius: var(--radius-small); min-height: 44px; max-width: 100%; padding: 10px 17px; font-size: 13px; font-weight: 600; line-height: 1.5; text-align: center; text-decoration: none; white-space: normal; transition: background .15s; }
 .primary { background: var(--accent); color: white; }
 .primary:hover:enabled { background: var(--accent-hover); }
 .secondary { background: var(--accent-soft); color: var(--accent); }

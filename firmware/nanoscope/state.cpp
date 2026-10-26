@@ -27,9 +27,9 @@ static void addText(cJSON* object, const char* key, const String& value) {
   cJSON_AddStringToObject(object, key, value.c_str());
 }
 
-static void addStrings(cJSON* object, const char* key, const std::vector<String>& values) {
-  auto array = cJSON_AddArrayToObject(object, key);
-  for (const auto& value : values) cJSON_AddItemToArray(array, cJSON_CreateString(value.c_str()));
+static void addProperties(cJSON* object, uint8_t properties) {
+  auto array = cJSON_AddArrayToObject(object, "properties");
+  for (const auto& property : GattProperties) if (properties & property.flag) cJSON_AddItemToArray(array, cJSON_CreateString(property.name));
 }
 
 static String jsonText(cJSON* value) {
@@ -128,7 +128,7 @@ void sendState(WebServer& server) {
         auto value = cJSON_CreateObject();
         addText(value, "uuid", characteristic.uuid);
         cJSON_AddNumberToObject(value, "handle", characteristic.handle);
-        addStrings(value, "properties", characteristic.properties);
+        addProperties(value, characteristic.properties);
         addText(value, "subscription", characteristic.subscription);
         auto descriptors = cJSON_AddArrayToObject(value, "descriptors");
         for (const auto& descriptor : characteristic.descriptors) {
