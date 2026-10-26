@@ -7,5 +7,6 @@ if [ ! -x .tools/arduino-cli ]; then
   tar -xzf .tools/arduino-cli.tar.gz -C .tools arduino-cli
 fi
 .tools/arduino-cli core update-index --config-file arduino-cli.yaml
-.tools/arduino-cli core install esp32:esp32@3.3.2 --config-file arduino-cli.yaml
-.tools/arduino-cli lib install 'NimBLE-Arduino@2.5.1' --config-file arduino-cli.yaml
+.tools/arduino-cli core install esp32:esp32@3.3.12 --config-file arduino-cli.yaml
+.tools/arduino-cli lib update-index --config-file arduino-cli.yaml
+.tools/arduino-cli lib install 'NimBLE-Arduino@2.5.2' --config-file arduino-cli.yaml

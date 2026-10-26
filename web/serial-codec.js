@@ -26,7 +26,7 @@ var NanoSerialCodec = (() => {
     return Uint8Array.from(binary, character => character.charCodeAt(0));
   }
 
-  function parser(onFrame) {
+  function parser(onFrame, options = {}) {
     const decoder = new TextDecoder('utf-8', { fatal: true });
     let pending = '';
     return chunk => {
@@ -36,7 +36,11 @@ var NanoSerialCodec = (() => {
         const line = pending.slice(0, end).replace(/\r$/, '');
         pending = pending.slice(end + 1);
         if (line.length > limits.line) throw new Error('USB response line exceeds its limit.');
-        if (line.startsWith('@G1 ')) onFrame(JSON.parse(line.slice(4)));
+        if (line.startsWith('@G1 ')) {
+          let frame;
+          try { frame = JSON.parse(line.slice(4)); } catch (error) { if (options.ignoreMalformed?.()) continue; throw error; }
+          onFrame(frame);
+        }
       }
       if (pending.length > limits.line) throw new Error('USB response line exceeds its limit.');
     };

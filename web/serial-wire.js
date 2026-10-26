@@ -8,7 +8,8 @@ var NanoSerialWire = (() => {
     const timers = options.timers || globalThis;
     const reader = port.readable.getReader(), writer = port.writable.getWriter();
     const queue = [];
-    let current, stopped = false, cleanup, nextId = 1;
+    let current, stopped = false, cleanup, nextId = options.initialId || 1;
+    let synchronized = !options.synchronize;
 
     function settle(item, error, response) {
       if (item.settled) return;
@@ -36,15 +37,18 @@ var NanoSerialWire = (() => {
       if (stopped || current || !queue.length) return;
       const item = current = queue.shift();
       item.timer = timers.setTimeout(() => close(new Error('USB board response timed out. Switch the board to workbench mode with a triple press, or update its firmware.')), item.timeout);
-      writer.write(item.bytes).catch(error => close(error));
+      const bytes = synchronized ? item.bytes : Uint8Array.of(10, ...item.bytes);
+      writer.write(bytes).catch(error => close(error));
     }
 
     function onFrame(frame) {
+      if (!synchronized && (frame?.id !== current?.id || frame?.event !== 'start')) return;
       if (!frame || frame.v !== 1 || !Number.isInteger(frame.id) || frame.id <= 0 || frame.id > 0xffffffff) throw new Error('Invalid USB response frame.');
       if (!current || frame.id !== current.id) throw new Error('Unexpected USB response ID.');
       const item = current;
       if (frame.event === 'start') {
         if (item.start || !Number.isInteger(frame.status) || frame.status < 200 || frame.status > 599 || typeof frame.type !== 'string') throw new Error('Invalid USB response start.');
+        synchronized = true;
         item.start = frame;
         item.headers = new Headers(frame.headers || {});
         if (frame.type) item.headers.set('Content-Type', frame.type);
@@ -70,7 +74,7 @@ var NanoSerialWire = (() => {
       } else throw new Error('Unknown USB response frame.');
     }
 
-    const parse = codec.parser(onFrame);
+    const parse = codec.parser(onFrame, { ignoreMalformed: () => !synchronized });
     (async () => {
       try {
         while (!stopped) {

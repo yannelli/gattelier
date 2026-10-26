@@ -67,7 +67,8 @@ var NanoSerial = (() => {
         try { await selected.setSignals({ requestToSend: false, dataTerminalReady: true }); } catch {}
         if (generation !== token) throw new DOMException('USB connection canceled.', 'AbortError');
         port = selected;
-        connection = wire = Wire.create(port, { ...options, onClose: reason => { if (generation === token) lost(reason); } });
+        const initialId = options.initialId || globalThis.crypto?.getRandomValues(new Uint32Array(1))[0] || Math.floor(Math.random() * 0xffffffff) + 1;
+        connection = wire = Wire.create(port, { ...options, synchronize: true, initialId, onClose: reason => { if (generation === token) lost(reason); } });
         const body = await session('open', wifiOff);
         if (generation !== token) throw new DOMException('USB connection canceled.', 'AbortError');
         wifiSuspended = Boolean(body.wifiSuspended); state = 'connected'; error = ''; notify();

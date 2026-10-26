@@ -172,7 +172,7 @@ function poll({ streamOnly = false } = {}) {
         state = next; online = true; lastStatePoll = Date.now();
         scanStore?.ingest(state);
       }
-      if (state.ble.advertisementStream) {
+      if (state.ble.advertisementStream && state.ble.scanning && !state.ble.busy && !state.ble.connected) {
         await scanStream.poll();
         if (generation !== apiGeneration) return;
         if (scanStream.status().supported === false) {
@@ -188,9 +188,13 @@ function poll({ streamOnly = false } = {}) {
       }
     } catch (error) {
       if (generation !== apiGeneration) return;
-      online = false;
-      scanStore?.setOffline();
-      transportError = NanoAPI.transport() === 'serial' ? NanoAPI.serialStatus().error || 'USB is unavailable. Connect the board in Settings.' : error.name === 'AbortError' ? 'The board took too long to respond. Check its power and Wi-Fi connection.' : 'Cannot reach the board. Check its power and connect to the same Wi-Fi network.';
+      if (error.name === 'AbortError' && online && NanoAPI.transport() === 'serial' && NanoAPI.serialStatus().connected) {
+        transportError = 'USB is connected. Board status refresh is delayed; waiting for the next update.';
+      } else {
+        online = false;
+        scanStore?.setOffline();
+        transportError = NanoAPI.transport() === 'serial' ? NanoAPI.serialStatus().error || 'USB is unavailable. Connect the board in Settings.' : error.name === 'AbortError' ? 'The board took too long to respond. Check its power and Wi-Fi connection.' : 'Cannot reach the board. Check its power and connect to the same Wi-Fi network.';
+      }
     } finally {
       if (generation === apiGeneration) {
         NanoPWA.reportConnection(online);
@@ -252,7 +256,7 @@ async function boot() {
   selected = scanStore.getPreference('selectedDevice', '');
   browserUI = NanoBrowserUI.mount(scanStore, { change: () => { listSignature = ''; detailSignature = ''; render(); tick(); }, getSelected: selectedDevice, getState: () => state });
   NanoWorkspace.init({ getPreference: (key, fallback) => scanStore.getPreference(key, fallback), setPreference: (key, value) => scanStore.setPreference(key, value), onChange: render });
-  document.addEventListener('nanoscope:state', event => { state = event.detail; scanStore.ingest(state); online = true; render(); });
+  document.addEventListener('nanoscope:state', event => { state = event.detail; scanStore.ingest(state); online = true; transportError = ''; render(); });
   document.addEventListener('nanoscope:busy', event => { pending = event.detail; render(); });
   globalThis.addEventListener('nanoscope:api-change', () => {
     apiGeneration++; stateController?.abort(); scanStream.reset();

@@ -144,7 +144,7 @@ test('closing rejects queued work and prioritizes Wi-Fi restoration after active
   const active = assert.rejects(client.fetch('/api/state'), { name: 'AbortError' });
   const queued = assert.rejects(client.fetch('/api/events'), /closing/);
   const closing = client.close();
-  port.respond(2, '{}');
+  port.respond(port.requests.at(-1).id, '{}');
   await Promise.all([active, queued, closing]);
   assert.deepEqual(port.requests.map(request => request.path), ['/api/serial', '/api/state', '/api/serial']);
   assert.equal(JSON.parse(port.requests[2].body).action, 'close');

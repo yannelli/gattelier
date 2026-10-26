@@ -4,13 +4,15 @@ export function frame(value) { return `@G1 ${JSON.stringify({ v: 1, ...value })}
 
 export class FakePort {
   requests = [];
+  writes = [];
   closes = 0;
   async open(options) {
     this.openOptions = options;
     this.readable = new ReadableStream({ start: controller => { this.input = controller; } });
     this.writable = new WritableStream({
       write: bytes => {
-        const request = JSON.parse(new TextDecoder().decode(bytes).slice(4));
+        this.writes.push(bytes);
+        const request = JSON.parse(new TextDecoder().decode(bytes).trimStart().slice(4));
         this.requests.push(request);
         if (this.onRequest) return this.onRequest(request);
         if (request.path === '/api/serial') {
