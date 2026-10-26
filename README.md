@@ -67,7 +67,14 @@ npm run build:cloud
 
 The hosted app runs on Cloudflare Workers. On iPhone, open its HTTPS URL in Safari and choose Share > Add to Home Screen. The app caches its files for offline launch; live tools wait for the board connection. Settings includes a manual cache refresh.
 
-Connect this GitHub repository in Cloudflare Workers Builds, choose `main`, set the build command to `npm test && npm run build:cloud`, and the deploy command to `npx wrangler deploy`. Pushes to `main` then deploy automatically. The GitHub Check workflow also runs tests and validates the Workers build.
+The GitHub workflow tests each update and deploys successful pushes to `main`. Deployment needs two repository settings:
+
+| Setting | GitHub location |
+| --- | --- |
+| `CLOUDFLARE_ACCOUNT_ID` | Actions variable |
+| `CLOUDFLARE_API_TOKEN` | Actions secret |
+
+Use a Cloudflare token with Workers deployment permission for the target account. The deploy job stays disabled until the account ID is set. After adding both settings, run the Check workflow manually or push a commit. Cloudflare's [GitHub Actions guide](https://developers.cloudflare.com/workers/ci-cd/external-cicd/github-actions/) covers token setup.
 
 Cloudflare Workers hosts only the static app files. The browser stores recorder credentials and private keys locally. The app sends board API requests directly to the board or through the private bridge.
 
