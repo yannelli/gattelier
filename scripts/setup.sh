@@ -10,3 +10,5 @@ fi
 .tools/arduino-cli core install esp32:esp32@3.3.12 --config-file arduino-cli.yaml
 .tools/arduino-cli lib update-index --config-file arduino-cli.yaml
 .tools/arduino-cli lib install 'NimBLE-Arduino@2.5.2' --config-file arduino-cli.yaml
+[ -x .tools/python/bin/python3 ] || python3 -m venv .tools/python
+.tools/python/bin/pip install -q 'zopfli==0.4.3'

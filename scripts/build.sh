@@ -6,7 +6,9 @@ test -f firmware/nanoscope/secrets.h || {
   exit 1
 }
 npm run build:web
-python3 scripts/embed_web.py
+python=.tools/python/bin/python3
+[ -x "$python" ] || python=python3
+"$python" scripts/embed_web.py
 .tools/arduino-cli compile --config-file arduino-cli.yaml \
   --fqbn 'esp32:esp32:esp32c6:CDCOnBoot=cdc,FlashSize=4M,PartitionScheme=huge_app' \
   --warnings all --build-path "$PWD/build" firmware/nanoscope
