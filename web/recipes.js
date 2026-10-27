@@ -137,14 +137,14 @@ const NanoRecipes = (() => {
     add('Validate', () => { const recipe = read(); status.textContent = `Valid: ${recipe.steps.length} steps.`; }, 'validate');
     add('Run', async () => { log.replaceChildren(); const task = runner.execute(read()); sync(); await task; }, 'run');
     add('Cancel', () => { runner.cancel(); status.textContent = 'Cancelling…'; }, 'cancel');
-    add('Save recipe', () => {
+    add('Save', () => {
       const recipe = read(); safe(recipe); const index = saved.findIndex(item => item.name === recipe.name);
       if (index < 0 && saved.length >= 20) throw new Error('20 recipes are saved. Reuse an existing name to replace one.');
       if (index < 0) saved.push(recipe); else saved[index] = recipe;
       try { localStorage.setItem('nanoscope.recipes.v1', JSON.stringify(saved)); persistent = true; } catch { persistent = false; }
       renderSaved(); status.textContent = persistent ? 'Recipe saved in this browser.' : 'Recipe kept in memory. Browser storage failed.';
     }, 'save');
-    add('Export recipe', () => {
+    add('Export', () => {
       const recipe = read(); safe(recipe); const url = URL.createObjectURL(new Blob([JSON.stringify(recipe, null, 2)], { type: 'application/json' }));
       const link = el('a'); link.href = url; link.download = `${recipe.name.replace(/[^a-z0-9_-]/gi, '_')}.json`; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); status.textContent = '';
     }, 'export');
@@ -161,10 +161,12 @@ const NanoRecipes = (() => {
     } catch { persistent = false; saved = []; }
     const help = el('details'); help.append(el('summary', '', 'Recipe format'));
     help.append(el('p', 'vendor-note', 'Version 1: name, optional target address, and 1–32 steps. Every step has action and uuid. Add service and zero-based instance to resolve repeated UUIDs; instances follow ascending handles. write uses hex and response; subscribe uses mode notify/indicate/off; wait accepts optional HEX prefix. timeoutMs: 100–30000, default 10000. Wait consumes the next matching notification received during this run, including replies received during the preceding write. Cancel stops later steps.'));
-    const library = el('div', 'recipe-library'), advanced = el('details', 'recipe-advanced');
-    advanced.append(el('summary', '', 'Edit, save, or import a recipe'), savedSelect, storageStatus, editor, importFile, help);
+    const library = el('div', 'recipe-library'), advanced = el('details', 'recipe-advanced'), editorActions = el('div', 'inspector-shortcuts'), importButton = el('label', 'button quiet file-button', 'Import');
+    // Run leads the primary row; saving and exporting act on the editor, so they live beside it.
+    buttons.run.className = 'button primary'; controls.prepend(buttons.run); importButton.append(importFile); editorActions.append(buttons.save, buttons.export, importButton);
+    advanced.append(el('summary', '', 'Editor & saved recipes'), savedSelect, storageStatus, editor, editorActions, help);
     body.append(library, status, controls, log, advanced); container.replaceChildren(heading, body);
-    NanoRecipeBrowser.mount(library, lab, recipe => { editor.value = JSON.stringify(recipe, null, 2); status.textContent = `${recipe.name} loaded. Press Run to execute on the connected device.`; });
+    NanoRecipeBrowser.mount(library, lab, recipe => { editor.value = JSON.stringify(recipe, null, 2); status.textContent = `${recipe.name} loaded.`; });
     renderSaved(); sync(); lab.onState((state, online = true) => { available = online; sync(); });
   }
   return { mount, createRunner };
