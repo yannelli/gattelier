@@ -39,7 +39,8 @@ const NanoInsights = (() => {
     for (const tool of NanoProfiles.catalog()) {
       const card = el('button', 'profile-tool'); card.type = 'button';
       const matches = devices.filter(item => NanoProfiles.identify(item).category === tool.category);
-      card.append(el('span', 'eyebrow', `${matches.length} seen`), el('strong', '', tool.title), el('span', '', tool.description));
+      card.classList.toggle('empty-tool', !matches.length); card.setAttribute('aria-label', `${tool.title}: ${matches.length} seen. Show in Discover`); card.title = tool.description;
+      card.append(el('strong', '', tool.title), el('span', 'profile-count', String(matches.length)), el('span', '', tool.description));
       card.addEventListener('click', () => filter(tool.category)); catalog.append(card);
     }
     fragment.append(catalog);
