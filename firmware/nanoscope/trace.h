@@ -3,13 +3,15 @@
 
 struct TraceEvent {
   uint32_t seq = 0, ms = 0;
-  String kind, address, uuid, hex, message;
+  const char* kind = "";  // Always a string literal, so no copy is kept.
+  char address[18] = {};
+  String uuid, hex, message;
   uint16_t handle = 0, length = 0;
   bool success = true, truncated = false, redacted = false;
 };
 
 void startTrace();
-void recordTrace(const String& kind, const String& address, const String& uuid,
+void recordTrace(const char* kind, const String& address, const String& uuid,
                  uint16_t handle, const uint8_t* data, size_t length,
                  const String& message = "", bool success = true);
 class BoardServer;

@@ -20,15 +20,16 @@ void startTrace() {
   bootId = String(esp_random(), HEX);
 }
 
-void recordTrace(const String& kind, const String& address, const String& uuid,
+void recordTrace(const char* kind, const String& address, const String& uuid,
                  uint16_t handle, const uint8_t* data, size_t length,
                  const String& message, bool success) {
-  if (kind == "read" || kind == "write" || kind == "notification" || kind == "indication" ||
-      kind == "connect" || kind == "disconnect" || kind == "mtu" || kind == "subscribe-result") signalActivityLed();
+  for (const char* traffic : {"read", "write", "notification", "indication", "connect", "disconnect", "mtu", "subscribe-result"}) {
+    if (!strcmp(kind, traffic)) { signalActivityLed(); break; }
+  }
   TraceEvent event;
   event.ms = millis();
   event.kind = kind;
-  event.address = address;
+  strlcpy(event.address, address.c_str(), sizeof(event.address));
   event.uuid = uuid;
   event.handle = handle;
   event.length = length;
@@ -42,7 +43,7 @@ void recordTrace(const String& kind, const String& address, const String& uuid,
              (uuid == "0x2bb1" || uuid == "00002bb1-0000-1000-8000-00805f9b34fb")) {
     event.message = "PLAUD authentication signature sent (redacted)";
     event.redacted = true;
-  } else if (data && kind == "write" &&
+  } else if (data && !strcmp(kind, "write") &&
              (uuid == "f8083535-849e-531c-c594-30f1f86a4ea5" || uuid == "f8083538-849e-531c-c594-30f1f86a4ea5")) {
     event.message = "Dexcom authentication payload sent (redacted)";
     event.redacted = true;
@@ -50,7 +51,7 @@ void recordTrace(const String& kind, const String& address, const String& uuid,
     event.hex = hexBytes(data, std::min(length, size_t(512)));
   }
   xSemaphoreTake(traceMutex, portMAX_DELAY);
-  const size_t cost = event.hex.length() + event.kind.length() + event.address.length() + event.uuid.length() + event.message.length() + 80;
+  const size_t cost = event.hex.length() + event.uuid.length() + event.message.length() + 80;
   while (!retention.empty() && !retention.room(cost)) {
     events[(retention.first - 1) % events.size()] = TraceEvent{};
     retention.discard();
@@ -65,8 +66,8 @@ static String eventJson(const TraceEvent& event) {
   auto item = cJSON_CreateObject();
   cJSON_AddNumberToObject(item, "seq", event.seq);
   cJSON_AddNumberToObject(item, "ms", event.ms);
-  cJSON_AddStringToObject(item, "kind", event.kind.c_str());
-  cJSON_AddStringToObject(item, "address", event.address.c_str());
+  cJSON_AddStringToObject(item, "kind", event.kind);
+  cJSON_AddStringToObject(item, "address", event.address);
   cJSON_AddStringToObject(item, "uuid", event.uuid.c_str());
   cJSON_AddNumberToObject(item, "handle", event.handle);
   cJSON_AddStringToObject(item, "hex", event.hex.c_str());
