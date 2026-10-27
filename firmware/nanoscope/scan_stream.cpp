@@ -49,7 +49,7 @@ static DeviceInfo deviceFrom(const ScanAdvertisement& record) {
   device.id = record.id; device.address = record.address; device.name = record.name; device.addressType = record.addressType;
   device.rssi = record.rssi; device.connectable = record.connectable; device.lastSeen = record.ms / 1000;
   device.advType = record.advType; device.hasTxPower = record.hasTxPower; device.txPower = record.txPower;
-  device.payloadHex = hexBytes(record.payload, record.length());
+  device.payloadHex = hexBytes(record.payload, record.length()); device.payloadTruncated = record.truncated();
   for (size_t at = 0; at < record.length();) {
     const size_t length = record.payload[at++];
     if (!length || at + length > record.length()) break;
@@ -90,7 +90,7 @@ void recordAdvertisement(const NimBLEAdvertisedDevice* advertised) {
     if (scanPayloadMatches(record, found->payloadHex.c_str(), found->payloadHex.length())) {
       found->rssi = record.rssi; found->lastSeen = record.ms / 1000;
       found->connectable = record.connectable; found->advType = record.advType;
-      found->hasTxPower = record.hasTxPower; found->txPower = record.txPower;
+      found->hasTxPower = record.hasTxPower; found->txPower = record.txPower; found->payloadTruncated = record.truncated();
       if (found->name != record.name) {
         found->name = record.name;
         while (!state.devices.empty() && cacheBytes() > ScanCacheLimitBytes) { eraseScanCache(0); ++evicted; }
@@ -138,6 +138,7 @@ cJSON* scanDeviceJson(const DeviceInfo& device) {
   cJSON_AddNumberToObject(item, "addressType", device.addressType); cJSON_AddNumberToObject(item, "rssi", device.rssi); cJSON_AddBoolToObject(item, "connectable", device.connectable);
   cJSON_AddBoolToObject(item, "remembered", device.remembered); cJSON_AddNumberToObject(item, "lastSeen", device.lastSeen);
   cJSON_AddStringToObject(item, "manufacturer", device.manufacturer.c_str()); cJSON_AddStringToObject(item, "payloadHex", device.payloadHex.c_str()); cJSON_AddNumberToObject(item, "advType", device.advType);
+  cJSON_AddBoolToObject(item, "payloadTruncated", device.payloadTruncated);
   if (device.hasTxPower) cJSON_AddNumberToObject(item, "txPower", device.txPower); else cJSON_AddNullToObject(item, "txPower");
   auto services = cJSON_AddArrayToObject(item, "services"); for (const auto& uuid : device.services) cJSON_AddItemToArray(services, cJSON_CreateString(uuid.c_str()));
   auto data = cJSON_AddArrayToObject(item, "serviceData");
@@ -191,7 +192,7 @@ void sendAdvertisements(BoardServer& server, uint64_t after, const String& expec
       continue;
     }
     auto json = scanDeviceJson(deviceFrom(record)); cJSON_AddNumberToObject(json, "seq", double(seq)); cJSON_AddNumberToObject(json, "ms", record.ms);
-    cJSON_AddBoolToObject(json, "payloadTruncated", record.truncated()); cJSON_AddNumberToObject(json, "payloadBytes", record.payloadBytes);
+    cJSON_AddNumberToObject(json, "payloadBytes", record.payloadBytes);
     char* raw = cJSON_PrintUnformatted(json); cJSON_Delete(json);
     if (!raw) { ++dropped; continue; }
     if (!first) append(","); append(raw); first = false; cJSON_free(raw);

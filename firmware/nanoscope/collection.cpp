@@ -215,7 +215,7 @@ void updateCollection() {
       cJSON_AddNumberToObject(item, "advType", device.advType); cJSON_AddStringToObject(item, "manufacturer", device.manufacturer.c_str());
       static_assert(ScanPayloadCapacity * 2 <= 1024, "Cached payloads must fit the collection record without truncation");
       cJSON_AddStringToObject(item, "payloadHex", device.payloadHex.c_str());
-      cJSON_AddBoolToObject(item, "payloadTruncated", device.payloadHex.length() > 1024);
+      cJSON_AddBoolToObject(item, "payloadTruncated", device.payloadTruncated);
       auto services = cJSON_AddArrayToObject(item, "services");
       for (const auto& uuid : device.services) cJSON_AddItemToArray(services, cJSON_CreateString(uuid.c_str()));
       enqueue(item);

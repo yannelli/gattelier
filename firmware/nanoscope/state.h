@@ -17,6 +17,7 @@ struct DeviceInfo {
   bool hasTxPower = false;
   bool connectable = false;
   bool remembered = false;
+  bool payloadTruncated = false;
   uint32_t lastSeen = 0;
   std::vector<String> services;
   std::vector<ServiceDataInfo> serviceData;
