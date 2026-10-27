@@ -37,10 +37,11 @@ struct ScanAdvertisement {
 
 template <size_t Capacity> class ScanJournal {
  public:
-  void append(ScanAdvertisement value) {
-    value.seq = ++sequence_;
-    if (value.truncated()) ++truncated_;
-    records_[(value.seq - 1) % Capacity] = value;
+  void append(const ScanAdvertisement& value) {
+    auto& record = records_[sequence_ % Capacity];
+    record = value;
+    record.seq = ++sequence_;
+    if (record.truncated()) ++truncated_;
   }
   uint64_t next() const { return sequence_; }
   uint64_t oldest() const { return sequence_ >= Capacity ? sequence_ - Capacity + 1 : 1; }

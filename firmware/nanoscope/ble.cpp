@@ -254,7 +254,7 @@ static void bleWorker(void*) {
   }
 }
 
-bool queueCommand(Command command, String& error) {
+bool queueCommand(Command& command, String& error) {
   if (usbHciMode()) { error = "Restore Bluetooth workbench mode before using web BLE commands."; return false; }
   if (collectionEnabled() && (command.action == Action::Scan || command.action == Action::StopScan)) { error = "Stop collection in Settings or hold the button for 3 seconds before using manual scanning."; return false; }
   StateLock lock;

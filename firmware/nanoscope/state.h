@@ -71,7 +71,7 @@ struct Command {
 };
 
 void startBle();
-bool queueCommand(Command command, String& error);
+bool queueCommand(Command& command, String& error);
 bool cancelConnection(const String& address, uint8_t addressType, uint32_t attempt, String& error);
 bool connectionCancellationRequested();
 void updateConnectionCancellation();
