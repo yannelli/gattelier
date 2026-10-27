@@ -5,6 +5,7 @@
 #include <Preferences.h>
 #include "board_server.h"
 #include "http_access.h"
+#include "scan_retention.h"
 #include <esp_random.h>
 #include <deque>
 
@@ -212,7 +213,8 @@ void updateCollection() {
       cJSON_AddStringToObject(item, "name", device.name.c_str()); cJSON_AddNumberToObject(item, "rssi", device.rssi);
       cJSON_AddNumberToObject(item, "lastSeenSeconds", device.lastSeen); cJSON_AddBoolToObject(item, "connectable", device.connectable);
       cJSON_AddNumberToObject(item, "advType", device.advType); cJSON_AddStringToObject(item, "manufacturer", device.manufacturer.c_str());
-      cJSON_AddStringToObject(item, "payloadHex", device.payloadHex.substring(0, 1024).c_str());
+      static_assert(ScanPayloadCapacity * 2 <= 1024, "Cached payloads must fit the collection record without truncation");
+      cJSON_AddStringToObject(item, "payloadHex", device.payloadHex.c_str());
       cJSON_AddBoolToObject(item, "payloadTruncated", device.payloadHex.length() > 1024);
       auto services = cJSON_AddArrayToObject(item, "services");
       for (const auto& uuid : device.services) cJSON_AddItemToArray(services, cJSON_CreateString(uuid.c_str()));
