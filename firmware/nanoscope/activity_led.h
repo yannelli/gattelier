@@ -2,6 +2,7 @@
 #include <Arduino.h>
 
 class BoardServer;
+constexpr uint8_t ActivityPin = 7;
 
 void startActivityLed();
 void signalActivityLed();

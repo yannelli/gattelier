@@ -12,3 +12,6 @@ constexpr GattPropertyName GattProperties[] = {
   {GattNotify, "notify"}, {GattIndicate, "indicate"}, {GattBroadcast, "broadcast"},
   {GattSignedWrite, "signed-write"}, {GattExtended, "extended-properties"}
 };
+
+// Indexed by Command::mode for Action::Subscribe.
+constexpr const char* SubscriptionModes[] = {"off", "notify", "indicate"};

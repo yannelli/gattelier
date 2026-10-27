@@ -1,10 +1,11 @@
 #include "http_access.h"
+#include "http_host.h"
 #include <Preferences.h>
-#include <cJSON.h>
 
 static String appOrigin;
 
-bool allowedHttpOrigin(BoardServer& server) {
+static bool allowedHttpOrigin(BoardServer& server) {
+  if (!server.viaSerial() && !boardHostAllowed(server.hostHeader().c_str())) return false;
   const String origin = server.header("Origin");
   return origin.isEmpty() || origin == "http://" + server.hostHeader() || (!appOrigin.isEmpty() && origin == appOrigin);
 }
@@ -26,6 +27,27 @@ static bool validOrigin(const String& origin) {
   return true;
 }
 
+void sendJson(BoardServer& server, int status, cJSON* json) {
+  char* body = cJSON_PrintUnformatted(json);
+  server.sendHeader("X-Content-Type-Options", "nosniff");
+  server.send(status, "application/json", body ? body : "{}");
+  cJSON_free(body); cJSON_Delete(json);
+}
+
+void sendJsonError(BoardServer& server, int status, const String& message) {
+  auto json = cJSON_CreateObject(); cJSON_AddStringToObject(json, "error", message.c_str()); sendJson(server, status, json);
+}
+
+cJSON* readJsonObject(BoardServer& server, size_t limit) {
+  if (!server.header("Content-Type").startsWith("application/json")) { sendJsonError(server, 415, "Expected application/json."); return nullptr; }
+  const String body = server.arg("plain");
+  if (body.length() > limit) { sendJsonError(server, 413, "Request is too large."); return nullptr; }
+  if (body.indexOf("\\u0000") >= 0) { sendJsonError(server, 400, "Strings cannot contain a null character."); return nullptr; }
+  auto json = cJSON_Parse(body.c_str());
+  if (!cJSON_IsObject(json)) { cJSON_Delete(json); sendJsonError(server, 400, "Expected a JSON object."); return nullptr; }
+  return json;
+}
+
 void registerHttpAccess(BoardServer& server) {
   Preferences preferences;
   preferences.begin("web-access", true);
@@ -35,6 +57,10 @@ void registerHttpAccess(BoardServer& server) {
   server.access([](BoardServer& request) {
     if (!request.uri().startsWith("/api/")) return false;
     request.sendHeader("Cache-Control", "no-store");
+    if (!request.viaSerial() && !boardHostAllowed(request.hostHeader().c_str())) {
+      request.send(403, "application/json", "{\"error\":\"Open the board by its IP address or a local name such as nanoscope.local.\"}");
+      return true;
+    }
     if (!allowedHttpOrigin(request)) {
       request.send(403, "application/json", "{\"error\":\"This app origin is not allowed. Configure hosted app access on the board's local page.\"}");
       return true;
@@ -58,31 +84,25 @@ void registerHttpAccess(BoardServer& server) {
   auto respond = [&server]() {
     auto json = cJSON_CreateObject();
     cJSON_AddStringToObject(json, "origin", appOrigin.c_str());
-    char* body = cJSON_PrintUnformatted(json);
-    server.send(200, "application/json", body ? body : "{}");
-    cJSON_free(body); cJSON_Delete(json);
+    sendJson(server, 200, json);
   };
   server.on("/api/access", HTTP_GET, respond);
   server.on("/api/access", HTTP_POST, [&server, respond]() {
     const String origin = server.header("Origin");
     if (!origin.isEmpty() && origin != "http://" + server.hostHeader()) {
-      server.send(403, "application/json", "{\"error\":\"Open the board's local page to change hosted app access.\"}"); return;
+      sendJsonError(server, 403, "Open the board's local page to change hosted app access."); return;
     }
-    if (!server.header("Content-Type").startsWith("application/json") || server.arg("plain").length() > 512) {
-      server.send(400, "application/json", "{\"error\":\"Send a JSON origin setting.\"}"); return;
-    }
-    const String body = server.arg("plain");
-    auto json = cJSON_Parse(body.c_str());
+    auto json = readJsonObject(server, 512); if (!json) return;
     auto value = cJSON_GetObjectItemCaseSensitive(json, "origin");
     String next = cJSON_IsString(value) ? value->valuestring : "";
-    const bool valid = cJSON_IsString(value) && body.indexOf("\\u0000") < 0 && validOrigin(next);
+    const bool valid = cJSON_IsString(value) && validOrigin(next);
     cJSON_Delete(json);
-    if (!valid) { server.send(400, "application/json", "{\"error\":\"Use an HTTPS origin without a path, or leave blank to disable hosted access.\"}"); return; }
+    if (!valid) { sendJsonError(server, 400, "Use an HTTPS origin without a path, or leave blank to disable hosted access."); return; }
     Preferences settings;
-    if (!settings.begin("web-access", false)) { server.send(503, "application/json", "{\"error\":\"Could not open access settings.\"}"); return; }
+    if (!settings.begin("web-access", false)) { sendJsonError(server, 503, "Could not open access settings."); return; }
     const String stored = next.isEmpty() ? "-" : next;
     const bool saved = settings.putString("origin", stored) == stored.length(); settings.end();
-    if (!saved) { server.send(503, "application/json", "{\"error\":\"Could not save access settings.\"}"); return; }
+    if (!saved) { sendJsonError(server, 503, "Could not save access settings."); return; }
     appOrigin = next; respond();
   });
 }

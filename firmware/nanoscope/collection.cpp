@@ -4,9 +4,9 @@
 #include <SPIFFS.h>
 #include <Preferences.h>
 #include "board_server.h"
+#include "http_access.h"
 #include <esp_random.h>
 #include <deque>
-#include <cmath>
 
 static portMUX_TYPE configMux = portMUX_INITIALIZER_UNLOCKED;
 static CollectionConfig config;
@@ -20,8 +20,7 @@ static std::deque<String> pending;
 static constexpr const char* logPath = "/collection.ndjson";
 static bool decodeConfig(const cJSON* json, CollectionConfig& next, String& error);
 
-static cJSON* configJson(const CollectionConfig& current) {
-  auto json = cJSON_CreateObject();
+static cJSON* addConfig(cJSON* json, const CollectionConfig& current) {
   cJSON_AddBoolToObject(json, "enabled", current.enabled); cJSON_AddBoolToObject(json, "active", current.active);
   cJSON_AddNumberToObject(json, "intervalMs", current.intervalMs); cJSON_AddNumberToObject(json, "windowMs", current.windowMs);
   cJSON_AddNumberToObject(json, "periodMs", current.periodMs); cJSON_AddNumberToObject(json, "burstMs", current.burstMs);
@@ -29,7 +28,7 @@ static cJSON* configJson(const CollectionConfig& current) {
 }
 
 static bool persistConfig(const CollectionConfig& next, String& error) {
-  auto json = cJSON_CreateObject(); cJSON_AddNumberToObject(json, "schemaVersion", 1); cJSON_AddItemToObject(json, "config", configJson(next));
+  auto json = cJSON_CreateObject(); cJSON_AddNumberToObject(json, "schemaVersion", 1); cJSON_AddItemToObject(json, "config", addConfig(cJSON_CreateObject(), next));
   char* encoded = cJSON_PrintUnformatted(json);
   const bool saved = persistenceReady && encoded && preferences.putString("config", encoded) == strlen(encoded);
   cJSON_free(encoded); cJSON_Delete(json);
@@ -164,7 +163,7 @@ static bool decodeConfig(const cJSON* json, CollectionConfig& next, String& erro
       bool schedule = !strcmp(key, "periodMs") || !strcmp(key, "burstMs");
       if (!scan && !schedule) { error = "Unknown collection setting."; return false; }
       double value = item->valuedouble;
-      if (!cJSON_IsNumber(item) || !std::isfinite(value) || value < 0 || value > (scan ? 10240 : 3600000) || floor(value) != value) { error = String(key) + " must be a whole number in range."; return false; }
+      if (!jsonInteger(item, 0, scan ? 10240 : 3600000)) { error = String(key) + " must be a whole number in range."; return false; }
       if (!strcmp(key, "intervalMs")) next.intervalMs = value;
       if (!strcmp(key, "windowMs")) next.windowMs = value;
       if (!strcmp(key, "periodMs")) next.periodMs = value;
@@ -184,10 +183,7 @@ bool configureCollection(const cJSON* json, String& error) {
   if (mounted && !full && !damaged) storageError = "";
   apply(next);
   if (mounted && !full && !damaged) {
-    auto event = record("collection_config"); cJSON_AddBoolToObject(event, "enabled", next.enabled); cJSON_AddBoolToObject(event, "active", next.active);
-    cJSON_AddNumberToObject(event, "intervalMs", next.intervalMs); cJSON_AddNumberToObject(event, "windowMs", next.windowMs);
-    cJSON_AddNumberToObject(event, "periodMs", next.periodMs); cJSON_AddNumberToObject(event, "burstMs", next.burstMs);
-    cJSON_AddStringToObject(event, "address", next.address); enqueue(event);
+    enqueue(addConfig(record("collection_config"), next));
   }
   return true;
 }
@@ -227,7 +223,7 @@ void updateCollection() {
 }
 
 cJSON* collectionState() {
-  const auto current = readConfig(); auto json = configJson(current);
+  const auto current = readConfig(); auto json = addConfig(cJSON_CreateObject(), current);
   bool connected, busy, scanning; { StateLock lock; connected = state.connected; busy = state.busy; scanning = state.scanning; }
   const char* status = !current.enabled ? "stopped" : connected ? "paused-connected" : busy ? "paused-busy" : !collectionScanPlan(millis()).enabled ? "scheduled" : scanning ? "collecting" : "starting";
   cJSON_AddStringToObject(json, "status", status);
@@ -247,9 +243,9 @@ uint32_t collectionLedColor(uint32_t base, uint32_t now) { return collectionColo
 
 void downloadCollection(BoardServer& server) {
   flush();
-  if (!mounted || !SPIFFS.exists(logPath)) { server.send(404, "application/json", "{\"error\":\"No saved collection log.\"}"); return; }
+  if (!mounted || !SPIFFS.exists(logPath)) { sendJsonError(server, 404, "No saved collection log."); return; }
   auto file = SPIFFS.open(logPath, FILE_READ);
-  if (!file) { server.send(500, "application/json", "{\"error\":\"The collection log could not be opened.\"}"); return; }
-  server.sendHeader("Cache-Control", "no-store"); server.sendHeader("Content-Disposition", "attachment; filename=nanoscope-collection.ndjson");
+  if (!file) { sendJsonError(server, 500, "The collection log could not be opened."); return; }
+  server.sendHeader("Content-Disposition", "attachment; filename=nanoscope-collection.ndjson");
   server.streamFile(file, "application/x-ndjson"); file.close();
 }

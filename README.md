@@ -67,7 +67,9 @@ sh scripts/build.sh
 sh scripts/flash.sh /dev/cu.usbmodemXXXX
 ```
 
-The board serves the app at `http://nanoscope.local` when mDNS is available. A short button press starts its hotspot if saved Wi-Fi is unavailable.
+The board serves the app at `http://nanoscope.local` when mDNS is available. A short button press starts its hotspot if saved Wi-Fi is unavailable. The hotspot is named `NanoScope-XXXXXX` and uses the password `nanoscope` until you change it in Settings > Wi-Fi & hotspot; Settings shows a notice while the default is in use. To build with a different default, define `HOTSPOT_PASSWORD` in `secrets.h`.
+
+The board API answers only when the browser reaches it by IP address, a single-label name, or a local suffix such as `.local`, `.lan`, `.home`, `.home.arpa`, or `.internal`. This blocks DNS rebinding from public websites.
 
 ## Development
 

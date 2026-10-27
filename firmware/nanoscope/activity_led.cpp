@@ -4,7 +4,6 @@
 #include <Preferences.h>
 #include <atomic>
 
-static constexpr uint8_t ActivityPin = 7;
 static std::atomic<bool> activityPending{false};
 static ActivityLedTiming timing;
 static Preferences preferences;

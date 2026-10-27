@@ -33,7 +33,7 @@ static void addProperties(cJSON* object, uint8_t properties) {
   for (const auto& property : GattProperties) if (properties & property.flag) cJSON_AddItemToArray(array, cJSON_CreateString(property.name));
 }
 
-static String jsonText(cJSON* value) {
+String jsonText(cJSON* value) {
   char* json = cJSON_PrintUnformatted(value);
   String result = json ? json : "null";
   cJSON_free(json);
@@ -131,7 +131,7 @@ void sendState(BoardServer& server) {
         addText(value, "uuid", characteristic.uuid);
         cJSON_AddNumberToObject(value, "handle", characteristic.handle);
         addProperties(value, characteristic.properties);
-        addText(value, "subscription", characteristic.subscription);
+        cJSON_AddStringToObject(value, "subscription", SubscriptionModes[characteristic.subscription]);
         auto descriptors = cJSON_AddArrayToObject(value, "descriptors");
         for (const auto& descriptor : characteristic.descriptors) {
           auto entry = cJSON_CreateObject();

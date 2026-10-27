@@ -2,6 +2,7 @@
 #include <cctype>
 #include <cstddef>
 #include <cstring>
+#include <initializer_list>
 
 // DNS rebinding delivers the attacker's own hostname in Host, so the API only answers to
 // IP literals, single-label names, and suffixes that cannot be registered in public DNS.

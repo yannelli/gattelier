@@ -27,6 +27,8 @@ static bool storageReady = false, apActive = false, previousConnected = false, m
 static bool wifiSuspended = false;
 static uint32_t applyAt = 0, connectingSince = 0, lastRetry = 0, lastMdns = 0;
 static const IPAddress apIP(192, 168, 4, 1), netmask(255, 255, 255, 0);
+// NanoC6 wiring: user button, RGB LED power enable, RGB LED data.
+constexpr uint8_t ButtonPin = 9, RgbPowerPin = 19, RgbPin = 20;
 
 static bool validPassword(const String& value, bool allowOpen) {
   if (allowOpen && value.isEmpty()) return true;
@@ -146,16 +148,16 @@ void addNetworkState(cJSON* wifi) {
   cJSON_AddStringToObject(wifi, "networkSSID", ssid.c_str()); cJSON_AddStringToObject(wifi, "ip", ip.c_str());
   cJSON_AddStringToObject(wifi, "configuredSSID", stationSSID.c_str()); cJSON_AddStringToObject(wifi, "apSSID", apSSID.c_str());
   cJSON_AddStringToObject(wifi, "apIP", apIP.toString().c_str()); cJSON_AddStringToObject(wifi, "led", led);
-  cJSON_AddStringToObject(wifi, "error", wifiSuspended ? "" : networkError.c_str()); cJSON_AddNumberToObject(wifi, "buttonPin", 9);
-  cJSON_AddBoolToObject(wifi, "passwordSet", !stationPassword.isEmpty()); cJSON_AddBoolToObject(wifi, "stationPasswordSet", !stationPassword.isEmpty());
+  cJSON_AddStringToObject(wifi, "error", wifiSuspended ? "" : networkError.c_str()); cJSON_AddNumberToObject(wifi, "buttonPin", ButtonPin);
+  cJSON_AddBoolToObject(wifi, "passwordSet", !stationPassword.isEmpty());
   cJSON_AddBoolToObject(wifi, "apPasswordSet", !apPassword.isEmpty()); cJSON_AddBoolToObject(wifi, "apPasswordDefault", apPassword == HOTSPOT_PASSWORD); cJSON_AddBoolToObject(wifi, "pending", !pendingMode.isEmpty());
   cJSON_AddNumberToObject(wifi, "applyAfterMs", pendingMode.isEmpty() ? 0 : std::max(int32_t(0), int32_t(applyAt - millis())));
 }
 
 void startNetwork() {
   startActivityLed();
-  pinMode(9, INPUT_PULLUP); pinMode(19, OUTPUT); digitalWrite(19, HIGH);
-  button.begin(digitalRead(9) == LOW, millis()); rgbLedWrite(20, 0, 0, 24);
+  pinMode(ButtonPin, INPUT_PULLUP); pinMode(RgbPowerPin, OUTPUT); digitalWrite(RgbPowerPin, HIGH);
+  button.begin(digitalRead(ButtonPin) == LOW, millis()); rgbLedWrite(RgbPin, 0, 0, 24);
   uint8_t mac[6]; esp_read_mac(mac, ESP_MAC_WIFI_STA);
   char generatedSSID[32]; snprintf(generatedSSID, sizeof(generatedSSID), "NanoScope-%02X%02X%02X", mac[3], mac[4], mac[5]);
   apSSID = generatedSSID;
@@ -181,21 +183,20 @@ void startNetwork() {
 }
 
 void handleNetworkConsole(const String& line) {
-    if (serialApiActive()) return;
-    if (line == "network status") {
-      auto json = cJSON_CreateObject(); addNetworkState(json);
-      char* encoded = cJSON_PrintUnformatted(json); if (encoded) { Serial.print("NETWORK "); Serial.println(encoded); }
-      cJSON_free(encoded); cJSON_Delete(json);
-    } else if (line == "network station" || line == "network hotspot") {
-      NetworkChange change; change.mode = line.substring(8); String error;
-      Serial.println(queueNetworkChange(change, error) ? "Network mode change queued" : error);
-    }
+  if (serialApiActive()) return;
+  if (line == "network status") {
+    auto json = cJSON_CreateObject(); addNetworkState(json);
+    Serial.println("NETWORK " + jsonText(json));
+  } else if (line == "network station" || line == "network hotspot") {
+    NetworkChange change; change.mode = line.substring(8); String error;
+    Serial.println(queueNetworkChange(change, error) ? "Network mode change queued" : error);
+  }
 }
 
 void updateNetwork() {
   updateActivityLed();
   uint32_t now = millis();
-  auto buttonEvent = button.updateEvent(digitalRead(9) == LOW, now);
+  auto buttonEvent = button.updateEvent(digitalRead(ButtonPin) == LOW, now);
   if (buttonEvent == NetworkButtonEvent::TriplePress) { String error; queueUsbMode(!usbHciMode(), error); }
   if (buttonEvent == NetworkButtonEvent::LongPress && !usbHciMode()) collectionToggle();
   if (buttonEvent == NetworkButtonEvent::ShortPress) {
@@ -228,5 +229,5 @@ void updateNetwork() {
   if (usbHciMode() && now % 1500 < 250) color = 0x180020;
   if (!usbHciMode()) color = collectionLedColor(color, now);
   static uint32_t previousColor = 0xffffffff;
-  if (color != previousColor) { rgbLedWrite(20, color >> 16, color >> 8, color); previousColor = color; }
+  if (color != previousColor) { rgbLedWrite(RgbPin, color >> 16, color >> 8, color); previousColor = color; }
 }

@@ -16,7 +16,7 @@ private:
   bool write(const char* bytes, size_t length);
   bool frame(cJSON* json);
   cJSON* event(const char* name);
-  uint32_t id_ = 0, startedAt_ = 0;
+  uint32_t id_ = 0;
   size_t bytes_ = 0;
   bool started_ = false, ended_ = false, failed_ = false;
   String disposition_, error_;

@@ -164,7 +164,7 @@ void sendAdvertisements(BoardServer& server, uint64_t after, const String& expec
     for (size_t i = 0; i < state.devices.size(); ++i) { if (i) header += ','; header += String(state.devices[i].id); }
     header += "],\"browserOffload\":" + String(offloadLease.active(millis(), collectionEnabled()) ? "true" : "false") + ",\"offloadLeaseMs\":" + String(ScanOffloadLeaseMs) + ",\"cacheSkippedTotal\":" + String(cacheSkipped);
   }
-  server.sendHeader("Cache-Control", "no-store"); server.sendHeader("X-Content-Type-Options", "nosniff"); server.setContentLength(CONTENT_LENGTH_UNKNOWN); server.send(200, "application/json", "");
+  server.sendHeader("X-Content-Type-Options", "nosniff"); server.setContentLength(CONTENT_LENGTH_UNKNOWN); server.send(200, "application/json", "");
   String chunk; chunk.reserve(3072);
   const auto append = [&](const char* data) {
     size_t length = strlen(data);

@@ -2,7 +2,7 @@
 #include "serial_api_frame.h"
 #include "board_server.h"
 #include "board_network.h"
-#include <cmath>
+#include "http_access.h"
 #include <cstring>
 
 static SerialApiLine input;
@@ -29,14 +29,6 @@ static void releaseSession() {
   setSerialWifiSuspended(false, error);
   lease.close();
   heapBeforePause = 0;
-}
-
-static void reject(BoardServer& server, int status, const char* message) {
-  auto json = cJSON_CreateObject();
-  cJSON_AddStringToObject(json, "error", message);
-  char* text = cJSON_PrintUnformatted(json);
-  server.send(status, "application/json", text ? text : "{}");
-  cJSON_free(text); cJSON_Delete(json);
 }
 
 static bool validPath(const char* path) {
@@ -101,9 +93,7 @@ static void sendStatus(BoardServer& server, bool closing) {
     cJSON_ReplaceItemInObjectCaseSensitive(json, "active", cJSON_CreateBool(false));
     cJSON_ReplaceItemInObjectCaseSensitive(json, "wifiSuspended", cJSON_CreateBool(false));
   }
-  char* text = cJSON_PrintUnformatted(json);
-  server.send(200, "application/json", text ? text : "{}");
-  cJSON_free(text); cJSON_Delete(json);
+  sendJson(server, 200, json);
 }
 
 static bool sessionRequest(BoardServer& server) {
@@ -114,7 +104,7 @@ static bool sessionRequest(BoardServer& server) {
   auto action = cJSON_GetObjectItemCaseSensitive(json, "action");
   auto wifiOff = cJSON_GetObjectItemCaseSensitive(json, "wifiOff");
   if (!cJSON_IsObject(json) || !cJSON_IsString(action) || (wifiOff && !cJSON_IsBool(wifiOff))) {
-    cJSON_Delete(json); reject(server, 400, "Provide an action and optional wifiOff boolean."); return false;
+    cJSON_Delete(json); sendJsonError(server, 400, "Provide an action and optional wifiOff boolean."); return false;
   }
   String requested = action->valuestring;
   bool pause = cJSON_IsTrue(wifiOff);
@@ -123,14 +113,14 @@ static bool sessionRequest(BoardServer& server) {
     String error;
     uint32_t before = ESP.getFreeHeap();
     bool wasPaused = serialWifiSuspended();
-    if (!setSerialWifiSuspended(pause, error)) { reject(server, 503, error.c_str()); return false; }
+    if (!setSerialWifiSuspended(pause, error)) { sendJsonError(server, 503, error.c_str()); return false; }
     if (pause && !wasPaused) heapBeforePause = before;
     if (!pause) heapBeforePause = 0;
     lease.renew(millis()); sendStatus(server, false); return false;
   }
   if (requested == "close") { sendStatus(server, true); return true; }
-  if (requested != "ping") { reject(server, 400, "Choose open, ping, or close."); return false; }
-  if (!lease.active()) { reject(server, 428, "Open a serial session first."); return false; }
+  if (requested != "ping") { sendJsonError(server, 400, "Choose open, ping, or close."); return false; }
+  if (!lease.active()) { sendJsonError(server, 428, "Open a serial session first."); return false; }
   lease.renew(millis()); sendStatus(server, false); return false;
 }
 
@@ -138,7 +128,7 @@ static void request(BoardServer& server, const char* line) {
   const char* end = nullptr;
   auto json = boundedJson(line) ? cJSON_ParseWithOpts(line, &end, true) : nullptr;
   auto id = cJSON_GetObjectItemCaseSensitive(json, "id");
-  bool validId = cJSON_IsNumber(id) && id->valuedouble >= 1 && id->valuedouble <= 4294967295.0 && std::floor(id->valuedouble) == id->valuedouble;
+  bool validId = jsonInteger(id, 1, 4294967295.0);
   uint32_t requestId = validId ? uint32_t(id->valuedouble) : 0;
   auto version = cJSON_GetObjectItemCaseSensitive(json, "v");
   auto method = cJSON_GetObjectItemCaseSensitive(json, "method");
@@ -153,9 +143,9 @@ static void request(BoardServer& server, const char* line) {
   server.beginSerial(requestId, verb, valid ? path->valuestring : "/api/serial", valid && body ? body->valuestring : "");
   cJSON_Delete(json);
   bool close = false;
-  if (!valid) reject(server, 400, "Invalid serial request.");
+  if (!valid) sendJsonError(server, 400, "Invalid serial request.");
   else if (server.uri() == "/api/serial") close = sessionRequest(server);
-  else if (!lease.active()) reject(server, 428, "Open a serial session first.");
+  else if (!lease.active()) sendJsonError(server, 428, "Open a serial session first.");
   else { lease.renew(millis()); server.dispatchSerial(); }
   bool complete = server.endSerial();
   if (close || !complete) releaseSession();

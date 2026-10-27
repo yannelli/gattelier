@@ -18,6 +18,7 @@ public:
   String arg(const String& name) const;
   String header(const String& name) const;
   String hostHeader() const { return serial_ ? String() : http_.hostHeader(); }
+  bool viaSerial() const { return serial_; }
   String uri() const { return serial_ ? path_ : http_.uri(); }
   HTTPMethod method() const { return serial_ ? method_ : http_.method(); }
   void sendHeader(const String& name, const String& value, bool first = false);

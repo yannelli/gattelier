@@ -3,7 +3,7 @@
 #include <mbedtls/base64.h>
 
 void SerialApiResponse::reset(uint32_t id) {
-  id_ = id; startedAt_ = millis(); bytes_ = 0;
+  id_ = id; bytes_ = 0;
   started_ = ended_ = failed_ = false;
   disposition_ = error_ = "";
 }
@@ -15,7 +15,8 @@ void SerialApiResponse::header(const String& name, const String& value) {
 bool SerialApiResponse::write(const char* bytes, size_t length) {
   uint32_t progress = millis();
   while (length) {
-    if (uint32_t(millis() - progress) >= 1000 || uint32_t(millis() - startedAt_) >= 10000) {
+    // Only a stalled host fails the response; large exports may take longer than any fixed total.
+    if (uint32_t(millis() - progress) >= 1000) {
       failed_ = true; return false;
     }
     if (!Serial) { delay(1); continue; }

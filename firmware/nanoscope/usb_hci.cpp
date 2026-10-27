@@ -9,18 +9,22 @@
 #include <esp32-hal-bt.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/queue.h>
+#include <freertos/ringbuf.h>
 #include <atomic>
 #include <algorithm>
+#include <new>
 
 struct UsbPacket { uint16_t size = 0; uint8_t bytes[H4Frame::Capacity] = {}; };
 static Preferences preferences;
 static bool hciMode = false, storageReady = false, running = false;
 static uint32_t restartAt = 0, lastByteAt = 0, pendingAt = 0;
 static String failure;
-static QueueHandle_t inbound = nullptr, outbound = nullptr;
-static H4Frame parser;
-static UsbPacket tx, rx;
-static uint16_t txOffset = 0;
+static QueueHandle_t inbound = nullptr;
+// Variable-length items: a busy scan produces many ~45-byte reports, which fixed 1 KB slots dropped.
+static RingbufHandle_t outbound = nullptr;
+static H4Frame* parser = nullptr;
+static uint8_t* tx = nullptr;
+static size_t txSize = 0, txOffset = 0;
 static std::atomic<uint32_t> received{0}, sent{0}, dropped{0}, rejected{0};
 
 bool usbHciMode() { return hciMode; }
@@ -41,30 +45,34 @@ bool queueUsbMode(bool requested, String& error) {
 }
 
 static int controllerPacket(hci_trans_pkt_ind_t type, uint8_t* data, uint16_t) {
-  UsbPacket packet;
-  packet.bytes[0] = uint8_t(type);
-  if (type == HCI_EVT_IND) {
-    packet.size = uint16_t(data[1]) + 3;
-    memcpy(packet.bytes + 1, data, packet.size - 1);
-    r_ble_hci_trans_buf_free(data);
-  } else if (type == HCI_ACL_IND) {
-    auto mbuf = reinterpret_cast<os_mbuf*>(data);
-    size_t length = OS_MBUF_PKTLEN(mbuf);
-    if (length <= H4Frame::Capacity - 1 && os_mbuf_copydata(mbuf, 0, length, packet.bytes + 1) == 0) packet.size = length + 1;
-    os_mbuf_free_chain(mbuf);
+  auto mbuf = type == HCI_ACL_IND ? reinterpret_cast<os_mbuf*>(data) : nullptr;
+  const size_t size = type == HCI_EVT_IND ? size_t(data[1]) + 3 : mbuf ? size_t(OS_MBUF_PKTLEN(mbuf)) + 1 : 0;
+  uint8_t* slot = nullptr;
+  const bool queued = size && size <= H4Frame::Capacity && xRingbufferSendAcquire(outbound, reinterpret_cast<void**>(&slot), size, 0) == pdTRUE;
+  bool forwarded = false;
+  if (queued) {
+    slot[0] = uint8_t(type);
+    if (mbuf) forwarded = os_mbuf_copydata(mbuf, 0, size - 1, slot + 1) == 0;
+    else { memcpy(slot + 1, data, size - 1); forwarded = true; }
+    // An acquired slot cannot be abandoned, so a failed copy is marked with H4 type 0 and skipped on output.
+    if (!forwarded) slot[0] = 0;
+    xRingbufferSendComplete(outbound, slot);
   }
-  if (packet.size) signalActivityLed();
-  if (!packet.size || xQueueSend(outbound, &packet, 0) != pdTRUE) ++dropped;
-  else ++received;
+  if (type == HCI_EVT_IND) r_ble_hci_trans_buf_free(data);
+  else if (mbuf) os_mbuf_free_chain(mbuf);
+  if (forwarded) { signalActivityLed(); ++received; }
+  else ++dropped;
   return 0;
 }
 
 bool startUsbHci() {
   if (!hciMode) return false;
   btStarted();
+  // Allocated here so workbench mode does not carry the 1 KB frame buffer.
+  parser = new (std::nothrow) H4Frame();
   inbound = xQueueCreate(8, sizeof(UsbPacket));
-  outbound = xQueueCreate(16, sizeof(UsbPacket));
-  if (!inbound || !outbound) { failure = "USB HCI queue allocation failed"; return false; }
+  outbound = xRingbufferCreate(16 * 1024, RINGBUF_TYPE_NOSPLIT);
+  if (!parser || !inbound || !outbound) { failure = "USB HCI queue allocation failed"; return false; }
   esp_bt_controller_config_t config = BT_CONTROLLER_INIT_CONFIG_DEFAULT();
   esp_err_t result = esp_bt_controller_init(&config);
   if (result == ESP_OK && hci_transport_host_callback_register(controllerPacket)) result = ESP_FAIL;
@@ -95,31 +103,40 @@ void updateUsbHci() {
   uint32_t now = millis();
   if (restartAt && int32_t(now - restartAt) >= 0) ESP.restart();
   if (!running) return;
-  if (parser.pending() && uint32_t(now - lastByteAt) > 1000) { parser.reset(); ++rejected; }
-  for (unsigned count = 0; count < 256 && Serial.available() && uxQueueSpacesAvailable(inbound); ++count) {
+  if (parser->pending() && uint32_t(now - lastByteAt) > 1000) { parser->reset(); ++rejected; }
+  UsbPacket packet;
+  for (unsigned count = 0; count < 2048 && Serial.available() && uxQueueSpacesAvailable(inbound); ++count) {
     signalActivityLed();
     lastByteAt = now;
-    if (parser.feed(uint8_t(Serial.read()))) {
-      UsbPacket packet; packet.size = parser.length;
-      memcpy(packet.bytes, parser.data, packet.size);
+    if (parser->feed(uint8_t(Serial.read()))) {
+      packet.size = parser->length;
+      memcpy(packet.bytes, parser->data, packet.size);
       if (xQueueSend(inbound, &packet, 0) != pdTRUE) ++dropped;
     }
   }
-  if (!rx.size && xQueueReceive(inbound, &rx, 0) == pdTRUE) pendingAt = now;
-  if (rx.size) {
-    if (sendToController(rx)) rx.size = 0;
-    else if (uint32_t(now - pendingAt) > 1000) { rx.size = 0; ++dropped; }
+  // The head packet stays queued until the controller takes it or it has waited a second.
+  while (xQueuePeek(inbound, &packet, 0) == pdTRUE) {
+    if (!pendingAt) pendingAt = now;
+    const bool forwarded = sendToController(packet);
+    if (!forwarded && uint32_t(now - pendingAt) <= 1000) break;
+    if (!forwarded) ++dropped;
+    xQueueReceive(inbound, &packet, 0);
+    pendingAt = 0;
   }
   if (!Serial) return;
-  if (!tx.size && xQueueReceive(outbound, &tx, 0) == pdTRUE) txOffset = 0;
-  if (tx.size) {
-    size_t count = std::min(size_t(tx.size - txOffset), size_t(std::max(0, Serial.availableForWrite())));
-    if (count) {
-      const size_t written = Serial.write(tx.bytes + txOffset, count);
-      txOffset += written;
-      if (written) signalActivityLed();
+  for (;;) {
+    if (!tx) {
+      tx = static_cast<uint8_t*>(xRingbufferReceive(outbound, &txSize, 0));
+      txOffset = 0;
+      if (!tx) break;
+      if (!tx[0]) { vRingbufferReturnItem(outbound, tx); tx = nullptr; continue; }
     }
-    if (txOffset == tx.size) tx.size = txOffset = 0;
+    const size_t room = size_t(std::max(0, Serial.availableForWrite()));
+    const size_t written = room ? Serial.write(tx + txOffset, std::min(txSize - txOffset, room)) : 0;
+    if (!written) break;
+    txOffset += written;
+    signalActivityLed();
+    if (txOffset == txSize) { vRingbufferReturnItem(outbound, tx); tx = nullptr; }
   }
 }
 
@@ -133,7 +150,7 @@ void addUsbState(cJSON* item) {
   cJSON_AddNumberToObject(item, "controllerPackets", received.load());
   cJSON_AddNumberToObject(item, "hostPackets", sent.load());
   cJSON_AddNumberToObject(item, "droppedPackets", dropped.load());
-  cJSON_AddNumberToObject(item, "rejectedBytes", rejected.load() + parser.errors);
+  cJSON_AddNumberToObject(item, "rejectedBytes", rejected.load() + (parser ? parser->errors : 0));
   cJSON_AddNumberToObject(item, "maxAclBytes", H4Frame::Capacity - 5);
   cJSON_AddBoolToObject(item, "nativeUsbBluetoothClass", false);
 }

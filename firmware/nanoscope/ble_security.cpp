@@ -31,15 +31,18 @@ static void updateFlags(NimBLEConnInfo& info) {
   security.bonded = info.isBonded(); security.keySize = info.getSecKeySize();
 }
 
-static bool prompt(NimBLEConnInfo& info, const char* kind, uint32_t pin = 0) {
-  StateLock lock;
-  if (info.getConnHandle() != security.handle) return false;
-  security.active = true; security.started = millis(); security.status = kind;
+static void openPrompt(const char* status) {
+  security.active = true; security.started = millis(); security.status = status;
   security.error = ""; security.challengeId = newChallenge(); security.display = "";
-  if (String(kind) != "passkey-input") {
+}
+
+static void prompt(NimBLEConnInfo& info, const char* kind, uint32_t pin = 0) {
+  StateLock lock;
+  if (info.getConnHandle() != security.handle) return;
+  openPrompt(kind);
+  if (strcmp(kind, "passkey-input")) {
     char text[7]; snprintf(text, sizeof(text), "%06lu", static_cast<unsigned long>(pin)); security.display = text;
   }
-  return true;
 }
 
 static int securityGapEvent(ble_gap_event* event, void*) {
@@ -95,8 +98,7 @@ void beginPairing() {
     if (info.getConnHandle() != security.handle) { clearPrompt("failed", "The BLE connection changed before pairing started."); return; }
     updateFlags(info);
     if (security.encrypted) { clearPrompt("secured"); return; }
-    security.active = true; security.status = "pairing"; security.error = "";
-    security.challengeId = newChallenge(); security.display = ""; security.started = millis();
+    openPrompt("pairing");
   }
   if (!peer->secureConnection(true)) {
     StateLock lock;

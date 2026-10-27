@@ -28,7 +28,7 @@ struct CharacteristicInfo {
   String uuid, valueHex, valueText, readError;
   uint16_t handle = 0;
   bool hasValue = false;
-  String subscription = "off";
+  uint8_t subscription = 0;
   uint8_t properties = 0;
   std::vector<DescriptorInfo> descriptors;
 };
@@ -78,6 +78,9 @@ void updateConnectionCancellation();
 class BoardServer;
 void sendState(BoardServer& server);
 String hexBytes(const uint8_t* bytes, size_t length);
+struct cJSON;
+// Prints and deletes the item.
+String jsonText(cJSON* value);
 void startHttp();
 void handleHttp();
 void handleSerialHttp();

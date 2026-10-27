@@ -8,6 +8,8 @@
 
 void setup() {
   if (Serial.setRxBufferSize(4224) != 4224) abort();
+  // The 256-byte default throttles USB exports and HCI event forwarding.
+  if (Serial.setTxBufferSize(4096) != 4096) abort();
   Serial.begin(115200);
   initUsbMode();
   stateMutex = xSemaphoreCreateMutex();

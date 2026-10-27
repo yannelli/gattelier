@@ -7,9 +7,8 @@
 #include <esp_random.h>
 #include <array>
 #include <algorithm>
-#include <optional>
 
-static std::array<std::optional<TraceEvent>, 256> events;
+static std::array<TraceEvent, 256> events;
 static TraceRetention<256, 48 * 1024> retention;
 static SemaphoreHandle_t traceMutex;
 static uint32_t sequence = 0;
@@ -53,12 +52,12 @@ void recordTrace(const String& kind, const String& address, const String& uuid,
   xSemaphoreTake(traceMutex, portMAX_DELAY);
   const size_t cost = event.hex.length() + event.kind.length() + event.address.length() + event.uuid.length() + event.message.length() + 80;
   while (!retention.empty() && !retention.room(cost)) {
-    events[(retention.first - 1) % events.size()].reset();
+    events[(retention.first - 1) % events.size()] = TraceEvent{};
     retention.discard();
   }
   retention.append(cost);
   event.seq = ++sequence;
-  events[(sequence - 1) % events.size()].emplace(std::move(event));
+  events[(sequence - 1) % events.size()] = std::move(event);
   xSemaphoreGive(traceMutex);
 }
 
@@ -76,11 +75,7 @@ static String eventJson(const TraceEvent& event) {
   cJSON_AddBoolToObject(item, "success", event.success);
   cJSON_AddBoolToObject(item, "truncated", event.truncated);
   cJSON_AddBoolToObject(item, "redacted", event.redacted);
-  char* raw = cJSON_PrintUnformatted(item);
-  String result = raw ? raw : "null";
-  cJSON_free(raw);
-  cJSON_Delete(item);
-  return result;
+  return jsonText(item);
 }
 
 void sendTrace(BoardServer& server, uint32_t after) {
@@ -90,7 +85,6 @@ void sendTrace(BoardServer& server, uint32_t after) {
   xSemaphoreGive(traceMutex);
   uint32_t begin = std::max(after + 1, oldest);
   uint32_t dropped = after < oldest - 1 ? oldest - 1 - after : 0;
-  server.sendHeader("Cache-Control", "no-store");
   server.setContentLength(CONTENT_LENGTH_UNKNOWN);
   server.send(200, "application/json", "");
   String chunk = "{\"bootId\":\"" + bootId + "\",\"oldestSeq\":" + String(oldest) +
@@ -98,8 +92,7 @@ void sendTrace(BoardServer& server, uint32_t after) {
   bool first = true;
   for (uint32_t seq = begin; seq <= end && seq > 0; ++seq) {
     xSemaphoreTake(traceMutex, portMAX_DELAY);
-    const auto& slot = events[(seq - 1) % events.size()];
-    TraceEvent event = slot ? *slot : TraceEvent{};
+    TraceEvent event = events[(seq - 1) % events.size()];
     xSemaphoreGive(traceMutex);
     if (event.seq != seq) { ++dropped; continue; }
     if (!first) chunk += ',';

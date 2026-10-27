@@ -4,8 +4,7 @@
 struct TraceEvent {
   uint32_t seq = 0, ms = 0;
   String kind, address, uuid, hex, message;
-  uint16_t handle = 0;
-  size_t length = 0;
+  uint16_t handle = 0, length = 0;
   bool success = true, truncated = false, redacted = false;
 };
 

@@ -10,56 +10,38 @@
 #include "scan_stream.h"
 #include "serial_api.h"
 #include "board_server.h"
-#include <cJSON.h>
-#include <cmath>
 
 static BoardServer server(80);
 static bool httpEnabled = false;
 
-static void sendError(int code, const String& message) {
-  auto root = cJSON_CreateObject();
-  cJSON_AddStringToObject(root, "error", message.c_str());
-  char* body = cJSON_PrintUnformatted(root);
-  server.send(code, "application/json", body ? body : "{}");
-  cJSON_free(body);
-  cJSON_Delete(root);
+static void sendError(int code, const String& message) { sendJsonError(server, code, message); }
+
+static bool validAddress(const cJSON* value) {
+  if (!cJSON_IsString(value) || strlen(value->valuestring) != 17) return false;
+  for (size_t i = 0; i < 17; ++i) if (i % 3 == 2 ? value->valuestring[i] != ':' : !isxdigit(value->valuestring[i])) return false;
+  return true;
 }
 
-static void sendAsset(const char* contentType, const uint8_t* data, size_t size) {
+static void sendAsset(const WebAsset& asset) {
   server.sendHeader("Content-Encoding", "gzip");
   server.sendHeader("Cache-Control", "no-cache");
   server.sendHeader("X-Content-Type-Options", "nosniff");
   server.sendHeader("Content-Security-Policy", "default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' data:; connect-src 'self' http: https:; object-src 'none'; frame-ancestors 'none'; base-uri 'none'");
-  server.send_P(200, contentType, reinterpret_cast<const char*>(data), size);
+  server.send_P(200, asset.type, reinterpret_cast<const char*>(asset.data), asset.size);
 }
 
 static void submit(Action action, const char* argument = nullptr) {
-  server.sendHeader("Cache-Control", "no-store");
-  if (!allowedHttpOrigin(server)) {
-    sendError(403, "Open Gattelier directly to control this board."); return;
-  }
-  if (!server.header("Content-Type").startsWith("application/json")) {
-    sendError(415, "Expected application/json."); return;
-  }
-  String body = server.arg("plain");
-  if (body.length() > 1400) { sendError(413, "Request is too large."); return; }
-  auto json = cJSON_Parse(body.c_str());
-  if (!cJSON_IsObject(json)) { cJSON_Delete(json); sendError(400, "Expected a JSON object."); return; }
+  auto json = readJsonObject(server, 1400); if (!json) return;
   uint32_t value = 0;
   auto address = cJSON_GetObjectItemCaseSensitive(json, "address");
   auto addressType = cJSON_GetObjectItemCaseSensitive(json, "addressType");
   bool direct = action == Action::Connect && address;
   if (direct) {
-    bool valid = cJSON_IsString(address) && strlen(address->valuestring) == 17 && cJSON_IsNumber(addressType)
-      && addressType->valuedouble >= 0 && addressType->valuedouble <= 3 && std::floor(addressType->valuedouble) == addressType->valuedouble
-      && !cJSON_GetObjectItemCaseSensitive(json, "id");
-    for (size_t i = 0; valid && i < 17; ++i) valid = i % 3 == 2 ? address->valuestring[i] == ':' : isxdigit(address->valuestring[i]);
-    if (!valid) { cJSON_Delete(json); sendError(400, "Known-address connection requires address and addressType (0–3)."); return; }
+    if (!validAddress(address) || !jsonInteger(addressType, 0, 3) || cJSON_GetObjectItemCaseSensitive(json, "id")) { cJSON_Delete(json); sendError(400, "Known-address connection requires address and addressType (0–3)."); return; }
   }
   if (argument && !direct) {
     auto number = cJSON_GetObjectItemCaseSensitive(json, argument);
-    double maxValue = action == Action::Connect ? 4294967295.0 : 65535;
-    if (!cJSON_IsNumber(number) || number->valuedouble < 1 || number->valuedouble > maxValue || std::floor(number->valuedouble) != number->valuedouble) {
+    if (!jsonInteger(number, 1, action == Action::Connect ? 4294967295.0 : 65535)) {
       cJSON_Delete(json); sendError(400, "Expected a valid numeric device id or characteristic handle."); return;
     }
     value = static_cast<uint32_t>(number->valuedouble);
@@ -92,10 +74,11 @@ static void submit(Action action, const char* argument = nullptr) {
   }
   if (action == Action::Subscribe) {
     auto mode = cJSON_GetObjectItemCaseSensitive(json, "mode");
-    if (!cJSON_IsString(mode) || (strcmp(mode->valuestring, "off") && strcmp(mode->valuestring, "notify") && strcmp(mode->valuestring, "indicate"))) {
+    command.mode = 0;
+    while (cJSON_IsString(mode) && command.mode < 3 && strcmp(mode->valuestring, SubscriptionModes[command.mode])) ++command.mode;
+    if (!cJSON_IsString(mode) || command.mode == 3) {
       cJSON_Delete(json); sendError(400, "Subscription mode must be off, notify, or indicate."); return;
     }
-    command.mode = !strcmp(mode->valuestring, "notify") ? 1 : !strcmp(mode->valuestring, "indicate") ? 2 : 0;
   }
   cJSON_Delete(json);
   String error;
@@ -108,20 +91,11 @@ static void submit(Action action, const char* argument = nullptr) {
 }
 
 static void cancelConnectRequest() {
-  server.sendHeader("Cache-Control", "no-store");
-  if (!allowedHttpOrigin(server)) { sendError(403, "Open Gattelier directly to control this board."); return; }
-  if (!server.header("Content-Type").startsWith("application/json")) { sendError(415, "Expected application/json."); return; }
-  const String body = server.arg("plain");
-  if (body.length() > 160) { sendError(413, "Request is too large."); return; }
-  auto json = cJSON_Parse(body.c_str());
+  auto json = readJsonObject(server, 160); if (!json) return;
   auto address = cJSON_GetObjectItemCaseSensitive(json, "address");
   auto type = cJSON_GetObjectItemCaseSensitive(json, "addressType");
   auto attempt = cJSON_GetObjectItemCaseSensitive(json, "connectionAttempt");
-  bool valid = cJSON_IsObject(json) && cJSON_IsString(address) && strlen(address->valuestring) == 17 && cJSON_IsNumber(type) &&
-    type->valuedouble >= 0 && type->valuedouble <= 3 && std::floor(type->valuedouble) == type->valuedouble && cJSON_IsNumber(attempt) &&
-    attempt->valuedouble >= 1 && attempt->valuedouble <= 4294967295.0 && std::floor(attempt->valuedouble) == attempt->valuedouble;
-  for (size_t i = 0; valid && i < 17; ++i) valid = i % 3 == 2 ? address->valuestring[i] == ':' : isxdigit(address->valuestring[i]);
-  if (!valid) { cJSON_Delete(json); sendError(400, "Provide the connection attempt, address and addressType."); return; }
+  if (!validAddress(address) || !jsonInteger(type, 0, 3) || !jsonInteger(attempt, 1, 4294967295.0)) { cJSON_Delete(json); sendError(400, "Provide the connection attempt, address and addressType."); return; }
   String error;
   const bool accepted = cancelConnection(address->valuestring, uint8_t(type->valueint), uint32_t(attempt->valuedouble), error);
   cJSON_Delete(json);
@@ -138,22 +112,9 @@ void startHttp() {
   registerSecurityRoutes(server);
   registerUsbRoutes(server);
   registerCollectionRoutes(server);
-  server.on("/", HTTP_GET, [] { sendAsset("text/html; charset=utf-8", index_html, sizeof(index_html)); });
-  server.on("/app.bundle.js", HTTP_GET, [] { sendAsset("text/javascript; charset=utf-8", app_bundle_js, sizeof(app_bundle_js)); });
-  server.on("/app.bundle.css", HTTP_GET, [] { sendAsset("text/css; charset=utf-8", app_bundle_css, sizeof(app_bundle_css)); });
-  server.on("/metadata-v1.json", HTTP_GET, [] { sendAsset("application/json", metadata_json, sizeof(metadata_json)); });
-  server.on("/vendors.json", HTTP_GET, [] { sendAsset("application/json", vendors_json, sizeof(vendors_json)); });
-  server.on("/manifest.webmanifest", HTTP_GET, [] { sendAsset("application/manifest+json", manifest_json, sizeof(manifest_json)); });
-  server.on("/sw.js", HTTP_GET, [] { sendAsset("text/javascript; charset=utf-8", service_worker_js, sizeof(service_worker_js)); });
-  server.on("/icons/nanoscope-180.png", HTTP_GET, [] { sendAsset("image/png", icon_180_png, sizeof(icon_180_png)); });
-  server.on("/icons/nanoscope-192.png", HTTP_GET, [] { sendAsset("image/png", icon_192_png, sizeof(icon_192_png)); });
-  server.on("/icons/nanoscope-512.png", HTTP_GET, [] { sendAsset("image/png", icon_512_png, sizeof(icon_512_png)); });
-  server.on("/api/state", HTTP_GET, [] {
-    server.sendHeader("Cache-Control", "no-store");
-    sendState(server);
-  });
+  for (const auto& asset : webAssets) server.on(asset.path, HTTP_GET, [&asset] { sendAsset(asset); });
+  server.on("/api/state", HTTP_GET, [] { sendState(server); });
   server.on("/api/advertisements", HTTP_GET, [] {
-    if (!allowedHttpOrigin(server)) { sendError(403, "Open Gattelier directly to read discoveries."); return; }
     const String cursor = server.arg("after"), boot = server.arg("bootId");
     if (cursor.length() > 16 || boot.length() > 32) { sendError(400, "Invalid advertisement cursor."); return; }
     for (size_t i = 0; i < cursor.length(); ++i) if (!isDigit(cursor[i])) { sendError(400, "Invalid advertisement cursor."); return; }
@@ -175,10 +136,7 @@ void startHttp() {
     sendTrace(server, strtoul(cursor.c_str(), nullptr, 10));
   });
   server.on("/api/capture", HTTP_POST, [] {
-    if (!allowedHttpOrigin(server) || !server.header("Content-Type").startsWith("application/json")) {
-      sendError(403, "Use the board UI with a JSON request."); return;
-    }
-    auto json = cJSON_Parse(server.arg("plain").c_str());
+    auto json = readJsonObject(server, 160); if (!json) return;
     auto address = cJSON_GetObjectItemCaseSensitive(json, "address");
     if (!cJSON_IsString(address) || (strlen(address->valuestring) && strlen(address->valuestring) != 17)) {
       cJSON_Delete(json); sendError(400, "Provide a device address, or an empty string to stop advertisement capture."); return;

@@ -122,7 +122,7 @@ static void subscribeCharacteristic(NimBLERemoteCharacteristic* characteristic, 
     failOperation(address, uuid, command.argument, "Subscription requires a client configuration descriptor (0x2902), which was not found.");
     return;
   }
-  const char* mode = command.mode == 1 ? "notify" : command.mode == 2 ? "indicate" : "off";
+  const char* mode = SubscriptionModes[command.mode];
   recordTrace("subscribe", address, uuid, command.argument, nullptr, 0, String("Subscription requested: ") + mode);
   bool success = command.mode ? characteristic->subscribe(command.mode == 1, notificationReceived, true) : characteristic->unsubscribe(true);
   if (!success) {
@@ -132,7 +132,7 @@ static void subscribeCharacteristic(NimBLERemoteCharacteristic* characteristic, 
   {
     StateLock lock;
     auto entry = findEntry(command.argument);
-    if (entry) entry->subscription = mode;
+    if (entry) entry->subscription = command.mode;
   }
   recordTrace("subscribe-result", address, uuid, command.argument, nullptr, 0, String("Subscription active: ") + mode);
 }
