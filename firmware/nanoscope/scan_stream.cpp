@@ -162,7 +162,9 @@ void sendAdvertisements(BoardServer& server, uint64_t after, const String& expec
     const bool reset = !expectedBoot.isEmpty() && expectedBoot != bootId;
     if (reset) after = 0;
     end = journal.next(); oldest = journal.oldest(); dropped = journal.dropped(after); overwritten = journal.overwritten(); truncated = journal.truncated();
-    header = "{\"bootId\":\"" + bootId + "\",\"reset\":" + (reset ? "true" : "false") + ",\"uptime\":" + String(millis() / 1000) + ",\"oldestSeq\":" + String(oldest) + ",\"nextSeq\":" + String(end) + ",\"cursor\":" + String(end) + ",\"capacity\":" + String(ScanJournalCapacity) + ",\"journalBytes\":" + String(sizeof(journal)) + ",\"cacheCapacity\":" + String(ScanCacheCapacity) + ",\"cacheBytes\":" + String(cacheBytes()) + ",\"cacheLimitBytes\":" + String(ScanCacheLimitBytes) + ",\"droppedTotal\":" + String(overwritten) + ",\"truncatedTotal\":" + String(truncated) + ",\"cacheIds\":[";
+    // Each "+" appends into the first helper, so reserving it and the result avoids a reallocation per field on every poll.
+    StringSumHelper json("{\"bootId\":\""); json.reserve(768); header.reserve(768);
+    header = json + bootId + "\",\"reset\":" + (reset ? "true" : "false") + ",\"uptime\":" + String(millis() / 1000) + ",\"oldestSeq\":" + String(oldest) + ",\"nextSeq\":" + String(end) + ",\"cursor\":" + String(end) + ",\"capacity\":" + String(ScanJournalCapacity) + ",\"journalBytes\":" + String(sizeof(journal)) + ",\"cacheCapacity\":" + String(ScanCacheCapacity) + ",\"cacheBytes\":" + String(cacheBytes()) + ",\"cacheLimitBytes\":" + String(ScanCacheLimitBytes) + ",\"droppedTotal\":" + String(overwritten) + ",\"truncatedTotal\":" + String(truncated) + ",\"cacheIds\":[";
     for (size_t i = 0; i < state.devices.size(); ++i) { if (i) header += ','; header += String(state.devices[i].id); }
     header += "],\"browserOffload\":" + String(offloadLease.active(millis(), collectionEnabled()) ? "true" : "false") + ",\"offloadLeaseMs\":" + String(ScanOffloadLeaseMs) + ",\"cacheSkippedTotal\":" + String(cacheSkipped);
   }
