@@ -39,7 +39,7 @@ const NanoSensorApp = (() => {
     const actions = el('div', 'protocol-actions'), pause = button('Pause history', () => session.toggle());
     const json = button('Export JSON', () => { const device = session.status().device; if (device) download(device, history, false); });
     const csv = button('Export CSV', () => { const device = session.status().device; if (device) download(device, history, true); }); actions.append(pause, json, csv);
-    const storage = el('p', 'vendor-note'), clearDetails = el('details', 'protocol-details'); clearDetails.append(el('summary', '', 'Clear this sensor’s history'));
+    const storage = el('span', 'vendor-note sensor-storage'), clearDetails = el('details', 'protocol-details'); clearDetails.append(el('summary', '', 'Clear this sensor’s history'));
     clearDetails.append(el('p', 'vendor-note', 'Removes all readings for this sensor. Export first to keep a copy.'), button('Clear readings', async () => { const device = session.status().device; if (device) await history.clear(device); paint(); }));
     const meta = el('details', 'protocol-details'), metaBody = el('div'); meta.append(el('summary', '', 'Advertisement details & sources'), metaBody);
     const imported = el('details', 'protocol-details'), importBody = el('div', 'protocol-import'), importFormatLabel = el('label', '', 'Captured data format'), importFormat = el('select'); importFormatLabel.append(importFormat);
@@ -52,12 +52,12 @@ const NanoSensorApp = (() => {
       importResult.append(NanoInsights.profileCard(profile));
     });
     imported.append(el('summary', '', 'Inspect a saved advertisement'), importBody); importBody.append(el('p', 'vendor-note', 'Imported readings stay separate from device history.'), importFormatLabel, importLabel, inspect, importResult);
-    body.append(context, status, keyForm, readings, toolbar, plot, statistics, actions, storage, clearDetails, imported, meta); container.append(heading, body);
+    actions.append(storage); body.append(context, status, keyForm, readings, toolbar, plot, statistics, actions, clearDetails, imported, meta); container.append(heading, body);
     const history = NanoSensorHistory.create(), session = NanoSensorSession.create(history, { change: paint }); controller = session;
     let lastFields = '', lastChart = '', optionsKey = '';
     function paint() {
       const state = session.status(), device = state.device, profile = state.profile;
-      context.textContent = device ? `${device.label || device.name || device.address} · ${device.rssi} dBm · ${NanoInsights.age(device.lastSeenMs)}` : 'Choose a BTHome or Ruuvi sensor in Discover.';
+      context.textContent = device ? `${device.rssi} dBm · ${NanoInsights.age(device.lastSeenMs)}` : 'Choose a BTHome or Ruuvi sensor in Discover.';
       badge.textContent = state.pending ? 'Checking authentication' : profile?.authenticated ? 'Authenticated payload' : device?.streamLive || device?.liveId != null ? 'Live' : device ? 'Saved' : '';
       status.textContent = state.message || (state.encrypted && !state.hasKey ? 'This sensor encrypts its readings. Enter its key to decode them locally.' : profile?.fields.some(field => field.label === 'Calibration' && field.value === 'In progress') ? 'Sensor calibration is in progress. Readings have not settled.' : '');
       keyForm.hidden = !state.encrypted; forget.disabled = !state.hasKey; unlock.disabled = state.pending;
