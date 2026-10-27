@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
-const { companyId, addressLabel, addressVendor, identify } = require('../web/vendors.js');
+const { companyId, addressLabel, addressVendor, expand, identify } = require('../web/vendors.js');
 const { visibleDevices } = require('../web/app.js');
 const database = {
   oui: { '000000': 'Zero prefix', AABBCC: 'MA-L vendor', AABBCCD: 'MA-M vendor', AABBCCDDE: 'MA-S vendor' },
@@ -26,6 +26,14 @@ test('public addresses use the longest matching registry prefix', () => {
   assert.equal(addressVendor('AA:BB:CC:D1:22:33', 2, database), 'MA-M vendor');
   assert.equal(addressVendor('AA-BB-CC-11-22-33', 0, database), 'MA-L vendor');
   assert.equal(addressVendor('000000123456', 0, database), 'Zero prefix');
+});
+
+test('grouped vendor prefixes expand to a prefix lookup', () => {
+  const expanded = expand({ updated: 'today', vendors: { 'MA-L vendor': 'AABBCC', 'MA-S vendor': '000000 AABBCCDDE' }, company: {} });
+  assert.deepEqual(expanded.oui, { AABBCC: 'MA-L vendor', '000000': 'MA-S vendor', AABBCCDDE: 'MA-S vendor' });
+  assert.equal(expanded.vendors, undefined);
+  assert.equal(addressVendor('aa:bb:cc:dd:ee:ff', 0, expanded), 'MA-S vendor');
+  assert.equal(expand(database), database);
 });
 
 test('random and unknown address types do not perform vendor lookup', () => {

@@ -30,6 +30,13 @@ const NanoVendors = (() => {
     }
     return '';
   }
+  // vendors.json groups IEEE prefixes by organization to shrink the embedded copy; lookups need them keyed by prefix.
+  function expand(data) {
+    if (!data?.vendors) return data;
+    const { vendors, ...rest } = data, oui = {};
+    for (const [name, prefixes] of Object.entries(vendors)) for (const prefix of String(prefixes).split(' ')) oui[prefix] = name;
+    return { ...rest, oui };
+  }
   function identify(device, database) {
     const id = companyId(device.manufacturer);
     const manufacturer = id === null ? '' : database?.company?.[String(id)] || '';
@@ -45,6 +52,6 @@ const NanoVendors = (() => {
       search: `${manufacturer} ${vendor}`
     };
   }
-  return { companyId, addressLabel, addressVendor, identify };
+  return { companyId, addressLabel, addressVendor, expand, identify };
 })();
 if (typeof module !== 'undefined') module.exports = NanoVendors;

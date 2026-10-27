@@ -235,7 +235,7 @@ async function loadVendors() {
     if (!database) {
       const response = await fetch('/vendors.json', { signal: controller.signal });
       if (!response.ok) throw new Error('Vendor database unavailable');
-      database = await response.json();
+      database = vendorTools.expand(await response.json());
       if (database.oui && database.company) await NanoBrowserCache.saveVendors(database);
     }
     if (!database.oui || !database.company) throw new Error('Invalid vendor database');

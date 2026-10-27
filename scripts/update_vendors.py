@@ -44,6 +44,14 @@ def company_names(source):
     return entries
 
 
+def group_prefixes(oui):
+    # One entry per organization ("Name": "P1 P2") is about 120 KB smaller gzipped than a prefix-keyed map.
+    groups = {}
+    for prefix, name in oui.items():
+        groups.setdefault(name, []).append(prefix)
+    return {name: " ".join(sorted(prefixes)) for name, prefixes in sorted(groups.items())}
+
+
 def main():
     oui = {}
     for registry in ("MA-L", "MA-M", "MA-S"):
@@ -56,7 +64,7 @@ def main():
     if len(oui) < 40000:
         raise ValueError("Incomplete IEEE database")
     companies = company_names(download(SOURCES["Bluetooth SIG"]))
-    data = {"updated": datetime.now(timezone.utc).date().isoformat(), "sources": SOURCES, "oui": oui, "company": companies}
+    data = {"updated": datetime.now(timezone.utc).date().isoformat(), "sources": SOURCES, "vendors": group_prefixes(oui), "company": companies}
     payload = json.dumps(data, ensure_ascii=True, separators=(",", ":")).encode()
     (ROOT / "web/vendors.json").write_bytes(payload + b"\n")
     print(f"{len(oui)} IEEE prefixes; {len(companies)} BLE company IDs; {len(gzip.compress(payload))} bytes compressed")
