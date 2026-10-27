@@ -83,7 +83,7 @@ const NanoWorkspace = (() => {
   }
   function update({ device, connected } = {}) {
     const name = String(device?.label || device?.name || device?.address || '');
-    get('recorder-context').textContent = name ? `Selected device: ${name}${connected ? ' · connected' : ''}` : 'Choose a matching device from Discover or the app catalog.';
+    get('recorder-context').textContent = name ? `${name}${connected ? ' · Connected' : ''}` : '';
   }
   return { init, show: view => activate(view), view: () => active, module: () => activeModule, update, openModule,
     openTool(value) { activate('workbench'); selectTool(value); }, openRecorder: openModule };

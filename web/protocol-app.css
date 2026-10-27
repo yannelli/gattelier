@@ -24,7 +24,7 @@
 .protocol-sources { display: grid; gap: 10px; font-size: 13px; }
 .protocol-imported h3 { font-size: 14px; margin: 0 0 12px; }
 .protocol-body .vendor-note { line-height: 1.6; }
-.app-catalog-filters { display: grid; grid-template-columns: minmax(0, 1fr) 190px; gap: 12px; margin: var(--section-gap) 0; }
+.app-catalog-filters { display: grid; grid-template-columns: minmax(0, 1fr) 190px; gap: 12px; margin: 0 0 var(--section-gap); }
 .app-catalog-filters label { display: grid; gap: 8px; min-width: 0; color: var(--muted); font-size: 12px; }
 .app-catalog-filters :is(input, select) { width: 100%; min-width: 0; }
 .app-catalog-filters input { min-height: 44px; padding: 10px 12px; color: var(--text); background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-small); }

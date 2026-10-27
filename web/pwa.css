@@ -1,9 +1,5 @@
-.pwa-body { padding: 0 20px 20px; }
-.pwa-body p { margin: 0 0 14px; line-height: 1.5; }
-.pwa-instructions { color: var(--muted, #6e6e73); font-size: 13px; }
+.pwa-body { display: grid; gap: 12px; padding: 0 var(--panel-inset) var(--panel-inset); }
+.pwa-body p { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
+.pwa-body p:empty { display: none; }
 .pwa-actions { display: flex; flex-wrap: wrap; gap: 8px; }
-.pwa-settings .badge.online { color: var(--success, #248a3d); }
-@media (max-width: 600px) {
-  .pwa-body { padding: 0 16px 16px; }
-  .pwa-actions .button { flex: 1 1 auto; }
-}
+@media (max-width: 600px) { .pwa-actions .button { flex: 1 1 auto; } }

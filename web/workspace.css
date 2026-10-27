@@ -53,24 +53,24 @@ main { max-width: 1336px; padding: 22px 28px 16px; }
 .detail-top { padding: 22px 0; }
 .detail-top h3 { font-size: 22px; }
 .metadata { padding: 20px 0; gap: 18px 22px; }
-.view-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; padding: 0 2px; margin: 2px 0 20px; min-height: 54px; }
+.view-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; padding: 0 2px; margin: 2px 0 20px; min-height: 44px; }
 .view-heading > * { min-width: 0; }
 .view-heading :is(h1, h2, p) { overflow-wrap: anywhere; }
 .view-heading h2 { font-size: 24px; letter-spacing: -.7px; font-weight: 650; }
 .view-heading p { color: var(--muted); font-size: 12px; margin-top: 6px; }
+.view-heading p:empty { display: none; }
 .subnav { flex-shrink: 0; flex-wrap: wrap; max-width: 100%; border-radius: 11px; }
 .subnav button { padding: 8px 18px; border-radius: 7px; }
+.subnav .subnav-help { width: 36px; padding: 0; font-weight: 650; }
 .workspace-view > .lab-panel { margin-top: 0; }
 .workspace-view .lab-panel > .panel-heading { padding-top: 22px; }
 .view-empty { min-height: 400px; }
 .insights-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
 .insight-card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 22px; }
 .insight-value { font-size: 32px; font-weight: 650; letter-spacing: -1px; }
-.settings-layout { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(260px, .8fr); gap: 20px; align-items: start; }
 .settings-card .panel-heading { padding: 22px 24px 18px; }
 .setting-row { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 22px 24px; border-top: 1px solid var(--line); cursor: pointer; }
 .setting-row > span { min-width: 0; }
-.setting-row > input[type="file"] { width: 230px; max-width: 45%; }
 .setting-row strong { display: block; font-size: 13px; font-weight: 550; }
 .setting-row small { display: block; font-size: 11px; color: var(--muted); line-height: 1.7; margin-top: 5px; max-width: 430px; }
 .setting-switch { appearance: none; -webkit-appearance: none; position: relative; min-height: 0; width: 38px; height: 23px; flex-shrink: 0; padding: 0; border: 0; border-radius: 14px; background: color-mix(in srgb, var(--muted) 32%, var(--surface)); transition: background .15s; cursor: pointer; }
@@ -79,11 +79,6 @@ main { max-width: 1336px; padding: 22px 28px 16px; }
 .setting-switch:checked::before { transform: translateX(15px); }
 .settings-actions { display: flex; flex-wrap: wrap; gap: 10px; padding: 20px 24px; border-top: 1px solid var(--line); }
 .destructive { color: var(--danger); background: color-mix(in srgb, var(--danger) 7%, var(--surface)); }
-.settings-explainer { padding: 24px; }
-.settings-icon { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 12px; background: var(--surface-secondary); color: var(--muted); margin-bottom: 17px; }
-.settings-explainer h2 { font-size: 15px; letter-spacing: -.2px; margin-bottom: 13px; }
-.settings-explainer p { font-size: 12px; line-height: 1.8; color: var(--muted); }
-.settings-explainer p + p { margin-top: 12px; }
 footer { padding: 20px 2px 4px; }
 @media (prefers-color-scheme: dark) { :root { --danger: #ff8c82; --tab-shadow: 0 1px 4px #00000026, 0 0 0 1px #ffffff08; } }
 @media (max-width: 1000px) {
@@ -91,8 +86,6 @@ footer { padding: 20px 2px 4px; }
   .workspace-tabs { flex: 1; }
   .workspace-tabs button { flex: 1; padding: 10px 12px; }
   .workspace { grid-template-columns: minmax(300px, .9fr) minmax(0, 1.1fr); gap: 16px; }
-  .settings-layout { grid-template-columns: minmax(0, 1fr); }
-  .settings-explainer { max-width: none; }
 }
 @media (max-width: 760px) {
   :root { --toolbar-height: 108px; }
@@ -116,10 +109,8 @@ footer { padding: 20px 2px 4px; }
   .subnav button { flex: 1 1 auto; padding-inline: 12px; }
   .view-empty { min-height: 300px; }
   .insights-grid { grid-template-columns: minmax(0, 1fr); }
-  .setting-row, .settings-actions, .settings-explainer { padding: 20px; }
+  .setting-row, .settings-actions { padding: 20px; }
   .settings-card .panel-heading { padding: 20px; }
-  .setting-row:has(input[type="file"]) { flex-wrap: wrap; gap: 12px; }
-  .setting-row > input[type="file"] { width: 100%; max-width: 100%; }
   .discovery-options select, .filter-grid select { font-size: 16px; min-height: 44px; padding-left: 8px; }
   .discovery-options label, .filter-grid > label { font-size: 11px; }
   footer { flex-direction: column; align-items: center; gap: 5px; font-size: 9px; }

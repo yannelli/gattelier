@@ -1,5 +1,5 @@
 var NanoPWA = (() => {
-  let panel, registration, retry = () => {}, failures = 0, boardOnline = false;
+  let panel, registration, retry = () => {}, failures = 0;
   let status = 'Checking offline support', message = '', updating = false, installPrompt;
   const secure = () => globalThis.isSecureContext && 'serviceWorker' in navigator;
   const installed = () => globalThis.matchMedia?.('(display-mode: standalone)').matches || navigator.standalone;
@@ -8,21 +8,13 @@ var NanoPWA = (() => {
   function render() {
     if (!panel) return;
     panel.querySelector('[data-pwa-status]').textContent = status;
-    panel.querySelector('[data-pwa-connection]').textContent = boardOnline ? 'Board connected' : 'Waiting for board';
-    panel.querySelector('[data-pwa-connection]').classList.toggle('online', boardOnline);
-    panel.querySelector('[data-pwa-detail]').textContent = message || (boardOnline
-      ? 'Device history and app settings stay in this browser.'
-      : 'Saved history remains available. Live tools reconnect when this app can reach the board.');
+    panel.querySelector('[data-pwa-detail]').textContent = message;
     const update = panel.querySelector('[data-pwa-update]');
     update.disabled = !registration || updating;
-    update.textContent = updating ? 'Updating...' : registration?.waiting ? 'Install update' : 'Refresh app cache';
+    update.textContent = updating ? 'Updating…' : registration?.waiting ? 'Install update' : 'Check for updates';
     panel.querySelector('[data-pwa-install]').hidden = !installPrompt || installed();
-    panel.querySelector('[data-pwa-instructions]').textContent = installed() ? 'Opened as an installed app.'
-      : secure() ? 'On iPhone: Share > Add to Home Screen. Open this HTTPS address once before using the app offline.'
-        : 'Offline launch requires HTTPS. Open NanoScope from an HTTPS address before installing it.';
   }
   function reportConnection(connected) {
-    boardOnline = Boolean(connected);
     failures = connected ? 0 : Math.min(failures + 1, 5);
     render();
   }
@@ -39,7 +31,7 @@ var NanoPWA = (() => {
   }
   async function refresh() {
     if (!registration || updating) return;
-    updating = true; message = 'Downloading the current app. Saved devices and credentials are preserved.'; render();
+    updating = true; message = ''; render();
     try {
       await registration.update();
       if (registration.installing) await new Promise((resolve, reject) => {
@@ -63,24 +55,23 @@ var NanoPWA = (() => {
     if (!container || panel) return;
     panel = container; retry = hooks.retry || retry;
     panel.classList.add('settings-card', 'pwa-settings');
-    panel.innerHTML = '<div class="panel-heading"><div><h2>Offline app</h2><p data-pwa-status role="status"></p></div><span class="badge" data-pwa-connection></span></div><div class="pwa-body"><p data-pwa-detail></p><p class="pwa-instructions" data-pwa-instructions></p><div class="pwa-actions"><button class="button secondary" data-pwa-update type="button">Refresh app cache</button><button class="button quiet" data-pwa-retry type="button">Retry connection</button><button class="button primary" data-pwa-install type="button" hidden>Install app</button></div></div>';
+    panel.innerHTML = '<div class="panel-heading"><div><h2>Offline app</h2><p data-pwa-status role="status"></p></div><details class="help"><summary aria-label="About the offline app"><span aria-hidden="true">?</span></summary><div class="help-body"><p>Install Gattelier to open it without a connection. Saved history, settings and credentials are kept when the app updates.</p><p>On iPhone, tap Share, then Add to Home Screen. Offline launch needs an HTTPS address; open it once while online first.</p></div></details></div><div class="pwa-body"><div class="pwa-actions"><button class="button primary" data-pwa-install type="button" hidden>Install app</button><button class="button secondary" data-pwa-update type="button">Check for updates</button></div><p data-pwa-detail role="status"></p></div>';
     panel.querySelector('[data-pwa-update]').addEventListener('click', refresh);
-    panel.querySelector('[data-pwa-retry]').addEventListener('click', () => { failures = 0; retry(); });
     panel.querySelector('[data-pwa-install]').addEventListener('click', async () => { await installPrompt?.prompt(); installPrompt = null; render(); });
     globalThis.addEventListener('beforeinstallprompt', event => { event.preventDefault(); installPrompt = event; render(); });
     globalThis.addEventListener('appinstalled', render);
     globalThis.addEventListener('online', () => { failures = 0; retry(); });
-    if (!secure()) { status = 'HTTPS required for offline launch'; render(); return; }
+    if (!secure()) { status = 'Needs HTTPS for offline use'; render(); return; }
     try {
       registration = await navigator.serviceWorker.register('/sw.js', { scope: '/', updateViaCache: 'none' });
-      const ready = () => { status = registration.waiting ? 'App update ready' : 'App saved for offline launch'; render(); };
+      const ready = () => { status = registration.waiting ? 'Update ready' : installed() ? 'Installed · available offline' : 'Available offline'; render(); };
       registration.addEventListener('updatefound', () => {
         registration.installing?.addEventListener('statechange', () => {
           if (registration.waiting || registration.active) ready();
         });
       });
       if (registration.active) ready();
-      else { status = 'Saving app for offline launch'; navigator.serviceWorker.ready.then(ready); }
+      else { status = 'Saving for offline use…'; navigator.serviceWorker.ready.then(ready); }
     } catch (error) { status = 'Offline setup unavailable'; message = error.message; }
     render();
   }

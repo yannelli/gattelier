@@ -27,9 +27,9 @@
 .network-destination a { display: inline-flex; align-items: center; min-height: 44px; margin-top: 4px; color: var(--accent); font: 12px var(--mono); overflow-wrap: anywhere; }
 .network-message { color: var(--muted); font-size: 11px; line-height: 1.7; margin-top: 14px; }
 .network-message.error { color: var(--warning-text); }
-.network-physical { border-top: 1px solid var(--line); padding-top: 16px; margin-top: 18px; color: var(--muted); font-size: 11px; line-height: 1.7; }
-.network-led-legend { display: flex; flex-wrap: wrap; gap: 8px 18px; margin-top: 10px; }
-.network-led-legend > span { display: inline-flex; align-items: center; gap: 6px; font-size: 10px; }
+.network-message:empty { display: none; }
+.network-led-legend { display: grid; gap: 6px; }
+.network-led-legend > span { display: inline-flex; align-items: center; gap: 8px; }
 .network-led-legend .network-led { width: 6px; height: 6px; }
 @keyframes network-pulse { 50% { opacity: .25; } }
 @media (max-width: 760px) {

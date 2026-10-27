@@ -12,7 +12,7 @@ const NanoCatalogUI = (() => {
   }
   function mount(panel) {
     const section = el('section', 'catalog-section');
-    section.innerHTML = '<div class="catalog-heading"><div><h3>Discovery libraries</h3><p>Search services and recognize protocol families. Matching runs in this browser.</p></div><span class="badge" data-library-count></span></div><div class="api-actions"><button type="button" class="button secondary" data-libraries-refresh>Download libraries</button><button type="button" class="button quiet" data-libraries-clear>Remove libraries</button></div><p class="catalog-status" data-library-status role="status"></p><div class="catalog-library-list" data-library-list></div><details class="catalog-browser"><summary>Browse library entries</summary><div class="catalog-filters"><label>Search libraries<input type="search" data-library-search placeholder="UUID, protocol, name, or code" autocomplete="off"></label><label>Entry type<select data-library-kind><option value="">All entries</option><option value="uuid">UUID names</option><option value="protocol">Protocols</option><option value="appearance">Appearance</option><option value="ad-type">Advertising data</option></select></label></div><p class="vendor-note" data-library-results-count role="status"></p><div class="catalog-results" data-library-results></div></details>';
+    section.innerHTML = '<div class="catalog-heading"><p class="catalog-status" data-library-status role="status"></p><span class="badge" data-library-count></span></div><div class="api-actions"><button type="button" class="button secondary" data-libraries-refresh>Download libraries</button><button type="button" class="button quiet" data-libraries-clear>Remove</button></div><div class="catalog-library-list" data-library-list></div><details class="catalog-browser"><summary>Browse library entries</summary><div class="catalog-filters"><label>Search libraries<input type="search" data-library-search placeholder="UUID, protocol, name, or code" autocomplete="off"></label><label>Entry type<select data-library-kind><option value="">All entries</option><option value="uuid">UUID names</option><option value="protocol">Protocols</option><option value="appearance">Appearance</option><option value="ad-type">Advertising data</option></select></label></div><p class="vendor-note" data-library-results-count role="status"></p><div class="catalog-results" data-library-results></div></details>';
     panel.querySelector('.panel-heading').after(section);
     const get = selector => section.querySelector(selector), originInput = panel.querySelector('[data-metadata-origin]');
     const refresh = get('[data-libraries-refresh]'), clear = get('[data-libraries-clear]'), search = get('[data-library-search]'), kind = get('[data-library-kind]');
@@ -41,9 +41,9 @@ const NanoCatalogUI = (() => {
     function render() {
       const state = NanoCatalogs.status(); refresh.disabled = state.busy; clear.disabled = !state.busy && !state.libraries.length;
       refresh.textContent = state.busy ? 'Downloading…' : state.libraries.length ? 'Update libraries' : 'Download libraries';
-      get('[data-library-count]').textContent = `${state.count.toLocaleString()} active entries`;
+      get('[data-library-count]').textContent = `${state.count.toLocaleString()} entries`;
       if (!editingOrigin && state.libraries.length) originInput.value = state.origin;
-      get('[data-library-status]').textContent = state.error || (state.busy ? 'Downloading public catalogs. Device data stays local.' : state.updatedAt ? `${state.persistent ? 'Saved for offline use' : 'Available in this tab'}. Updated ${new Date(state.updatedAt).toLocaleString()}.` : 'No discovery libraries downloaded. Built-in profiles remain available.');
+      get('[data-library-status]').textContent = state.error || (state.busy ? 'Downloading…' : state.updatedAt ? `Updated ${new Date(state.updatedAt).toLocaleString()}${state.persistent ? '' : ' · this tab only'}` : 'Not downloaded');
       const next = JSON.stringify(state.libraries);
       if (signature !== next) {
         signature = next;

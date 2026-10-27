@@ -64,8 +64,8 @@ const NanoDexcom = (() => {
     const p = protocol(), connection = options.connection || NanoConnection, getDevice = options.getDevice || (() => connection.snapshot().selected);
     const { el } = NanoDexcomView, storage = NanoDexcomStorage.create();
     const heading = el('div', 'panel-heading'), intro = el('div'), body = el('div', 'dexcom-body');
-    intro.append(el('p', 'hint', 'Connect with your applicator code to request readings and history.'));
-    heading.append(intro);
+    intro.append(el('h2', '', 'Sensor'));
+    heading.append(intro); heading.insertAdjacentHTML('beforeend', '<details class="help"><summary aria-label="About Dexcom G7"><span aria-hidden="true">?</span></summary><div class="help-body"><p>Enter the 4-digit code printed on the applicator to authenticate, then request the latest reading, history or identity.</p><p>Times combine the sensor clock with when the browser received each packet. G7 packets do not carry exact stop or expiry times.</p><p>The applicator code is never saved. Saved sessions and readings stay in this browser, tied to this board and sensor.</p><a href="https://github.com/yannelli/gattelier/blob/main/DEXCOM-CRYPTO-NOTICE.md" target="_blank" rel="noopener noreferrer">Protocol sources and licenses</a></div></details>');
     const selected = el('p', 'hint'), status = el('p', 'lab-status'), results = el('div', 'dexcom-results'); status.setAttribute('role', 'status');
     const form = el('form', 'dexcom-connect'), pinLabel = el('label', '', '4-digit applicator code'), pin = el('input');
     pin.type = 'password'; pin.inputMode = 'numeric'; pin.pattern = '[0-9]{4}'; pin.maxLength = 4; pin.autocomplete = 'off'; pin.placeholder = '0000'; pinLabel.append(pin);
@@ -92,10 +92,7 @@ const NanoDexcom = (() => {
     const hexLabel = el('label', '', 'Packet HEX'), input = el('textarea'); input.rows = 3; input.spellcheck = false; input.placeholder = 'Paste one received characteristic value'; hexLabel.append(input);
     const timeLabel = el('label', '', 'Original capture time (optional)'), time = el('input'); time.type = 'datetime-local'; time.step = '1'; timeLabel.append(time);
     const decode = button('Decode packet'); details.append(passiveActions, uuidLabel, hexLabel, timeLabel, decode);
-    const info = el('p', 'hint', 'Readings use the sensor clock and browser receipt time. Exact stop and expiry times are unavailable in the supported G7 packets.');
-    const privacy = el('p', 'hint', 'The applicator code is used for authentication and is not saved. Saved sessions and readings stay in this browser, scoped to this board and sensor.');
-    const sources = el('a', 'hint', 'Protocol sources and licenses'); sources.href = 'https://github.com/yannelli/gattelier/blob/main/DEXCOM-CRYPTO-NOTICE.md'; sources.target = '_blank'; sources.rel = 'noopener noreferrer';
-    body.append(selected, form, status, toolbar, results, savedActions, details, info, privacy, sources); container.replaceChildren(heading, body);
+    body.append(selected, form, status, toolbar, results, savedActions, details); container.replaceChildren(heading, body);
     let session, client, selectedScope = '', displayed = {}, destroying = false, rendering = false, uiError = '', saveStamp = '', uiOperation = 0;
     const schedule = () => { if (!destroying) queueMicrotask(render); };
     client = createClient(lab, { ...options, onChange: schedule });
@@ -115,7 +112,7 @@ const NanoDexcom = (() => {
         if (fresh && keep.checked && fresh.packets && saveStamp !== `${nextScope}:${fresh.packets}`) {
           try { storage.saveReadings(device, fresh); saveStamp = `${nextScope}:${fresh.packets}`; } catch (error) { uiError = error.message; }
         }
-        selected.textContent = device ? `${device.label || device.name || 'Dexcom'} · ${device.address}` : 'Select a Dexcom device in Discover.';
+        selected.textContent = device ? `${device.label || device.name || 'Dexcom'} · ${device.address}` : 'Choose a Dexcom sensor in Discover.';
         const savedSession = storage.hasSession(device);
         pin.placeholder = savedSession ? 'Saved session available' : '0000'; pin.required = !savedSession; pin.disabled = active;
         connect.disabled = !device || active; connect.textContent = savedSession ? 'Reconnect to G7' : 'Connect to G7';
@@ -124,7 +121,7 @@ const NanoDexcom = (() => {
         for (const control of [latest, history, identity, hours]) control.disabled = !same || !direct.authenticated || direct.busy;
         listen.disabled = !device || active || captured.listening; stop.hidden = !captured.listening; decode.disabled = !device || active || captured.listening;
         exportButton.disabled = !displayed.records?.length; clear.disabled = !saved;
-        status.textContent = uiError || (same && (direct.error || direct.stage)) || captured.error || (captured.listening ? 'Capturing received packets.' : saved ? 'Showing readings saved in this browser.' : 'Ready to connect.');
+        status.textContent = uiError || (same && (direct.error || direct.stage)) || captured.error || (captured.listening ? 'Capturing received packets.' : saved ? 'Showing saved readings.' : '');
         status.classList.toggle('error', Boolean(uiError || same && direct.error || captured.error));
         NanoDexcomView.render(results, displayed, !fresh && Boolean(saved));
       } finally { rendering = false; }

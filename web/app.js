@@ -269,6 +269,7 @@ async function boot() {
   NanoLab.init();
   NanoCredentials.init();
   NanoConnection.init({ state: () => state, online: () => online, pending: () => pending, selected: selectedDevice, devices: browseDevices, refresh: poll, select: selectDevice, action: NanoLab.action, recorder: NanoRecorders.identify, changed: render, notice: message => { notice = message; } });
+  NanoSettings.mount();
   NanoCredentialsUI.mount($('credentials-panel'));
   NanoAPIUI.mount($('api-panel'));
   NanoActivityLedUI.mount($('activity-led-panel'), NanoLab);

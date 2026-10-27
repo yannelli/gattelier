@@ -2,8 +2,6 @@
 .device-personal input { padding:10px 12px; flex:1; min-width:130px; }
 .raw-details { border-top:1px solid var(--line); padding:14px 0; }
 .raw-details summary { cursor:pointer; color:var(--muted); font-weight:600; }
-.insights-intro,.insights-device { margin-bottom:20px; }
-.insights-intro h2,.insights-device h2 { margin-bottom:6px; }
 .profile-catalog { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; margin-bottom:28px; }
 .profile-tool { appearance:none; text-align:left; border:1px solid var(--line); border-radius:var(--radius-small); background:var(--surface); color:var(--text); padding:18px; display:flex; flex-direction:column; gap:7px; font:inherit; }
 .profile-tool:hover { border-color:var(--accent); background:var(--accent-soft); }

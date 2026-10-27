@@ -1,6 +1,9 @@
 #metadata-panel { grid-column: 1 / -1; }
 .catalog-section { padding: 0 var(--panel-inset) var(--panel-inset); display: grid; gap: var(--section-gap); }
-.catalog-heading { display: flex; justify-content: space-between; align-items: flex-start; gap: var(--control-gap); }
+.catalog-heading { display: flex; justify-content: space-between; align-items: center; gap: var(--control-gap); }
+.library-advanced.api-help { margin: 0; padding: 0 var(--panel-inset); border-top: 1px solid var(--line); }
+.library-advanced[open] { padding-bottom: var(--panel-inset); }
+.library-advanced .api-form { padding: 0; }
 .catalog-heading h3, .catalog-heading p, .catalog-status { margin: 0; }
 .catalog-heading p { margin-top: 6px; color: var(--muted); }
 .catalog-heading .badge { white-space: nowrap; }

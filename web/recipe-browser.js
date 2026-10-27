@@ -25,8 +25,8 @@ const NanoRecipeBrowser = (() => {
         select.value = selected;
       }
       const entry = NanoRecipeLibrary.get(selected);
-      description.textContent = entry ? `${entry.description}${entry.leavesSubscriptionActive ? ' Subscription stays on for capture.' : ''}` : 'Device information, batteries, thermometers, environmental sensors, heart rate, and pulse oximeters.';
-      availability.textContent = entry ? NanoRecipeLibrary.availability(entry, current).reason : `${ready.size} recipes match the current connection.`;
+      description.textContent = entry ? `${entry.description}${entry.leavesSubscriptionActive ? ' Subscription stays on for capture.' : ''}` : '';
+      availability.textContent = entry ? NanoRecipeLibrary.availability(entry, current).reason : ready.size ? `${ready.size} match this connection` : '';
       source.hidden = !entry;
       if (entry) { source.textContent = entry.source.title; source.href = entry.source.url; }
     }

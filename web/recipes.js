@@ -102,11 +102,12 @@ const NanoRecipes = (() => {
     if (!container) return;
     const el = (tag, cls, text) => { const item = document.createElement(tag); if (cls) item.className = cls; if (text !== undefined) item.textContent = text; return item; };
     let saved = [], persistent = true, available = false;
-    const heading = el('div', 'panel-heading'); heading.append(el('h2', '', 'Protocol recipes'), el('span', 'badge', 'Explicit runs'));
+    const heading = el('div', 'panel-heading'); heading.append(el('h2', '', 'Protocol recipes'));
+    heading.insertAdjacentHTML('beforeend', '<details class="help"><summary aria-label="About recipes"><span aria-hidden="true">?</span></summary><div class="help-body"><p>A recipe is a JSON list of reads, writes and subscriptions for the connected device. Pick a built-in one or edit your own.</p><p>Validate checks the steps without sending anything. Commands go out only when you press Run, and Cancel cannot undo commands already sent.</p><p>Up to 20 recipes are saved in this browser. Recipes with authentication payloads cannot be saved or exported.</p></div></details>');
     const body = el('div', 'detail'), controls = el('div', 'inspector-shortcuts'), editor = el('textarea');
     editor.id = 'recipe-editor'; editor.rows = 15; editor.spellcheck = false; editor.setAttribute('aria-label', 'Recipe JSON'); editor.value = JSON.stringify(model.example(), null, 2);
     const savedSelect = el('select'); savedSelect.setAttribute('aria-label', 'Saved recipes');
-    const status = el('p', 'hint', 'Edit a recipe, validate it, then run it on the connected device.'); status.setAttribute('role', 'status');
+    const status = el('p', 'hint recipe-status'); status.setAttribute('role', 'status');
     const storageStatus = el('p', 'vendor-note'), log = el('ol', 'recipe-results'), importFile = el('input'); importFile.type = 'file'; importFile.accept = '.json,application/json'; importFile.setAttribute('aria-label', 'Import recipe JSON');
     const buttons = {}, runner = createRunner(lab, { onUpdate(update) {
       if (update.index >= 0) {
@@ -126,16 +127,16 @@ const NanoRecipes = (() => {
     function renderSaved() {
       savedSelect.replaceChildren(el('option', '', 'Choose a saved recipe'));
       saved.forEach((recipe, index) => { const option = el('option', '', recipe.name); option.value = index; savedSelect.append(option); });
-      storageStatus.textContent = `${saved.length} / 20 saved recipes · ${persistent ? 'Browser local storage' : 'Memory only: browser storage unavailable'}`;
+      storageStatus.textContent = `${saved.length} of 20 saved${persistent ? '' : ' · this tab only'}`;
     }
     function sync() {
       const running = runner.running(); editor.disabled = running; savedSelect.disabled = running; importFile.disabled = running;
       for (const [key, button] of Object.entries(buttons)) button.disabled = key === 'cancel' ? !running : running;
       buttons.run.disabled ||= !available || !lab.getState().ble?.connected || lab.getState().ble?.busy || lab.isActing();
     }
-    add('Validate', () => { const recipe = read(); status.textContent = `Valid recipe: ${recipe.steps.length} steps. Write steps execute when you press Run.`; }, 'validate');
+    add('Validate', () => { const recipe = read(); status.textContent = `Valid: ${recipe.steps.length} steps.`; }, 'validate');
     add('Run', async () => { log.replaceChildren(); const task = runner.execute(read()); sync(); await task; }, 'run');
-    add('Cancel', () => { runner.cancel(); status.textContent = 'Cancelling. Already-sent commands cannot be undone.'; }, 'cancel');
+    add('Cancel', () => { runner.cancel(); status.textContent = 'Cancelling…'; }, 'cancel');
     add('Save recipe', () => {
       const recipe = read(); safe(recipe); const index = saved.findIndex(item => item.name === recipe.name);
       if (index < 0 && saved.length >= 20) throw new Error('20 recipes are saved. Reuse an existing name to replace one.');
@@ -145,13 +146,13 @@ const NanoRecipes = (() => {
     }, 'save');
     add('Export recipe', () => {
       const recipe = read(); safe(recipe); const url = URL.createObjectURL(new Blob([JSON.stringify(recipe, null, 2)], { type: 'application/json' }));
-      const link = el('a'); link.href = url; link.download = `${recipe.name.replace(/[^a-z0-9_-]/gi, '_')}.json`; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); status.textContent = 'Recipe export prepared.';
+      const link = el('a'); link.href = url; link.download = `${recipe.name.replace(/[^a-z0-9_-]/gi, '_')}.json`; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); status.textContent = '';
     }, 'export');
-    savedSelect.addEventListener('change', () => { const recipe = saved[Number(savedSelect.value)]; if (savedSelect.selectedIndex > 0 && recipe) { editor.value = JSON.stringify(recipe, null, 2); status.textContent = 'Recipe loaded. Press Run to execute.'; } });
+    savedSelect.addEventListener('change', () => { const recipe = saved[Number(savedSelect.value)]; if (savedSelect.selectedIndex > 0 && recipe) { editor.value = JSON.stringify(recipe, null, 2); status.textContent = ''; } });
     importFile.addEventListener('change', report(async () => {
       const file = importFile.files[0]; if (!file) return;
       if (file.size > 65536) throw new Error('Recipe file exceeds 64 KiB.');
-      const recipe = model.validate(JSON.parse(await file.text())); editor.value = JSON.stringify(recipe, null, 2); importFile.value = ''; status.textContent = 'Recipe imported into the editor. It has not been saved or run.';
+      const recipe = model.validate(JSON.parse(await file.text())); editor.value = JSON.stringify(recipe, null, 2); importFile.value = ''; status.textContent = 'Imported into the editor.';
     }));
     try {
       const value = JSON.parse(localStorage.getItem('nanoscope.recipes.v1') || '[]');

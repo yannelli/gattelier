@@ -3,8 +3,8 @@
 const NanoAccessUI = (() => {
   function mount(panel) {
     const details = document.createElement('details'); details.className = 'api-help';
-    details.innerHTML = '<summary>Allowed hosted app</summary><p>Set the exact HTTPS origin allowed to control this board. Open the board’s local page to change it. Leave blank to disable hosted access.</p><form data-access-form class="api-form"><label>Hosted app origin<input data-access-origin type="url" placeholder="https://gattelier.ryanyannelli.com" autocomplete="off" spellcheck="false"></label><div class="api-actions"><button class="button secondary" type="submit">Save allowed app</button><button class="button quiet" type="button" data-access-load>Read current setting</button></div></form><p data-access-message role="status" class="hint"></p>';
-    panel.append(details);
+    details.innerHTML = '<summary>Allowed hosted app</summary><form data-access-form class="api-form"><label>Hosted app origin<input data-access-origin type="url" placeholder="https://gattelier.ryanyannelli.com" autocomplete="off" spellcheck="false"></label><p class="vendor-note">Only this HTTPS origin can control the board. Change it from the board\'s local page. Leave blank to turn hosted access off.</p><div class="api-actions"><button class="button secondary" type="submit">Save</button><button class="button quiet" type="button" data-access-load>Reload</button></div></form><p data-access-message role="status" class="vendor-note"></p>';
+    panel.querySelector('.api-network').append(details);
     const input = details.querySelector('[data-access-origin]'), status = details.querySelector('[data-access-message]');
     async function request(body) {
       const controller = new AbortController(), timer = setTimeout(() => controller.abort(), 8000);

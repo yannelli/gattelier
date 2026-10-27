@@ -60,7 +60,7 @@ const NanoModules = (() => {
     document.getElementById('module-connection').hidden = active === 'medical' || Boolean(deviceApps.get(active));
     if (readers.has(active)) {
       const target = appDevice(active); readers.get(active).render(target, NanoLab.getState());
-      document.getElementById('recorder-context').textContent = target ? `Inspecting ${target.label || target.name || target.address}` : 'Choose an observed device from the app catalog.';
+      document.getElementById('recorder-context').textContent = target ? target.label || target.name || target.address : '';
     }
     const connection = NanoConnection.describe(device), connectionKey = JSON.stringify([device?.address, connection.status, connection.reason, connection.enabled, connection.label]);
     if (connectionKey !== connectionSignature) {
@@ -71,13 +71,13 @@ const NanoModules = (() => {
     if (next !== signature) {
     signature = next;
     const root = document.getElementById('apps-catalog'), intro = document.createElement('p'); intro.className = 'hint';
-    intro.textContent = device ? `Selected: ${device.label || device.name || device.address}. ${match.length ? 'Matching apps appear first.' : 'No specialized app matches this advertisement.'}` : 'Select a device to see matching apps, or choose an observed device below.';
+    intro.textContent = device && match.length ? `Apps for ${device.label || device.name || device.address} are shown first.` : '';
     const filters = document.createElement('div'); filters.className = 'app-catalog-filters';
-    const searchLabel = document.createElement('label'); searchLabel.textContent = 'Find an app';
-    const search = document.createElement('input'); search.type = 'search'; search.placeholder = 'Name, device, or capability'; search.value = appQuery; search.dataset.focus = 'app-search'; searchLabel.append(search);
-    const scopeLabel = document.createElement('label'); scopeLabel.textContent = 'Show';
-    const scope = document.createElement('select'); scope.dataset.focus = 'app-scope';
-    for (const [value, text] of [['all', 'All apps'], ['observed', 'Observed devices']]) { const option = document.createElement('option'); option.value = value; option.textContent = text; scope.append(option); }
+    const searchLabel = document.createElement('label');
+    const search = document.createElement('input'); search.type = 'search'; search.placeholder = 'Search apps'; search.setAttribute('aria-label', 'Search apps'); search.value = appQuery; search.dataset.focus = 'app-search'; searchLabel.append(search);
+    const scopeLabel = document.createElement('label');
+    const scope = document.createElement('select'); scope.dataset.focus = 'app-scope'; scope.setAttribute('aria-label', 'Show');
+    for (const [value, text] of [['all', 'All apps'], ['observed', 'Nearby only']]) { const option = document.createElement('option'); option.value = value; option.textContent = text; scope.append(option); }
     scope.value = appScope; scopeLabel.append(scope); filters.append(searchLabel, scopeLabel);
     search.addEventListener('input', () => { appQuery = search.value; render(hooks.selected(), hooks.devices()); });
     scope.addEventListener('change', () => { appScope = scope.value; render(hooks.selected(), hooks.devices()); });
@@ -88,12 +88,12 @@ const NanoModules = (() => {
       const card = document.createElement('article'); card.className = `app-card${match.includes(app.id) ? ' matched' : ''}`;
       const heading = document.createElement('h3'); heading.textContent = app.title;
       const description = document.createElement('p'); description.textContent = app.description;
-      const found = devices.filter(item => matches(item).includes(app.id)), status = document.createElement('span'); status.className = 'badge'; status.textContent = match.includes(app.id) ? 'Matches selected device' : `${found.length} observed`;
-      const open = document.createElement('button'); open.className = 'button secondary'; open.type = 'button'; open.textContent = `Open ${app.title}`;
+      const found = devices.filter(item => matches(item).includes(app.id)), status = document.createElement('span'); status.className = 'badge'; status.textContent = match.includes(app.id) ? 'Matches selection' : found.length ? `${found.length} nearby` : '';
+      const open = document.createElement('button'); open.className = 'button secondary'; open.type = 'button'; open.textContent = 'Open'; open.setAttribute('aria-label', `Open ${app.title}`);
       open.addEventListener('click', () => { if (!match.includes(app.id) && found.length === 1) selectAppDevice(app.id, found[0]); NanoWorkspace.openModule(app.id); render(hooks.selected(), hooks.devices()); });
-      card.append(status, heading, description, open);
+      card.append(...status.textContent ? [status] : [], heading, description, open);
       if (found.length) {
-        const label = document.createElement('label'); label.textContent = 'Observed devices';
+        const label = document.createElement('label'); label.textContent = 'Nearby';
         const select = document.createElement('select'); select.setAttribute('aria-label', `${app.title} device`); select.dataset.focus = `app-device-${app.id}`;
         const placeholder = document.createElement('option'); placeholder.value = ''; placeholder.textContent = 'Choose a device'; select.append(placeholder);
         for (const item of found) { const option = document.createElement('option'); option.value = `${item.address}/${item.addressType}`; option.textContent = `${item.label || item.name || item.address}${item.liveId == null && !item.streamLive ? ' · history' : ''}`; select.append(option); }
@@ -102,8 +102,8 @@ const NanoModules = (() => {
       }
       grid.append(card);
     }
-    const fragment = document.createDocumentFragment(); fragment.append(intro, filters, grid);
-    if (!visible.length) { const empty = document.createElement('p'); empty.className = 'hint'; empty.textContent = 'No apps match these filters. Try another search or show all apps.'; fragment.append(empty); }
+    const fragment = document.createDocumentFragment(); fragment.append(...intro.textContent ? [intro] : [], filters, grid);
+    if (!visible.length) { const empty = document.createElement('p'); empty.className = 'hint'; empty.textContent = 'No matching apps'; fragment.append(empty); }
     replacePreservingFocus(root, fragment);
     }
 

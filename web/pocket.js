@@ -5,9 +5,10 @@ const NanoPocket = (() => {
     const p = PocketProtocol;
     let current = {}, online = false, target = '', authenticated = false, running = false, transferActive = false, waiter, transfer, recording, lastPacket = 0, bootId = '', address = '', credentialStamp = '';
     const el = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text !== undefined) n.textContent = text; return n; };
-    const title = el('div', 'panel-heading'); title.append(el('h2', '', 'Pocket recordings'), el('span', 'badge', 'Protocol adapter'));
+    const title = el('div', 'panel-heading'); title.append(el('h2', '', 'Pocket recordings'));
+    title.insertAdjacentHTML('beforeend', '<details class="help"><summary aria-label="About Pocket"><span aria-hidden="true">?</span></summary><div class="help-body"><p>Authenticate with the recorder’s 16-character session key, then browse recordings by date and save them as MP3.</p><p>Load the key directly or extract it from an iPhone PacketLogger capture. Keys are saved in this browser for this Pocket address and left out of traffic exports. Backups and capture steps are in Settings › Credentials.</p></div></details>');
     const body = el('div', 'pocket-body');
-    const status = el('p', 'hint', 'Connect a Pocket recorder to browse its recordings.');
+    const status = el('p', 'hint');
     const auth = el('div', 'pocket-controls');
     const key = el('input'); key.type = 'password'; key.maxLength = 16; key.autocomplete = 'off'; key.placeholder = '16-character session key'; key.setAttribute('aria-label', 'Pocket session key');
     const keyFile = el('input'); keyFile.type = 'file'; keyFile.accept = '.txt,.pklg'; keyFile.setAttribute('aria-label', 'Load Pocket key or PacketLogger capture');
@@ -15,8 +16,7 @@ const NanoPocket = (() => {
     const keyInputs = el('div', 'pocket-controls'); keyInputs.append(key, keyFile);
     const credentialTools = el('details', 'credential-controls'); credentialTools.append(el('summary', '', 'Manage Pocket key'), keyInputs);
     auth.append(unlock, credentialTools);
-    const help = el('p', 'vendor-note', 'Keys are saved in this browser for the selected Pocket address and excluded from traffic exports. Credential backups and capture help are in Settings.');
-    const toolbar = el('div', 'pocket-controls');
+        const toolbar = el('div', 'pocket-controls');
     const directories = el('button', 'button secondary', 'List recording dates');
     const info = el('button', 'button secondary', 'Read device info');
     const dates = el('select'); dates.setAttribute('aria-label', 'Recording date');
@@ -26,9 +26,9 @@ const NanoPocket = (() => {
     const files = el('div', 'pocket-files');
     const progress = el('p', 'pocket-progress'); progress.setAttribute('role', 'status');
     const save = el('button', 'button primary', 'Save MP3'); save.hidden = true;
-    const credentialSettings = el('button', 'button quiet', 'Credential backups & capture help'); credentialSettings.type = 'button';
-    credentialSettings.addEventListener('click', () => { NanoWorkspace.show('settings'); document.getElementById('credentials-panel')?.scrollIntoView({ block: 'start' }); });
-    credentialTools.append(help, credentialSettings);
+    const credentialSettings = el('button', 'button quiet', 'Credential settings'); credentialSettings.type = 'button';
+    credentialSettings.addEventListener('click', () => { NanoSettings.open('credentials'); });
+    credentialTools.append(credentialSettings);
     body.append(status, auth, toolbar, files, progress, save); container.replaceChildren(title, body);
 
     function selection() {
@@ -41,7 +41,7 @@ const NanoPocket = (() => {
       const stamp = `${device?.address || ''}/${saved || ''}`;
       if (!force && stamp === credentialStamp) return;
       credentialStamp = stamp; key.value = saved || ''; credentialTools.open = !saved;
-      if (!device) status.textContent = 'Select a Pocket recorder from Discover or Apps.';
+      if (!device) status.textContent = '';
       else if (!authenticated) status.textContent = saved ? `Saved key ready for ${device.label || device.name || device.address}.` : 'Load the session key or an iPhone PacketLogger capture for this Pocket.';
     }
     function sync() {

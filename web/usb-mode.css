@@ -1,13 +1,6 @@
-.usb-body { padding: 0 20px 20px; }
-.usb-body p { line-height: 1.5; }
-.usb-counters { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin: 20px 0; }
-.usb-counters dt { color: var(--muted); font-size: 12px; }
-.usb-counters dd { margin: 4px 0 0; font-variant-numeric: tabular-nums; }
-.usb-help { margin-top: 20px; }
-.usb-help summary { cursor: pointer; font-weight: 600; }
-.usb-help pre { padding: 12px; overflow-x: auto; border-radius: 10px; background: var(--surface-secondary); }
-.usb-message { color: var(--muted); font-size: 13px; }
-@media (max-width: 600px) {
-  .usb-body { padding: 0 16px 16px; }
-  .usb-counters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-}
+.usb-body { display: grid; justify-items: start; gap: 16px; padding: 0 var(--panel-inset) var(--panel-inset); }
+.usb-counters { justify-self: stretch; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin: 0; padding: 16px; border-radius: var(--radius-small); background: var(--surface-secondary); }
+.usb-counters dt { color: var(--muted); font-size: 11px; }
+.usb-counters dd { margin: 4px 0 0; font-size: 13px; font-weight: 550; font-variant-numeric: tabular-nums; }
+.usb-message { color: var(--muted); font-size: 12px; }
+@media (max-width: 600px) { .usb-counters { grid-template-columns: repeat(2, minmax(0, 1fr)); } }

@@ -36,7 +36,7 @@ function renderInspector() {
   replacePreservingFocus($('inspector'), buildDeviceDetail(device));
 }
 function buildDeviceDetail(device, fullPage = false) {
-  if (!device) return empty('Discover something nearby.', 'Select a device to view its advertisement. Connect to inspect services and read values.', 'inspector-empty');
+  if (!device) return empty('No device selected', 'Choose a device from the list.', 'inspector-empty');
   const live = device.streamLive === true || device.liveId != null || state.devices.some(item => deviceKey(item) === deviceKey(device));
   const connected = Boolean(state.ble.connected && state.ble.address === device.address);
   const detail = node('div', 'detail');
@@ -101,7 +101,7 @@ function appendDeviceServices(detail, connected) {
       heading.append(node('span', 'uuid', service.uuid)); section.append(heading);
       const definition = NanoMetadata.lookup(service.uuid);
       if (definition?.description) section.append(node('p', 'hint', definition.description));
-      else if (!definition && uuidName(service.uuid, '') === '') section.append(node('p', 'hint', 'Vendor-defined service. Access properties are discovered; command and packet meanings are not yet decoded.'));
+      else if (!definition && uuidName(service.uuid, '') === '') section.append(node('p', 'hint', 'Vendor-defined service. Its commands are not decoded.'));
       for (const characteristic of service.characteristics) section.append(renderCharacteristic(characteristic, service.uuid));
       if (!service.characteristics.length) section.append(node('p', 'hint', 'No characteristics found.'));
       detail.append(section);

@@ -9,17 +9,17 @@ const NanoDexcomView = (() => {
     const hero = el('div', 'dexcom-reading');
     hero.append(el('span', 'eyebrow', saved ? 'Saved reading' : 'Last reading'));
     const number = el('div', 'dexcom-glucose'); number.append(el('strong', '', latest?.glucoseMgDl ?? '--'), el('span', 'hint', 'mg/dL')); hero.append(number);
-    hero.append(el('p', 'hint', latest ? `${latest.stateLabel} · ${time(latest.timestamp)}` : 'Connect to request a reading.'));
+    if (latest) hero.append(el('p', 'hint', `${latest.stateLabel} · ${time(latest.timestamp)}`));
     if (Number.isFinite(latest?.trendMgDlMinute)) hero.append(el('p', 'hint', `Trend ${latest.trendMgDlMinute > 0 ? '+' : ''}${latest.trendMgDlMinute} mg/dL per minute`));
     container.append(hero);
     const fields = el('dl', 'dexcom-fields');
     const add = (name, value) => { const row = el('div'); row.append(el('dt', '', name), el('dd', '', String(value))); fields.append(row); };
-    add('Sensor state', latest ? `${latest.stateLabel} (0x${latest.state.toString(16).padStart(2, '0')})` : 'Waiting for a reading');
-    add('Started (estimated)', time(data.estimatedStart));
-    add('Stopped', 'Exact time unavailable'); add('Expires', 'Exact time unavailable');
-    add('Serial number', data.identity?.serial || 'Not received'); add('Firmware', data.identity?.firmware || 'Not received');
+    if (latest) add('Sensor state', `${latest.stateLabel} (0x${latest.state.toString(16).padStart(2, '0')})`);
+    if (Number.isFinite(data.estimatedStart)) add('Started (estimated)', time(data.estimatedStart));
+    if (data.identity?.serial) add('Serial number', data.identity.serial);
+    if (data.identity?.firmware) add('Firmware', data.identity.firmware);
     if (latest) { add('Transmitter status', `0x${latest.statusRaw.toString(16).padStart(2, '0')}`); add('Reading age at receipt', `${latest.ageSeconds} seconds`); }
-    container.append(fields);
+    if (fields.children.length) container.append(fields);
     if (!records.length) return;
     const heading = el('div', 'dexcom-history-heading'); heading.append(el('h3', '', `History · ${records.length} reading${records.length === 1 ? '' : 's'}`));
     if (records.length > 100) heading.append(el('span', 'hint', 'Showing the latest 100. Export includes all readings.'));

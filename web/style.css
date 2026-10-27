@@ -70,9 +70,11 @@ input::placeholder { color: var(--muted); opacity: 1; }
 .device-address { display: block; font: 10px/1.6 var(--mono); color: var(--muted); margin-top: 3px; }
 .device-vendor { display: block; color: var(--muted); font-size: 10px; margin-top: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .vendor-note { color: var(--muted); font-size: 11px; line-height: 1.6; }
+p.vendor-note:empty, .snapshot-message:empty { display: none; }
 .signal { font-size: 11px; color: var(--muted); text-align: right; flex-shrink: 0; }
 .signal small { display: block; font-size: 10px; margin-top: 3px; }
 .panel-foot { border-top: 1px solid var(--line); padding: 12px 22px; display: flex; justify-content: space-between; gap: 12px; font-size: 10px; color: var(--muted); }
+.badge:empty { display: none; }
 .badge { display: inline-block; background: var(--surface-secondary); border-radius: 6px; padding: 4px 7px; font-size: 10px; color: var(--muted); white-space: nowrap; }
 .badge.connected { color: var(--success); background: color-mix(in srgb, var(--success) 10%, transparent); }
 .empty { display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; padding: 32px 20px; color: var(--muted); }

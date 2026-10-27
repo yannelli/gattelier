@@ -8,26 +8,22 @@ var NanoAPIUI = (() => {
     panel = container;
     panel.classList.add('settings-card', 'api-settings');
     panel.innerHTML = `
-      <div class="panel-heading"><div><h2>Board connection</h2><p>Connect through USB or your local network</p></div><span class="badge" data-api-state></span></div>
-      <fieldset class="api-transport"><legend>Connection method</legend>
-        <label><input type="radio" name="board-transport" value="serial"> USB</label>
-        <label><input type="radio" name="board-transport" value="http"> HTTP / HTTPS</label>
-      </fieldset>
-      <section class="api-usb" aria-labelledby="api-usb-title">
-        <h3 id="api-usb-title">USB connection</h3>
-        <p>In desktop Chrome, choose the NanoC6 when the USB permission window opens. Board data travels directly over USB and is not sent to Cloudflare.</p>
-        <label class="api-wifi-toggle"><input data-api-wifi-off type="checkbox" checked> Pause Wi-Fi while USB is connected</label>
-        <div class="api-actions"><button class="button primary" data-api-usb-connect type="button">Connect USB</button><button class="button quiet" data-api-usb-disconnect type="button">Disconnect USB</button></div>
-        <p class="hint">Wi-Fi resumes when you disconnect here. After an interrupted USB session, the board restores Wi-Fi when it detects the disconnect or its 90-second lease expires. USB workbench mode is separate from H4 HCI mode.</p>
+      <div class="panel-heading"><div><h2>Board connection</h2></div><div class="heading-tools"><span class="badge" data-api-state></span><details class="help"><summary aria-label="About board connection"><span aria-hidden="true">?</span></summary><div class="help-body"><h3>USB</h3><p>Works in desktop Chrome. Choose the NanoC6 when Chrome asks for serial access. Board data goes straight over USB.</p><p>Wi-Fi resumes when you disconnect. After an interrupted session the board restores Wi-Fi on its own within 90 seconds. USB HCI mode in Board settings is a separate feature.</p><h3>Network</h3><p>Chrome 142 and later can reach the board over local HTTP after you allow local-network access. Other browsers need the HTTPS bridge.</p></div></details></div></div>
+      <div class="settings-group api-method"><div class="segmented" role="radiogroup" aria-label="Connection method">
+        <label><input type="radio" name="board-transport" value="serial"><span>USB</span></label>
+        <label><input type="radio" name="board-transport" value="http"><span>Network</span></label>
+      </div></div>
+      <p class="api-message" data-api-message role="status" aria-live="polite"></p>
+      <section class="api-usb" aria-label="USB connection">
+        <label class="setting-row"><span><strong>Pause Wi-Fi while connected</strong></span><input data-api-wifi-off class="setting-switch" type="checkbox" role="switch" checked></label>
+        <div class="settings-actions"><button class="button primary" data-api-usb-connect type="button">Connect USB</button><button class="button secondary" data-api-usb-disconnect type="button">Disconnect</button></div>
       </section>
-      <section aria-labelledby="api-network-title"><h3 id="api-network-title" class="api-section-title">Network connection</h3>
-        <form class="api-form" data-api-form novalidate><label>Board API origin<input data-api-origin type="url" inputmode="url" autocomplete="url" spellcheck="false" placeholder="http://nanoscope.local"></label>
-          <div class="api-actions"><button class="button primary" type="submit">Save and check</button><button class="button quiet" data-api-check type="button">Check connection</button><button class="button quiet" data-api-clear type="button">Clear endpoint</button></div>
+      <section class="api-network" aria-label="Network connection">
+        <form class="api-form" data-api-form novalidate><label>Board address<input data-api-origin type="url" inputmode="url" autocomplete="url" spellcheck="false" placeholder="http://nanoscope.local"></label>
+          <div class="api-actions"><button class="button primary" type="submit">Save</button><button class="button secondary" data-api-check type="button">Test</button><button class="button quiet" data-api-clear type="button">Clear</button></div>
         </form>
-        <p class="hint api-network-hint">Select HTTP / HTTPS to use this endpoint. Chrome 142+ supports local HTTP connections after you allow local-network access. Browsers without this support need the HTTPS bridge below.</p>
-        <details class="api-help"><summary>Set up a private HTTPS bridge</summary><p>Run the bridge on a computer that can reach the NanoC6. Allow this app origin, then enter the bridge HTTPS origin above.</p><pre><code data-api-command></code></pre><p>The hosted app stores the bridge address in this browser. Board commands and credentials go straight to your private bridge.</p></details>
-      </section>
-      <p class="api-message" data-api-message role="status" aria-live="polite"></p>`;
+        <details class="api-help"><summary>HTTPS bridge</summary><p>Run this on a computer that can reach the NanoC6, then enter the bridge's HTTPS address above.</p><pre><code data-api-command></code></pre></details>
+      </section>`;
     const input = panel.querySelector('[data-api-origin]');
     const message = panel.querySelector('[data-api-message]');
     const state = panel.querySelector('[data-api-state]');
@@ -42,21 +38,21 @@ var NanoAPIUI = (() => {
       const origin = NanoAPI.origin(), usb = NanoAPI.transport() === 'serial', status = NanoAPI.serialStatus();
       if (globalThis.document.activeElement !== input) input.value = origin || '';
       for (const radio of panel.querySelectorAll('[name="board-transport"]')) radio.checked = radio.value === NanoAPI.transport();
-      for (const control of panel.querySelectorAll('[data-api-form] button')) control.disabled = usb;
+      panel.querySelector('.api-usb').hidden = !usb; panel.querySelector('.api-network').hidden = usb;
       connect.disabled = !status.supported || !status.secure || status.state !== 'disconnected';
-      disconnect.disabled = status.state !== 'connected';
+      disconnect.hidden = status.state !== 'connected'; connect.hidden = !disconnect.hidden;
       wifiOff.disabled = wifiChanging || ['connecting', 'closing'].includes(status.state);
       if (status.connected) wifiOff.checked = status.wifiSuspended;
-      state.textContent = usb ? ({ connected: 'USB connected', connecting: 'Connecting USB', closing: 'Disconnecting USB', disconnected: 'USB offline' }[status.state]) : origin ? 'Endpoint saved' : 'Setup required';
+      state.textContent = usb ? ({ connected: 'Connected', connecting: 'Connecting', closing: 'Disconnecting', disconnected: 'Not connected' }[status.state]) : origin ? 'Saved' : 'Not set up';
       state.classList.toggle('online', usb && status.connected);
-      const usbText = !status.secure ? 'USB requires HTTPS or localhost.' : !status.supported ? 'Web Serial is unavailable. Open this app in desktop Chrome.' : status.error || (status.connected ? `USB connected. Wi-Fi is ${status.wifiSuspended ? 'paused' : 'enabled'}.` : 'Click Connect USB and select the NanoC6.');
-      message.textContent = text || (usb ? usbText : origin ? `Live tools use ${origin}.` : 'Enter the board HTTP address or a private HTTPS bridge.');
+      const usbText = !status.secure ? 'USB requires HTTPS or localhost.' : !status.supported ? 'Web Serial is unavailable. Open this app in desktop Chrome.' : status.error || (status.connected ? `Wi-Fi is ${status.wifiSuspended ? 'paused' : 'on'}.` : '');
+      message.textContent = text || (usb ? usbText : '');
     }
 
     async function check() {
       if (NanoAPI.transport() !== 'http' || !NanoAPI.configured()) return;
       const token = ++checkGeneration;
-      state.textContent = 'Checking'; message.textContent = 'Contacting the board. Allow local-network access if your browser asks.';
+      state.textContent = 'Testing'; message.textContent = 'Allow local-network access if your browser asks.';
       const controller = new AbortController(), timer = setTimeout(() => controller.abort(), 10000);
       try {
         const response = await NanoAPI.fetch('/api/state', { signal: controller.signal });
@@ -64,12 +60,12 @@ var NanoAPIUI = (() => {
         if (!response.ok) throw new Error(body.error || `Connection failed (${response.status}).`);
         if (!body?.ble || !body?.wifi) throw new Error('The endpoint did not return Gattelier board status.');
         if (token !== checkGeneration) return;
-        state.textContent = 'Board connected'; state.classList.add('online');
-        message.textContent = `Connected through ${NanoAPI.origin()}.`;
+        state.textContent = 'Connected'; state.classList.add('online');
+        message.textContent = `Connected to ${NanoAPI.origin()}.`;
       } catch (error) {
         if (token !== checkGeneration) return;
         state.textContent = 'Connection failed'; state.classList.remove('online');
-        message.textContent = error.name === 'AbortError' ? 'The connection check timed out or the endpoint changed.' : error instanceof TypeError && NanoAPI.origin().startsWith('http:') ? 'Could not reach the local board. Check local-network permission, Wi-Fi, and the allowed hosted app origin on the board. If this browser blocks local HTTP, use the HTTPS bridge.' : error.message;
+        message.textContent = error.name === 'AbortError' ? 'The connection check timed out or the endpoint changed.' : error instanceof TypeError && NanoAPI.origin().startsWith('http:') ? 'Could not reach the board. Check local-network permission, Wi-Fi and the board\'s allowed app. If this browser blocks local HTTP, use the HTTPS bridge.' : error.message;
       } finally { clearTimeout(timer); }
     }
 
@@ -92,13 +88,13 @@ var NanoAPIUI = (() => {
     });
     panel.querySelector('[data-api-form]').addEventListener('submit', event => {
       event.preventDefault();
-      try { NanoAPI.setOrigin(input.value); render('Endpoint saved in this browser. Checking the board...'); check(); }
+      try { NanoAPI.setOrigin(input.value); render('Saved. Testing…'); check(); }
       catch (error) { render(error.message); }
     });
     panel.querySelector('[data-api-check]').addEventListener('click', check);
     panel.querySelector('[data-api-clear]').addEventListener('click', () => {
       NanoAPI.clearOrigin();
-      render(NanoAPI.configured() ? 'Using the app origin for the local board connection.' : 'Board endpoint cleared. Live tools are offline.');
+      render(NanoAPI.configured() ? 'Using this page\'s address.' : 'Address cleared.');
     });
     globalThis.addEventListener('nanoscope:api-change', () => { checkGeneration++; render(); });
     globalThis.addEventListener('nanoscope:serial', () => render());

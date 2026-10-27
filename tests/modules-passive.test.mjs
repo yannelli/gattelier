@@ -33,7 +33,7 @@ test('opening or selecting a passive app preserves an active G7 operation and gl
   context.apps.mount({ selected: () => globalDevice, devices: () => [globalDevice, coffee], select: () => { selectionCalls++; } });
   context.apps.render(globalDevice, [globalDevice, coffee]);
   const nodes = []; const visit = element => { nodes.push(element); element.children.forEach(visit); }; visit(get('apps-catalog'));
-  nodes.find(node => node.tag === 'button' && node.textContent === 'Open Nespresso').listeners.click();
+  nodes.find(node => node.tag === 'article' && node.children.some(child => child.tag === 'h3' && child.textContent === 'Nespresso')).children.find(child => child.tag === 'button').listeners.click();
   assert.equal(active, 'nespresso'); assert.equal(renderedTarget, coffee); assert.equal(selectionCalls, 0);
   const picker = nodes.find(node => node.tag === 'select' && node.dataset.focus === 'app-device-nespresso'); picker.value = `${coffee.address}/0`; picker.listeners.change();
   assert.equal(selectionCalls, 0); assert.equal(renderedTarget, coffee);

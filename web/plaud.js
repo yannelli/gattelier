@@ -11,7 +11,7 @@ const NanoPlaud = (() => {
     const el = (tag, cls, text) => { const item = document.createElement(tag); if (cls) item.className = cls; if (text !== undefined) item.textContent = text; return item; };
     const u16 = (data, offset) => data[offset] | data[offset + 1] << 8;
     const u32 = (data, offset) => new DataView(data.buffer, data.byteOffset, data.byteLength).getUint32(offset, true);
-    container.innerHTML = '<div class="panel-heading"><div><h2>PLAUD recordings</h2><p>Authenticate, browse, and download verified Ogg audio</p></div><span class="badge">Note Pro</span></div><div class="plaud-body"><p id="plaud-target" class="hint">Connect your PLAUD Note Pro to continue.</p><p id="plaud-credentials" class="plaud-credentials" role="status">No credentials saved for the selected recorder.</p><details id="plaud-credential-tools" class="credential-controls"><summary>Manage credentials</summary><label class="plaud-file-label">Device credentials JSON<input id="plaud-credentials-file" type="file" accept=".json,application/json"></label><button id="plaud-credential-settings" class="button quiet" type="button">Credential backups &amp; capture help</button></details><div class="plaud-controls"><button id="plaud-authenticate" class="button primary">Authenticate</button><button id="plaud-list" class="button secondary">List recordings</button><button id="plaud-stop" class="button secondary" hidden>Stop download</button></div><p id="plaud-status" class="plaud-status" role="status">Load credentials for the connected recorder.</p><div id="plaud-files" class="plaud-files"><p class="vendor-note">Authenticate to list recordings.</p></div><progress id="plaud-meter" max="1" value="0" hidden aria-label="Recording download progress"></progress><p id="plaud-progress" class="plaud-progress" role="status"></p><button id="plaud-save" class="button primary" hidden>Save Ogg</button><p class="vendor-note">Downloads retain the original recording. Maximum download: 64 MiB. Saving requires the announced byte count, a successful end marker, and verified Ogg CRCs.</p></div>';
+    container.innerHTML = '<div class="panel-heading"><div><h2>PLAUD recordings</h2></div><div class="heading-tools"><span class="badge">Note Pro</span><details class="help"><summary aria-label="About PLAUD"><span aria-hidden="true">?</span></summary><div class="help-body"><p>Authenticate with the device credentials file, then list and download recordings as Ogg audio.</p><p>Downloads keep the original recording, up to 64 MiB. Saving requires the full byte count, a clean end marker and valid Ogg checksums.</p><p>Credentials must match the recorder’s serial. Back them up in Settings › Credentials.</p></div></details></div></div><div class="plaud-body"><p id="plaud-target" class="hint"></p><p id="plaud-credentials" class="plaud-credentials" role="status"></p><details id="plaud-credential-tools" class="credential-controls"><summary>Manage credentials</summary><label class="plaud-file-label">Device credentials JSON<input id="plaud-credentials-file" type="file" accept=".json,application/json"></label><button id="plaud-credential-settings" class="button quiet" type="button">Credential settings</button></details><div class="plaud-controls"><button id="plaud-authenticate" class="button primary">Authenticate</button><button id="plaud-list" class="button secondary">List recordings</button><button id="plaud-stop" class="button secondary" hidden>Stop download</button></div><p id="plaud-status" class="plaud-status" role="status"></p><div id="plaud-files" class="plaud-files"></div><progress id="plaud-meter" max="1" value="0" hidden aria-label="Recording download progress"></progress><p id="plaud-progress" class="plaud-progress" role="status"></p><button id="plaud-save" class="button primary" hidden>Save Ogg</button></div>';
     function selection() {
       const device = NanoConnection.snapshot().selected;
       return NanoRecorders.identify(device)?.product === 'PLAUD Note Pro' ? device : null;
@@ -37,7 +37,7 @@ const NanoPlaud = (() => {
       const stamp = saved ? JSON.stringify(saved) : '';
       if (!force && stamp === credentialStamp) return;
       credentialStamp = stamp; credentials = saved ? p.credentials(saved) : null;
-      reset(credentials ? 'Saved credentials ready. Connect and authenticate to browse recordings.' : 'Select a PLAUD recorder and import its device credentials.');
+      reset(credentials || !selection() ? '' : 'Import this recorder’s credentials to continue.');
       get('credential-tools').open = !credentials;
     }
     function guard(token = generation) {
@@ -51,9 +51,9 @@ const NanoPlaud = (() => {
     function sync() {
       const device = selection(), info = NanoRecorders.identify(device), ready = online && matches() && Number.isInteger(p.handles(current).command);
       const connected = Boolean(device && current.ble?.connected && current.ble.address === device.address);
-      get('target').textContent = info ? `${info.product} · ${info.serial} · ${!online ? 'board offline' : connected ? 'connected' : 'disconnected'}` : 'Select a PLAUD recorder from Discover or Apps.';
+      get('target').textContent = info ? `${info.product} · ${info.serial} · ${!online ? 'board offline' : connected ? 'connected' : 'disconnected'}` : '';
       const canAuthenticate = online && Boolean(candidate());
-      get('credentials').textContent = credentials ? `Credentials for ${credentials.serial.toUpperCase()} · ${NanoCredentials.status().persistent ? 'saved in this browser' : 'memory only; export a backup in Settings'}` : 'No credentials saved for the selected recorder.';
+      get('credentials').textContent = credentials ? `Credentials for ${credentials.serial.toUpperCase()} · ${NanoCredentials.status().persistent ? 'saved in this browser' : 'memory only; export a backup in Settings'}` : selection() ? 'No saved credentials' : '';
       get('authenticate').textContent = connected ? authenticated ? 'Authenticated' : 'Authenticate' : current.ble?.connected ? 'Switch and authenticate' : 'Connect and authenticate';
       get('authenticate').disabled = !canAuthenticate || running || current.ble?.busy || authenticated && connected;
       get('list').disabled = !ready || !authenticated || running || current.ble?.busy;
@@ -161,7 +161,7 @@ const NanoPlaud = (() => {
     });
     document.addEventListener('nanoscope:credentials-changed', () => { loadSaved(); sync(); });
     document.addEventListener('nanoscope:selection', () => { loadSaved(); sync(); });
-    get('credential-settings').addEventListener('click', () => { NanoWorkspace.show('settings'); document.getElementById('credentials-panel')?.scrollIntoView({ block: 'start' }); });
+    get('credential-settings').addEventListener('click', () => { NanoSettings.open('credentials'); });
     get('authenticate').addEventListener('click', () => perform(async () => {
       authenticated = false; session = null; records = []; renderFiles();
       get('status').textContent = 'Subscribing and authenticating the device signature…';
@@ -190,7 +190,7 @@ const NanoPlaud = (() => {
     }, true));
     function renderFiles() {
       get('files').replaceChildren();
-      if (!records.length) { get('files').append(el('p', 'vendor-note', authenticated ? 'No recordings on this recorder.' : 'Authenticate to list recordings.')); return; }
+      if (!records.length) { if (authenticated) get('files').append(el('p', 'vendor-note', 'No recordings')); return; }
       for (const recording of records) {
         const row = el('div', 'plaud-recording'), label = el('div');
         label.append(el('strong', '', `Recording ${recording.id}`), el('small', '', `${recording.size.toLocaleString()} bytes${recording.size > maxBytes ? ' · exceeds 64 MiB download limit' : ''}`));

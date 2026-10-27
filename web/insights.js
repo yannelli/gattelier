@@ -36,12 +36,11 @@ const NanoInsights = (() => {
   }
   function render(container, device, devices, select, filter) {
     const fragment = document.createDocumentFragment();
-    const introduction = el('div', 'insights-intro'); introduction.append(el('h2', '', 'Make sense of what is nearby'), el('p', 'vendor-note', 'Profiles match broadcast formats and services. Each match shows its evidence. Rotating addresses remain separate.')); fragment.append(introduction);
-    const catalog = el('div', 'profile-catalog');
+        const catalog = el('div', 'profile-catalog');
     for (const tool of NanoProfiles.catalog()) {
       const card = el('button', 'profile-tool'); card.type = 'button';
       const matches = devices.filter(item => NanoProfiles.identify(item).category === tool.category);
-      card.append(el('span', 'eyebrow', `${matches.length} in browser`), el('strong', '', tool.title), el('span', '', tool.description));
+      card.append(el('span', 'eyebrow', `${matches.length} seen`), el('strong', '', tool.title), el('span', '', tool.description));
       card.addEventListener('click', () => filter(tool.category)); catalog.append(card);
     }
     fragment.append(catalog);
@@ -49,12 +48,12 @@ const NanoInsights = (() => {
       const heading = el('div', 'insights-device'); heading.append(el('h2', '', device.label || device.name || device.address), el('p', 'vendor-note', `${device.address} · ${age(device.lastSeenMs || Date.now())}`)); fragment.append(heading, signalChart(device), profileCard(NanoProfiles.identify(device)));
       const ad = NanoProfiles.advertisement(device.payloadHex || '');
       if (ad.fields.length) fragment.append(profileCard({ title: 'Advertisement metadata', confidence: 'Decoded bytes', evidence: ad.errors, fields: ad.fields, sources: [] }));
-    } else fragment.append(el('p', 'hint', 'Select a device in Discover to inspect its signal history and decoded advertisement.'));
+    } else fragment.append(el('p', 'hint', 'Select a device to see its signal history.'));
     const trackers = devices.filter(item => NanoProfiles.identify(item).category === 'tracker');
     if (trackers.length) {
       const list = el('section', 'tracker-list'); list.append(el('h3', '', 'Tracker broadcasts'));
       for (const item of trackers) { const row = el('button', 'tracker-row', `${item.label || item.name || item.address} · ${item.rssi} dBm · ${age(item.lastSeenMs)}`); row.type = 'button'; row.addEventListener('click', () => select(item)); list.append(row); }
-      list.append(el('p', 'vendor-note', 'This is an inventory of nearby broadcasts. It does not determine ownership or whether a tracker is following you.')); fragment.append(list);
+      list.append(el('p', 'vendor-note', 'Lists nearby broadcasts only. It cannot tell who owns a tracker or whether one is following you.')); fragment.append(list);
     }
     container.replaceChildren(fragment);
   }

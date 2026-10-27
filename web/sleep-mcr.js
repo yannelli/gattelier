@@ -83,15 +83,15 @@ const NanoSleepMcr = (() => {
     if (!container) return;
     const connection = options.connection || NanoConnection, getDevice = options.getDevice || (() => connection.snapshot().selected), client = createClient(lab, { ...options, connection });
     const el = (tag, cls, text) => { const item = document.createElement(tag); if (cls) item.className = cls; if (text !== undefined) item.textContent = text; return item; };
-    const heading = el('div', 'panel-heading'), body = el('div', 'detail'), selected = el('p', 'hint'), status = el('p', 'hint', 'Read firmness and pump status from the selected MCR bed.'); status.setAttribute('role', 'status');
-    const controls = el('div', 'inspector-shortcuts'), results = el('dl', 'metadata'); heading.append(el('h2', '', 'Sleep Number MCR'), el('span', 'badge', 'Read only'));
+    const heading = el('div', 'panel-heading'), body = el('div', 'detail'), status = el('p', 'hint'); status.setAttribute('role', 'status');
+    const controls = el('div', 'inspector-shortcuts'), results = el('dl', 'metadata'); heading.append(el('h2', '', 'Sleep Number MCR'));
+    heading.insertAdjacentHTML('beforeend', '<details class="help"><summary aria-label="About the MCR reader"><span aria-hidden="true">?</span></summary><div class="help-body"><p>Reads firmness and pump status. The browser saves a client identity to bind the session, then sends binding and status queries. The bed reports its own security requirements.</p><a href="https://github.com/kristofferR/ha-adjustable-bed/blob/main/custom_components/adjustable_bed/beds/sleep_number_mcr.py" target="_blank" rel="noopener noreferrer">Protocol source</a></div></details>');
     let selectedAddress = String(getDevice()?.address || '').toLowerCase(), selectionVersion = 0;
     const readButton = el('button', 'button secondary', 'Read firmness'), stop = el('button', 'button quiet', 'Stop');
     for (const button of [readButton, stop]) button.type = 'button';
     function render() {
       const device = getDevice(), context = connection.snapshot(), address = String(device?.address || '').toLowerCase();
-      if (address !== selectedAddress) { selectedAddress = address; selectionVersion++; if (client.busy()) client.stop(); results.replaceChildren(); status.textContent = 'Read firmness and pump status from the selected MCR bed.'; }
-      selected.textContent = device ? `Selected: ${device.label || device.name || device.address}` : 'Select an MCR bed in Discover.';
+      if (address !== selectedAddress) { selectedAddress = address; selectionVersion++; if (client.busy()) client.stop(); results.replaceChildren(); status.textContent = ''; }
       readButton.disabled = !device || client.busy() || !context.online || context.pending || context.state.ble?.busy; stop.hidden = !client.busy();
     }
     async function run() {
@@ -103,9 +103,7 @@ const NanoSleepMcr = (() => {
     }
     readButton.addEventListener('click', run); stop.addEventListener('click', () => client.stop());
     controls.append(readButton, stop);
-    const source = el('a', 'vendor-note', 'Sleep Number MCR protocol source'); source.href = 'https://github.com/kristofferR/ha-adjustable-bed/blob/main/custom_components/adjustable_bed/beds/sleep_number_mcr.py'; source.target = '_blank'; source.rel = 'noopener noreferrer';
-    const help = el('details'); help.append(el('summary', '', 'About this reader'), el('p', 'vendor-note', 'The browser saves a client identity for session binding. The reader sends binding and status queries. Security requirements are reported by the connected bed.'), source);
-    body.append(selected, controls, status, results, help); container.replaceChildren(heading, body);
+    body.append(controls, status, results); container.replaceChildren(heading, body);
     const off = lab.onState(render); document.addEventListener('nanoscope:selection', render); document.addEventListener('nanoscope:busy', render); render();
     return { read: run, stop: client.stop, destroy() { client.destroy(); off?.(); document.removeEventListener('nanoscope:selection', render); document.removeEventListener('nanoscope:busy', render); } };
   }

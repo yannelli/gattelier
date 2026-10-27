@@ -25,13 +25,14 @@ const NanoSensorApp = (() => {
   }
   function mount(container, hooks) {
     container.classList.add('protocol-panel');
-    const heading = el('div', 'panel-heading'), badge = el('span', 'badge', 'Broadcast readings'); heading.append(el('h2', '', 'Environmental sensors'), badge);
+    const heading = el('div', 'panel-heading'), badge = el('span', 'badge'), tools = el('div', 'heading-tools'); heading.append(el('h2', '', 'Readings'), tools); tools.append(badge);
+    tools.insertAdjacentHTML('beforeend', '<details class="help"><summary aria-label="About sensor readings"><span aria-hidden="true">?</span></summary><div class="help-body"><p>Readings are collected while this tab is open, including on other views. Unencrypted readings are saved in this browser for up to 32 sensors. Unchanged readings are sampled every 5 seconds.</p><p>Encryption keys stay in memory and clear when you leave this app.</p></div></details>');
     const body = el('div', 'protocol-body'), context = el('p', 'vendor-note'), readings = el('dl', 'protocol-values'), status = el('p', 'protocol-message'); status.setAttribute('role', 'status');
     const keyForm = el('form', 'sensor-key-form'), keyLabel = el('label', '', 'BTHome encryption key'), keyInput = el('input'); keyInput.type = 'password'; keyInput.autocomplete = 'off'; keyInput.spellcheck = false; keyInput.maxLength = 32; keyLabel.append(keyInput);
     const unlock = el('button', 'button secondary', 'Decode with key'); unlock.type = 'submit';
     const forget = button('Forget key', () => { keyInput.value = ''; session.lock(); });
     const keyActions = el('div', 'protocol-actions'); keyActions.append(unlock, forget);
-    keyForm.append(keyLabel, keyActions, el('p', 'vendor-note', 'The key stays in memory and clears when you leave this app. Decrypted history stays in memory unless you export it.'));
+    keyForm.append(keyLabel, keyActions, el('p', 'vendor-note', 'The key and decrypted readings stay in memory only.'));
     const toolbar = el('div', 'sensor-chart-controls'), metricLabel = el('label', '', 'Measurement'), metric = el('select'), rangeLabel = el('label', '', 'Time range'), range = el('select'); metricLabel.append(metric); rangeLabel.append(range);
     for (const [value, text] of [['900000', 'Last 15 minutes'], ['3600000', 'Last hour'], ['0', 'All saved readings']]) { const option = el('option', '', text); option.value = value; range.append(option); }
     toolbar.append(metricLabel, rangeLabel); const plot = el('div'), statistics = el('dl', 'sensor-statistics');
@@ -39,7 +40,7 @@ const NanoSensorApp = (() => {
     const json = button('Export JSON', () => { const device = session.status().device; if (device) download(device, history, false); });
     const csv = button('Export CSV', () => { const device = session.status().device; if (device) download(device, history, true); }); actions.append(pause, json, csv);
     const storage = el('p', 'vendor-note'), clearDetails = el('details', 'protocol-details'); clearDetails.append(el('summary', '', 'Clear this sensor’s history'));
-    clearDetails.append(el('p', 'vendor-note', 'Removes saved and session readings for this address. Export a copy first if you need them.'), button('Clear readings', async () => { const device = session.status().device; if (device) await history.clear(device); paint(); }));
+    clearDetails.append(el('p', 'vendor-note', 'Removes all readings for this sensor. Export first to keep a copy.'), button('Clear readings', async () => { const device = session.status().device; if (device) await history.clear(device); paint(); }));
     const meta = el('details', 'protocol-details'), metaBody = el('div'); meta.append(el('summary', '', 'Advertisement details & sources'), metaBody);
     const imported = el('details', 'protocol-details'), importBody = el('div', 'protocol-import'), importFormatLabel = el('label', '', 'Captured data format'), importFormat = el('select'); importFormatLabel.append(importFormat);
     for (const [value, text] of [['manufacturer', 'Ruuvi manufacturer HEX'], ['bthome', 'BTHome service-data HEX']]) { const option = el('option', '', text); option.value = value; importFormat.append(option); }
@@ -50,14 +51,14 @@ const NanoSensorApp = (() => {
       if (!profile) { importResult.append(el('p', 'protocol-message', 'No supported sensor frame was found. Ruuvi data starts with company bytes 9904. BTHome data starts with the device-info byte, without the FCD2 UUID.')); return; }
       importResult.append(NanoInsights.profileCard(profile));
     });
-    imported.append(el('summary', '', 'Inspect a saved advertisement'), importBody); importBody.append(el('p', 'vendor-note', 'Decode captured data in this browser. Imported readings stay separate from device history. Encrypted BTHome captures show encryption metadata here.'), importFormatLabel, importLabel, inspect, importResult);
+    imported.append(el('summary', '', 'Inspect a saved advertisement'), importBody); importBody.append(el('p', 'vendor-note', 'Imported readings stay separate from device history.'), importFormatLabel, importLabel, inspect, importResult);
     body.append(context, status, keyForm, readings, toolbar, plot, statistics, actions, storage, clearDetails, imported, meta); container.append(heading, body);
     const history = NanoSensorHistory.create(), session = NanoSensorSession.create(history, { change: paint }); controller = session;
     let lastFields = '', lastChart = '', optionsKey = '';
     function paint() {
       const state = session.status(), device = state.device, profile = state.profile;
-      context.textContent = device ? `${device.label || device.name || device.address} · ${device.rssi} dBm · ${NanoInsights.age(device.lastSeenMs)}` : 'Choose a BTHome or Ruuvi sensor from Apps or Discover.';
-      badge.textContent = state.pending ? 'Checking authentication' : profile?.authenticated ? 'Authenticated payload' : device?.streamLive || device?.liveId != null ? 'Broadcast readings' : 'Saved observation';
+      context.textContent = device ? `${device.label || device.name || device.address} · ${device.rssi} dBm · ${NanoInsights.age(device.lastSeenMs)}` : 'Choose a BTHome or Ruuvi sensor in Discover.';
+      badge.textContent = state.pending ? 'Checking authentication' : profile?.authenticated ? 'Authenticated payload' : device?.streamLive || device?.liveId != null ? 'Live' : device ? 'Saved' : '';
       status.textContent = state.message || (state.encrypted && !state.hasKey ? 'This sensor encrypts its readings. Enter its key to decode them locally.' : profile?.fields.some(field => field.label === 'Calibration' && field.value === 'In progress') ? 'Sensor calibration is in progress. Readings have not settled.' : '');
       keyForm.hidden = !state.encrypted; forget.disabled = !state.hasKey; unlock.disabled = state.pending;
       pause.disabled = !profile; pause.textContent = state.recording ? 'Pause history' : 'Resume history';
@@ -80,7 +81,7 @@ const NanoSensorApp = (() => {
         if (summary) for (const [label, value] of [['Latest', summary.latest], ['Minimum', summary.minimum], ['Maximum', summary.maximum], ['Average', summary.average]]) { const item = el('div'); item.append(el('dt', '', label), el('dd', '', `${number(value)} ${summary.unit}`)); statistics.append(item); }
       }
       const stored = history.status();
-      storage.textContent = `${samples.length} of ${stored.limit} readings for this sensor. ${state.encrypted && !state.hasKey ? 'Enter the key in this app to collect encrypted readings.' : state.recording ? 'Collecting while this tab is open, including other views.' : 'History paused.'} ${stored.available ? 'Unencrypted readings are saved in this browser.' : `History is in memory. ${stored.error}`} Up to 32 sensors are retained. Repeated unchanged readings are sampled every 5 seconds.`;
+      storage.textContent = `${samples.length} of ${stored.limit} readings${state.recording ? '' : ' · paused'}${stored.available ? '' : ` · memory only. ${stored.error}`}`;
     }
     metric.addEventListener('change', paint); range.addEventListener('change', paint);
     keyForm.addEventListener('submit', async event => { event.preventDefault(); const value = keyInput.value.trim(); keyInput.value = ''; try { await session.unlock(value); } catch (error) { status.textContent = error.message; } });

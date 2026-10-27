@@ -146,7 +146,7 @@ const NanoRadiaCode = (() => {
     status.setAttribute('role', 'status'); status.setAttribute('aria-atomic', 'true');
     heading.append(el('h2', '', 'RadiaCode'), liveBadge);
     const deviceInfo = el('div'); deviceInfo.append(deviceName, addressLabel); selected.append(deviceInfo, connectionBadge);
-    empty.append(el('h3', '', 'No readings yet'), el('p', '', 'Read measurements to see the latest buffered values from this device.'));
+    empty.append(el('h3', '', 'No readings yet'));
     function setStatus(message, state = 'idle') { status.textContent = message; status.dataset.state = state; }
     function render() {
       const device = getDevice(), context = connection.snapshot(), address = String(device?.address || '').toLowerCase();
@@ -154,7 +154,7 @@ const NanoRadiaCode = (() => {
         selectedAddress = address; selectionVersion++; poller.stop();
         sections.clear(); results.replaceChildren(); setStatus('');
       }
-      deviceName.textContent = device ? device.label || device.name || 'RadiaCode device' : 'Select a RadiaCode in Discover';
+      deviceName.textContent = device ? device.label || device.name || 'RadiaCode device' : ''; selected.hidden = !device;
       addressLabel.textContent = device?.address || '';
       const connected = Boolean(context.online && device && context.state.ble?.connected && String(context.state.ble.address || '').toLowerCase() === address);
       const disconnected = wasConnected && !connected; wasConnected = connected;

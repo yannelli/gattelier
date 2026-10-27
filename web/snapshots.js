@@ -6,19 +6,18 @@ const NanoSnapshots = (() => {
     if (!container) return;
     let snapshots = [], memoryOnly = false, deleted = null;
     const get = name => container.querySelector(`#snapshot-${name}`);
-    container.innerHTML = `<div class="panel-heading"><div><h2>Device snapshots</h2><p>Save advertisements and the connected device's GATT schema.</p></div><span id="snapshot-count" class="badge">0 / 20 saved</span></div>
-      <div class="snapshots-body"><form id="snapshot-form" class="snapshot-capture"><label>Snapshot label<input id="snapshot-label" maxlength="160" placeholder="Optional label" autocomplete="off"></label>
-      <label class="snapshot-check"><input id="snapshot-values" type="checkbox">Include readable values already loaded</label>
-      <p class="vendor-note">Values can contain private data. This option saves existing readable values without reading the device. Known recorder session values and recognizable authentication payloads are excluded.</p>
+    container.innerHTML = `<div class="panel-heading"><div><h2>Device snapshots</h2></div><div class="heading-tools"><span id="snapshot-count" class="badge">0 of 20</span><details class="help"><summary aria-label="About snapshots"><span aria-hidden="true">?</span></summary><div class="help-body"><p>A snapshot saves the selected device's advertisement and, if connected, its GATT schema. Up to 20 stay in this browser.</p><p>Loaded values are values you already read. Saving them never reads the device. Recorder session values and recognizable authentication payloads are left out.</p><p>Comparisons ignore signal strength and timestamps.</p></div></details></div></div>
+      <div class="snapshots-body"><form id="snapshot-form" class="snapshot-capture"><label>Label<input id="snapshot-label" maxlength="160" placeholder="Optional" autocomplete="off"></label>
+      <label class="snapshot-check"><input id="snapshot-values" type="checkbox">Include loaded values (may contain private data)</label>
       <button class="button primary" type="submit">Save selected device</button></form>
-      <p id="snapshot-storage" class="vendor-note"></p><p id="snapshot-message" role="status" class="snapshot-message">Select a device in Discover, then save a snapshot here.</p>
+      <p id="snapshot-storage" class="vendor-note"></p><p id="snapshot-message" role="status" class="snapshot-message"></p>
       <div class="snapshot-pickers"><label>Baseline<select id="snapshot-baseline"></select></label><label>Current<select id="snapshot-current"></select></label></div>
       <div id="snapshot-facts" class="snapshot-facts"></div><div class="snapshot-actions"><button id="snapshot-compare" class="button secondary" type="button">Compare</button><button id="snapshot-export" class="button quiet" type="button">Export current</button><button id="snapshot-import" class="button quiet" type="button">Import JSON</button><input id="snapshot-file" type="file" accept="application/json,.json" hidden><button id="snapshot-delete" class="button quiet" type="button">Delete current</button><button id="snapshot-undo" class="button quiet" type="button" hidden>Undo delete</button></div>
-      <div class="snapshot-results"><h3 id="snapshot-comparison-title">Compare saved snapshots</h3><p id="snapshot-comparison-note" class="vendor-note">Choose a baseline and current snapshot to inspect structural changes. Signal strength and timestamps are excluded.</p><div id="snapshot-diff" class="snapshot-diff"></div></div></div>`;
+      <div class="snapshot-results"><h3 id="snapshot-comparison-title">Comparison</h3><p id="snapshot-comparison-note" class="vendor-note"></p><div id="snapshot-diff" class="snapshot-diff"></div></div></div>`;
     const node = (tag, value, className) => { const result = document.createElement(tag); if (value != null) result.textContent = value; if (className) result.className = className; return result; };
     function message(value) { get('message').textContent = value; }
     function storageStatus() {
-      get('storage').textContent = memoryOnly ? 'Browser storage is unavailable or full. Changes stay in this tab until it closes. Export snapshots to keep them.' : 'Up to 20 snapshots are saved in this browser when you choose Save or Import.';
+      get('storage').textContent = memoryOnly ? 'Browser storage is unavailable or full. Changes stay in this tab until it closes. Export snapshots to keep them.' : '';
     }
     function persist() {
       try { localStorage.setItem(STORAGE, JSON.stringify(snapshots)); memoryOnly = false; }
@@ -54,8 +53,8 @@ const NanoSnapshots = (() => {
       }
       get('compare').disabled = !selected('baseline') || !selected('current');
       get('export').disabled = get('delete').disabled = !selected('current');
-      get('comparison-title').textContent = 'Compare saved snapshots';
-      get('comparison-note').textContent = 'Signal strength and timestamps are excluded. Values appear only when explicitly included in each snapshot.';
+      get('comparison-title').textContent = 'Comparison';
+      get('comparison-note').textContent = '';
       get('diff').replaceChildren(node('p', snapshots.length ? 'Choose Compare to see changes.' : 'No snapshots saved yet.', 'snapshot-empty'));
     }
     function refresh(current = get('current').value, baseline = get('baseline').value) {
@@ -66,7 +65,7 @@ const NanoSnapshots = (() => {
         if (snapshots.length) control.value = String(Math.min(Math.max(0, Number(chosen) || 0), snapshots.length - 1));
         control.disabled = !snapshots.length;
       }
-      get('count').textContent = `${snapshots.length} / 20 saved`;
+      get('count').textContent = `${snapshots.length} of 20`;
       get('undo').hidden = !deleted; facts();
     }
     function add(snapshot) {
@@ -84,7 +83,7 @@ const NanoSnapshots = (() => {
         const before = selected('baseline'), after = selected('current'); if (!before || !after) return;
         const changes = NanoSnapshotModel.diff(before, after);
         get('comparison-title').textContent = `${title(before)} → ${title(after)}`;
-        get('comparison-note').textContent = `${changes.length} ${changes.length === 1 ? 'change' : 'changes'}. ${before.device.address !== after.device.address ? 'Comparing different device addresses. ' : ''}Signal strength and timestamps excluded.`;
+        get('comparison-note').textContent = `${changes.length} ${changes.length === 1 ? 'change' : 'changes'}. ${before.device.address !== after.device.address ? 'Comparing different device addresses. ' : ''}`.trim();
         const target = get('diff'); target.replaceChildren();
         if (!changes.length) { target.append(node('p', 'No structural or included-value changes.', 'snapshot-empty')); return; }
         const table = node('table'), head = node('thead'), row = node('tr'), body = node('tbody');

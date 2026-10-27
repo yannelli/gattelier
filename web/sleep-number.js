@@ -7,23 +7,22 @@ const NanoSleep = (() => {
     let current = {}, online = false, running = false, generation = 0, target = '', bootId = '', cursor = 0, failure = '';
     let sessionId = null, armed = false, commandHex = '', waiters = new Set();
     const el = (tag, cls, text) => { const item = document.createElement(tag); if (cls) item.className = cls; if (text !== undefined) item.textContent = text; return item; };
-    const heading = el('div', 'panel-heading'); heading.append(el('h2', '', 'Sleep Number metadata'), el('span', 'badge', 'Fuzion'));
-    const body = el('div', 'detail'), status = el('p', 'hint', 'Connect a Fuzion bed in Discover to query its settings.'); status.setAttribute('role', 'status');
+    const heading = el('div', 'panel-heading'); heading.append(el('h2', '', 'Sleep Number Fuzion'));
+    heading.insertAdjacentHTML('beforeend', '<details class="help"><summary aria-label="About the Fuzion reader"><span aria-hidden="true">?</span></summary><div class="help-body"><p>Reads Fuzion bed settings. If the bed reports an authentication or encryption error, pair it in Security. Cloud sleep scores are not available over BLE.</p><a href="https://github.com/kristofferR/ha-adjustable-bed/blob/main/docs/beds/sleep_number.md" target="_blank" rel="noopener noreferrer">Protocol source</a></div></details>');
+    const body = el('div', 'detail'), status = el('p', 'hint'); status.setAttribute('role', 'status');
     const controls = el('div', 'inspector-shortcuts'), results = el('dl', 'metadata'), buttons = [];
     for (const [kind, label] of [['capabilities', 'Read capabilities'], ['left', 'Read left firmness'], ['right', 'Read right firmness'], ['privacy', 'Read privacy state']]) {
       const button = el('button', 'button secondary', label); button.type = 'button'; button.addEventListener('click', () => run(kind)); controls.append(button); buttons.push(button);
     }
     const stop = el('button', 'button quiet', 'Stop query'); stop.type = 'button'; stop.hidden = true; controls.append(stop);
-    const help = el('p', 'vendor-note', 'Reads Fuzion bed settings. Pair in Security if the device reports an authentication or encryption error. Cloud sleep scores use a separate transport.');
-    const source = el('a', 'vendor-note', 'Protocol source'); source.href = 'https://github.com/kristofferR/ha-adjustable-bed/blob/main/docs/beds/sleep_number.md'; source.target = '_blank'; source.rel = 'noopener noreferrer';
-    body.append(status, controls, results, help, source); container.replaceChildren(heading, body);
+        body.append(status, controls, results); container.replaceChildren(heading, body);
     function sync() {
       const selected = NanoConnection.snapshot().selected;
       const handles = p.handles(current), same = current.ble?.connected && selected?.address === current.ble.address;
       const ready = online && selected && ((same && handles.variant === 'Fuzion') || selected.services?.some(uuid => uuid.toLowerCase() === p.SERVICE));
       for (const button of buttons) button.disabled = !ready || running || current.ble?.busy || lab.isActing();
       stop.hidden = !running;
-      if (!running && !ready) status.textContent = handles.variant === 'MCR' ? 'MCR transport detected. This reader supports Fuzion metadata.' : 'Connect a Fuzion bed in Discover to query its settings.';
+      if (!running && !ready) status.textContent = handles.variant === 'MCR' ? 'MCR transport detected. This reader supports Fuzion metadata.' : '';
     }
     function rejectAll(message) {
       failure = message;

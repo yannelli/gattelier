@@ -1,0 +1,44 @@
+.settings-layout { display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 28px; align-items: start; }
+.settings-nav { position: sticky; top: 16px; display: grid; gap: 2px; }
+.settings-nav button { display: flex; align-items: center; gap: 10px; min-height: 40px; padding: 8px 12px; border: 0; border-radius: 10px; background: transparent; color: var(--text); font-size: 13px; font-weight: 550; text-align: left; }
+.settings-nav button:hover { background: color-mix(in srgb, var(--text) 5%, transparent); }
+.settings-nav button[aria-selected="true"] { background: var(--accent); color: var(--surface); }
+.settings-nav svg { width: 18px; height: 18px; }
+.settings-pane { min-width: 0; max-width: 780px; }
+.settings-section { display: grid; gap: var(--section-gap); }
+.settings-section:focus { outline: none; }
+.settings-note { padding: 0 var(--panel-inset) var(--section-gap); color: var(--muted); font-size: 12px; }
+.settings-note:empty { display: none; }
+.settings-actions + .settings-note { padding-top: 0; margin-top: -6px; }
+.file-button { position: relative; overflow: hidden; cursor: pointer; }
+.file-button input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.settings-group { border-top: 1px solid var(--line); padding: var(--section-gap) var(--panel-inset) var(--panel-inset); }
+.settings-group > h3 { font-size: 13px; font-weight: 650; margin-bottom: 12px; }
+.segmented { display: inline-flex; padding: 3px; gap: 2px; border-radius: 10px; background: color-mix(in srgb, var(--text) 5%, var(--surface)); }
+.segmented label { position: relative; display: block; cursor: pointer; }
+.segmented input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
+.segmented span { display: block; padding: 6px 16px; border-radius: 8px; color: var(--muted); font-size: 12px; font-weight: 600; }
+.segmented input:checked + span { background: var(--surface); color: var(--text); box-shadow: 0 1px 3px #00000014; }
+.segmented input:focus-visible + span { outline: 3px solid var(--accent); outline-offset: 1px; }
+
+.help { position: relative; flex-shrink: 0; }
+.help > summary { display: grid; place-items: center; width: 26px; height: 26px; border: 1px solid var(--line); border-radius: 50%; color: var(--muted); font-size: 12px; font-weight: 650; line-height: 1; cursor: pointer; list-style: none; }
+.help > summary::-webkit-details-marker { display: none; }
+.help > summary:hover, .help[open] > summary { color: var(--accent); border-color: currentColor; }
+.help-body { position: absolute; z-index: 30; top: calc(100% + 8px); right: 0; width: min(360px, calc(100vw - 48px)); max-height: min(60vh, 460px); overflow-y: auto; padding: 14px 16px; color: var(--text); background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-small); box-shadow: 0 12px 40px #00000024; font-size: 12px; font-weight: 400; line-height: 1.6; text-align: left; white-space: normal; }
+.help-body > * + * { margin-top: 8px; }
+.help-body > :empty { display: none; }
+.help-body h3 { margin-top: 14px; font-size: 12px; font-weight: 650; }
+.help-body ol, .help-body ul { margin: 8px 0 0; padding-left: 18px; }
+.help-body pre { margin: 8px 0 0; padding: 8px 10px; overflow-x: auto; white-space: pre-wrap; word-break: break-word; font: 11px/1.5 var(--mono); background: var(--surface-secondary); border-radius: 8px; }
+.help-body a { display: inline-block; }
+.panel:has(.help[open]), .panel-heading:has(.help[open]) { overflow: visible; }
+.panel-heading > .help, .panel-heading > .heading-tools { margin-left: auto; }
+.heading-tools { display: flex; align-items: center; gap: 8px; }
+
+@media (max-width: 760px) {
+  .settings-layout { grid-template-columns: minmax(0, 1fr); gap: 14px; }
+  .settings-nav { position: static; display: flex; gap: 6px; margin-inline: -16px; padding: 0 16px 2px; overflow-x: auto; scrollbar-width: none; }
+  .settings-nav button { flex-shrink: 0; min-height: 36px; padding: 6px 14px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); }
+  .settings-nav svg { display: none; }
+}

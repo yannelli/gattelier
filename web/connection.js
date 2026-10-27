@@ -26,8 +26,8 @@ const NanoConnection = (() => {
     const ble = context.state.ble || {}, connected = Boolean(device && ble.connected && address(device) === String(ble.address).toLowerCase());
     const live = (context.state.devices || []).find(item => same(item, device)) || (device?.streamLive ? device : null);
     const result = { connected, live, enabled: false, label: connected ? 'Disconnect' : 'Connect', status: connected ? 'Connected' : 'Disconnected', reason: '' };
-    if (!device) return { ...result, status: 'No device selected', reason: 'Select a device in Discover.' };
-    if (!context.online) return { ...result, status: 'Board offline', reason: 'Reconnect to Gattelier to check the connection.' };
+    if (!device) return { ...result, status: 'No device selected', reason: 'Choose one in Discover.' };
+    if (!context.online) return { ...result, status: 'Board offline', reason: 'Reconnect the board first.' };
     if (context.state.usb?.mode === 'hci') return { ...result, status: 'USB controller mode', reason: 'Restore Bluetooth workbench mode in Settings to connect from this page.' };
     const local = inFlight && attempt && same(attempt.device, device), remote = ble.busy && ['connecting', 'discovering', 'cancelling'].includes(ble.operation) && address(device) === String(ble.address).toLowerCase() && device.addressType === ble.addressType && Number.isInteger(ble.connectionAttempt) && ble.connectionAttempt > 0;
     if (!context.checking && (local || remote)) {
@@ -35,11 +35,11 @@ const NanoConnection = (() => {
       return { ...result, enabled: !stopping, cancel: true, label: stopping ? 'Cancelling...' : 'Cancel connection', status: stopping ? 'Cancelling' : remote && ble.operation === 'discovering' ? 'Discovering services' : 'Connecting', reason: stopping ? 'Waiting for the connection attempt to stop.' : 'Stop this connection attempt.' };
     }
     if (context.pending || ble.busy) return { ...result, status: connected ? 'Connected' : 'Working', reason: `${ble.operation || 'Bluetooth operation'} in progress…` };
-    if (connected) return { ...result, enabled: true, reason: context.state.security?.active ? 'Pairing needs attention in Security.' : 'Services and apps use this connection.' };
+    if (connected) return { ...result, enabled: true, reason: context.state.security?.active ? 'Pairing needs attention in Security.' : '' };
     if ((live || device).connectable === false) return { ...result, status: 'Broadcast only', reason: 'This advertisement does not accept a BLE connection.' };
     if (!/^(?:[0-9a-f]{2}:){5}[0-9a-f]{2}$/.test(address(device)) || !Number.isInteger(device.addressType) || device.addressType < 0 || device.addressType > 3) return { ...result, reason: 'This record has no usable Bluetooth address type.' };
     if (ble.connected) return { ...result, enabled: true, label: 'Switch and connect', status: 'Another device connected', reason: `Disconnects ${name(connectedDevice(context))} and connects this device.` };
-    return { ...result, enabled: true, label: live ? 'Connect' : 'Try known address', status: live ? 'Available' : 'Saved device', reason: live ? 'Ready to connect.' : 'Not in the current scan. Try its saved address; private addresses can change.' };
+    return { ...result, enabled: true, label: live ? 'Connect' : 'Try known address', status: live ? 'Available' : 'Saved device', reason: live ? '' : 'Not in the current scan. Private addresses can change.' };
   }
   async function ensure(device) {
     if (inFlight) throw new Error('A connection change is already running.');
@@ -98,7 +98,7 @@ const NanoConnection = (() => {
   function controls(device, focus = 'connection') {
     const status = describe(device), root = document.createElement('div'); root.className = 'connection-controls';
     const info = document.createElement('div'), label = document.createElement('strong'), reason = document.createElement('p');
-    label.textContent = status.status; reason.textContent = status.reason; reason.className = 'hint'; info.append(label, reason);
+    label.textContent = status.status; reason.textContent = status.reason; reason.className = 'hint'; info.append(label); if (status.reason) info.append(reason);
     const action = document.createElement('button'); action.type = 'button'; action.className = `button ${status.connected ? 'secondary' : 'primary'}`;
     action.textContent = status.label; action.disabled = !status.enabled; action.title = status.reason; action.dataset.focus = focus;
     action.addEventListener('click', () => perform(device)); root.append(info, action); return root;
