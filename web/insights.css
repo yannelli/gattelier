@@ -19,3 +19,6 @@
 .tracker-row { display:block; width:100%; text-align:left; color:var(--text); background:var(--surface-secondary); padding:12px; border:0; border-radius:8px; margin:8px 0; font:12px var(--font); overflow-wrap:anywhere; }
 @media(max-width:700px) { .profile-catalog { grid-template-columns:repeat(2,minmax(0,1fr)); } }
 @media(max-width:420px) { .profile-catalog { grid-template-columns:1fr; } .profile-card,.signal-card { padding:16px; } }
+.profile-about { margin-top:12px; border-top:1px solid var(--line); padding-top:10px; }
+.profile-about > summary { cursor:pointer; color:var(--muted); font-size:12px; }
+.profile-about > p { margin-top:6px; }

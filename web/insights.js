@@ -9,18 +9,17 @@ const NanoInsights = (() => {
   function profileCard(profile) {
     const card = el('section', 'profile-card');
     card.append(el('h3', '', profile.title), el('span', 'badge', profile.confidence));
-    const evidence = el('ul', 'profile-evidence');
-    for (const text of profile.evidence || []) evidence.append(el('li', '', text));
-    card.append(evidence);
     if (profile.fields?.length) {
       const fields = el('dl', 'metadata');
       for (const field of profile.fields) { const row = el('div'); row.append(el('dt', '', field.label), el('dd', '', String(field.value))); fields.append(row); }
       card.append(fields);
     }
-    for (const text of profile.limitations || []) card.append(el('p', 'vendor-note', text));
-    const links = el('div', 'profile-sources');
+    // Match evidence, limitations and sources are reference material, so they start collapsed.
+    const about = el('details', 'profile-about'), evidence = el('ul', 'profile-evidence'), links = el('div', 'profile-sources');
+    for (const text of profile.evidence || []) evidence.append(el('li', '', text));
     for (const source of profile.sources || []) { const link = el('a', '', source.title); link.href = source.url; link.target = '_blank'; link.rel = 'noopener noreferrer'; links.append(link); }
-    card.append(links);
+    about.append(el('summary', '', 'How this was identified'), evidence, ...(profile.limitations || []).map(text => el('p', 'vendor-note', text)), links);
+    if (evidence.children.length || links.children.length || profile.limitations?.length) card.append(about);
     if (profile.revision) card.append(el('p', 'vendor-note', `Library: ${profile.library} · ${profile.revision}`));
     return card;
   }

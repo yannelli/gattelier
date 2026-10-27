@@ -41,8 +41,8 @@ const NanoNetwork = (() => {
       get('led').dataset.led = config.led || '';
       get('current-ssid').textContent = config.suspendedForUsb ? 'Wi-Fi paused for USB' : config.networkSSID || (config.mode === 'hotspot' ? config.apSSID : config.ssid) || 'Not connected';
       get('current-ip').textContent = config.suspendedForUsb ? 'USB serial' : config.ip || 'No address assigned';
-      get('saved-ssid').textContent = config.configuredSSID || 'Not configured';
-      get('ap-name').textContent = config.apSSID || 'Not configured';
+      get('saved-ssid').textContent = config.configuredSSID || 'None';
+      get('ap-name').textContent = config.apSSID || 'None';
       get('button-help').textContent = `Short-press the board button${Number.isInteger(config.buttonPin) ? ` (GPIO ${config.buttonPin})` : ''} ${config.suspendedForUsb ? 'to resume Wi-Fi' : 'to switch between Wi-Fi and hotspot'}.`;
       if (!stationDirty) get('station-ssid').value = config.configuredSSID || '';
       if (!hotspotDirty) get('hotspot-ssid').value = config.apSSID || '';
