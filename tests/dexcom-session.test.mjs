@@ -54,7 +54,7 @@ test('saved session authenticates before control subscriptions and current reads
   assert.ok(f.writes.findIndex(item => item.hex?.startsWith('04')) < f.writes.findIndex(item => item.kind === 'subscribe' && item.handle === 4));
   await f.client.readIdentity(); assert.equal(f.client.snapshot().identity.serial, String(0x334455667788));
   await f.client.readHistory({ hours: 1 }); assert.equal(f.client.snapshot().historyReceived, 1);
-  await assert.rejects(f.client.readTime(), /not established/); f.client.destroy(); assert.equal(f.listeners.size, 0); assert.equal(f.states.size, 0);
+  await assert.rejects(f.client.readTime(), /no direct time query/); f.client.destroy(); assert.equal(f.listeners.size, 0); assert.equal(f.states.size, 0);
 });
 
 test('first pair verifies all proof rounds, exchanges certificates and bonds', async () => {

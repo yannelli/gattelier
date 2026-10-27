@@ -42,7 +42,7 @@ const NanoLGWebOSProtocol = (() => {
     if (company) { result.evidence.push('Manufacturer company 0x00C4 is assigned to LG Electronics.'); result.fields.push(field('Bluetooth company', 'LG Electronics (0x00C4)'), field('Manufacturer payload HEX', manufacturer.slice(4))); }
     if (service) { result.evidence.push('Service 0xFEB9 is assigned to LG Electronics.'); result.fields.push(field('Assigned LG service', '0xFEB9')); }
     if (television) { result.evidence.push(`Broadcast name: ${device.name}`); result.fields.push(field('TV name candidate', device.name), field('webOS control transport', 'LAN WebSocket / SSAP')); }
-    result.limitations.push('Company 0x00C4 and service 0xFEB9 establish LG vendor metadata. They do not establish a TV model, webOS support, operating state or a BLE control protocol.',
+    result.limitations.push('Company 0x00C4 and service 0xFEB9 identify LG as the vendor, not the TV model, webOS support, power state or a BLE control protocol.',
       'A TV name is an unauthenticated candidate. Confirm webOS and the TV LAN host in an external client before using a prepared request.',
       'LAN controls require webOS registration, TV approval and the granted permissions. Manufacturer payload fields remain uninterpreted.');
     if (device.payloadTruncated) result.limitations.push('The advertisement was truncated; the displayed manufacturer payload is incomplete.');
@@ -139,7 +139,7 @@ const NanoLGWebOSProtocol = (() => {
         'An external client sends a register envelope with its permission manifest. Accept the TV prompt, then retain the client-key returned in the registered response.',
         'For reconnects, the external client supplies its saved client-key in the register payload. The key is secret. A registered connection and granted permissions are required for requests.',
         'Firmware and TV settings determine transport and permission availability. Use unique request IDs within the external session.'],
-      warnings: ['This preview opens no connection and sends no BLE or LAN command. The selected name does not confirm webOS compatibility.'], sources: sources.map(source => ({ ...source })) };
+      warnings: ['This preview opens no connection and sends no BLE or LAN command.'], sources: sources.map(source => ({ ...source })) };
     if (id !== 'register') plan.registrationPreview = registration();
     if (id === 'remote-key') plan.followUp = { transport: 'Separate LAN WebSocket', endpoint: 'Use socketPath from the pointer-input response.', message: `type:button\nname:${values.key}\n\n` };
     if (id === 'power-off') plan.warnings.push('Power-off requires the TV to be on. The WebSocket connection closes during shutdown; waking the TV is outside this preview.');

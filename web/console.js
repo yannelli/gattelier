@@ -56,7 +56,7 @@ const NanoConsole = (() => {
       history = history.slice(0, 12); renderHistory();
       notify(`Sending ${data.length} bytes to handle ${handle}…`);
       await api.action('write', { handle, hex: data.hex, response });
-      notify(`${data.length} bytes sent to handle ${handle}${response ? ' with response.' : ' without response; remote acceptance is unconfirmed.'}`);
+      notify(`${data.length} bytes sent to handle ${handle}${response ? ' with response.' : ' without response.'}`);
     } catch (error) { notify(error.message, true); }
     finally { update(latest, online); }
   }

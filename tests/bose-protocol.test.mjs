@@ -11,7 +11,7 @@ const build = (id, options = {}) => bose.buildCommand(id, { device: qc, identity
 test('Bose manufacturer, service and name matches stay candidates including SoundLink Max', () => {
   assert.equal(bose.identify(max).title, 'Bose SoundLink Max candidate');
   assert.equal(bose.identify(max).family, 'unconfirmed');
-  assert.ok(bose.identify(max).limitations.some(value => value.includes('SoundLink Max compatibility is unconfirmed')));
+  assert.ok(bose.identify(max).limitations.some(value => value.includes('unavailable for SoundLink Max')));
   assert.equal(bose.identify(qc).family, 'unconfirmed');
   assert.equal(bose.identify({ name: 'Bose test' }).confidence, 'Name candidate');
   assert.equal(bose.identify({ manufacturer: '9e00' }).confidence, 'Manufacturer match');
@@ -105,7 +105,7 @@ test('reference queries encode exact BMAP and single-segment BLE bytes without s
 });
 
 test('SoundLink Max, missing model/service evidence and unsupported operations reject previews', () => {
-  assert.throws(() => build('battery', { device: max }), /SoundLink Max compatibility/);
+  assert.throws(() => build('battery', { device: max }), /unavailable for SoundLink Max/);
   assert.throws(() => build('battery', { identityHex: '00030303408201' }), /0x4066/);
   assert.throws(() => build('battery', { identityHex: '' }));
   assert.throws(() => build('battery', { device: { name: qc.name } }), /FEBE/);

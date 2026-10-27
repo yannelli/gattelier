@@ -27,7 +27,7 @@ const NanoCollection = (() => {
     setupCheck(after);
     if (before.collection.bootId !== after.collection.bootId) throw new Error('The board restarted during verification. Verify setup again.');
     const count = after.collection.recordCount - before.collection.recordCount;
-    return count > 0 ? `Setup verified. ${count} new record${count === 1 ? '' : 's'} saved during the check.` : 'Setup is saved and storage is ready. Live capture is unverified: no new records arrived in 2.5 seconds. Check the address filter or wait for advertisements.';
+    return count > 0 ? `Setup verified. ${count} new record${count === 1 ? '' : 's'} saved during the check.` : 'Setup is saved and storage is ready, but no new records arrived in 2.5 seconds. Check the address filter or wait for advertisements.';
   }
   function mount(container, lab) {
     if (!container) return;

@@ -1,7 +1,7 @@
 # Gattelier
 
 > [!WARNING]
-> **Work in progress.** Interfaces and stored data formats can change, and hardware support varies by device.
+> **Work in progress.** Interfaces and stored data formats can change.
 
 [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/yannelli/gattelier)
 
@@ -16,13 +16,13 @@ The board address is `http://nanoscope.local`. Existing NanoScope storage keys a
 - Contextual apps selected from discovered device metadata
 - PacketLogger and Android/BlueZ btsnoop H4/H1 imports, shared ATT decoding, exact timestamps, loss counters, and authentication redaction
 - Tracker and beacon signal statistics, Eddystone configuration decoding, and offline configuration previews
-- Bose BMAP capture inspection and QC Ultra Gen1 reference previews; SoundLink Max compatibility is unconfirmed
+- Bose BMAP capture inspection and QC Ultra Gen1 command previews
 - Apple/AirPods broadcast decoding, Vertuo state and maintenance flags, and Core 200S saved-status inspection, with local change history and snapshot export
-- Offline command previews for Vertuo settings, AirPods AACP, and VeSync cloud controls, with transport requirements and source links; these apps send no device commands
+- Offline command previews for Vertuo settings, AirPods AACP, and VeSync cloud controls, with transport requirements and source links
 - Import and export of PLAUD and Pocket recorder credentials, plus authenticated recording access
 - RadiaCode identity, status, measurements, calibrated spectrum plots, live refresh, and confirmed dose reset
-- Sleep Number Fuzion and MCR readers with passing unit tests; a live link has not been verified
-- Experimental Dexcom G7 authentication with the applicator code, saved sessions, latest/history requests, serial/firmware, and sensor states; sensor interoperability awaits manual testing
+- Sleep Number Fuzion and MCR readers
+- Dexcom G7 authentication with the applicator code, saved sessions, latest/history requests, serial/firmware, and sensor states
 - Environmental sensor readings, charts, browser history, and JSON/CSV exports for BTHome, Ruuvi Tag, and Ruuvi Air formats 6/E1; encrypted BTHome readings decode locally with a device key
 - Optional browser-cached supplemental metadata from `https://gattelier.ryanyannelli.com`
 - 743 bundled UUID names and 1,734 names in hosted libraries, named descriptors and units, plus readable GATT feature flags, service-change ranges, connection parameters, and descriptor values
@@ -36,7 +36,7 @@ Gattelier does not include full TV or GE appliance control. [Device expansion re
 
 The NanoC6 supports BLE. Its ESP32-C6 has no Bluetooth Classic or USB host controller. Gattelier captures advertisements and traffic from its own connections; it does not sniff connections between other devices.
 
-USB controller mode exposes the board's own H4 controller traffic over serial. The Wireshark extcap path has been tested with that traffic.
+USB controller mode exposes the board's own H4 controller traffic over serial. Wireshark reads it through the extcap plugin in `scripts/nanoscope_extcap.py`.
 
 The board button controls its operating mode:
 
@@ -127,7 +127,7 @@ Settings > Metadata & libraries downloads public catalogs from `https://gattelie
 | Advertising data | 51 | AD type names, retaining context-specific duplicate assignments |
 | Protocol signatures | 36 | Meshtastic, Nordic, micro:bit, LEGO, Polar, GoPro, SwitchBot, Xiaomi, Victron, Adafruit, fitness profiles, and others |
 
-The library browser searches names, UUIDs, codes, and protocols. Discover also searches downloaded service names and protocol matches. Device pages show matching evidence from advertisements and discovered GATT services, source links, and limitations. A service or company match does not confirm a product model or enable device commands.
+The library browser searches names, UUIDs, codes, and protocols. Discover also searches downloaded service names and protocol matches. Device pages show matching evidence from advertisements and discovered GATT services, source links, and limitations.
 
 The Worker serves `/catalogs/index.json` and the versioned catalogs listed in it. Requests download complete public files; device addresses, packets, recordings, credentials, and health readings stay local. Rules contain bounded field comparisons, with no downloaded executable code. The browser validates the complete set before replacing its cache and preserves existing libraries if a download fails. Catalog files are excluded from board firmware.
 

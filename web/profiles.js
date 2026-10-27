@@ -81,7 +81,7 @@ const NanoProfiles = (() => {
     if (dexcomService || dexcomName) {
       set('medical', 'Dexcom metadata', dexcomService ? 'Service match' : 'Name candidate', dexcomService ? `Advertised Dexcom service ${dexcomService}.` : `Name ${device.name} matches a published Dexcom naming pattern.`, dexcomService ? 'dexcom' : 'dexcomName');
       field('Broadcast name', device.name || 'Not advertised'); field('Advertised services', services.join(', ') || 'None');
-      result.limitations.push('Advertisements do not provide a validated glucose reading. Name-only matches are unconfirmed.');
+      result.limitations.push('Advertisements do not carry glucose readings.');
     }
     const sleep = services.includes('09d23fae-90e6-44c2-95b6-0b3d0f1abf25') ? 'Fuzion' : services.includes('ffffd1fd-388d-938b-344a-939d1f6efee0') ? 'MCR' : '';
     if (sleep) {

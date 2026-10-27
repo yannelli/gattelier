@@ -14,7 +14,7 @@ test('manufacturer and FEB9 establish vendor evidence without a TV identity', ()
     assert.equal(result.category, 'vendor');
     assert.equal(fields(result.fields)['TV model'], undefined);
     assert.equal(fields(result.fields).Volume, undefined);
-    assert.ok(result.limitations.some(value => value.includes('do not establish a TV model')));
+    assert.ok(result.limitations.some(value => value.includes('not the TV model')));
   }
   assert.equal(fields(protocol.identify({ manufacturer: 'c40001020304' }).fields)['Manufacturer payload HEX'], '01020304');
 });

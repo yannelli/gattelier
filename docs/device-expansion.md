@@ -1,6 +1,6 @@
 # Device and tool expansion
 
-Source inspection dated 2026-10-25. "Implemented" describes code in this checkout. Protocol unit tests and the app build pass. RadiaCode spectrum capture is checked separately on hardware; G7 direct authentication and device tests remain incomplete. Proposed features below are separate from implemented behavior.
+Source inspection dated 2026-10-25. "Implemented" describes code in this checkout; everything else is a proposal.
 
 ## Device modules
 
@@ -11,7 +11,7 @@ Source inspection dated 2026-10-25. "Implemented" describes code in this checkou
 | Sleep Number Fuzion | Auth/session framing; system capabilities, firmness and privacy reads | Capability-gated position, presence and climate/lighting state reads | Valid Auth session, link security when required, fresh GATT discovery |
 | Sleep Number MCR | Persistent client identity, session binding, correlated pump/firmness reads | Foundation capabilities and positions | Assigned session addresses; distinct foundation message layout and discovered capabilities |
 | RadiaCode | Identity/status/measurements; spectrum formats 0/1; calibrated chart; serial live polling; confirmed accumulated-dose reset | Spectrum export, local timed spectrum history, accumulated-spectrum selection | Firmware 4.8+ for measurements/spectrum/reset; configuration format; reset acknowledgement |
-| Dexcom G7 | Direct applicator-code authentication, saved sessions, current/history/identity requests, reconnect, captured-packet decoding | User testing on a sensor | Certificate acceptance and sensor interoperability remain untested |
+| Dexcom G7 | Direct applicator-code authentication, saved sessions, current/history/identity requests, reconnect, captured-packet decoding | Exact sensor stop and expiry times | A packet that carries them; supported G7 packets supply neither |
 | Health thermometers | Standard temperature FLOAT, units, timestamps/location, interval/type and indication recipes | Measurement history, export and indication readiness | Service/characteristic properties and an actual measurement from the peripheral |
 | Environmental Sensing | Standard ambient temperature, humidity and pressure reads/subscriptions | Timed observations and sensor-specific optional fields | Discovered Environmental Sensing characteristics; device security requirements |
 | BTHome | v2 numeric/binary subset, CO2, current, 24/32-bit energy, malformed-frame checks; encrypted-frame metadata | Remaining objects/events; authenticated decryption | Correct object layout; encrypted frames need per-device key, nonce and tag validation |
@@ -36,7 +36,7 @@ A name, manufacturer ID, service UUID or generic NUS match establishes the state
 
 [Fuzion position reads](https://github.com/kristofferR/ha-adjustable-bed/blob/3bbe58262ed902a3892153b08e9c096cd67cd0da/custom_components/adjustable_bed/beds/sleep_number.py#L856) and [MCR capability/position decoders](https://github.com/kristofferR/ha-adjustable-bed/blob/3bbe58262ed902a3892153b08e9c096cd67cd0da/custom_components/adjustable_bed/beds/sleep_number_mcr_protocol.py#L47) support read-only expansion before motor controls. Keep the two transports separate. MCR wire side 0 is right and side 1 is left.
 
-The [upstream transport account](https://github.com/kristofferR/ha-adjustable-bed/blob/3bbe58262ed902a3892153b08e9c096cd67cd0da/docs/beds/sleep_number.md) records changing characteristic handle layouts and distinct Auth failures. Resolve UUIDs after discovery and distinguish zero/short Auth replies from valid sessions. Its expanded controls still await physical validation. Cloud sleep scores require a separate data source.
+The [upstream transport account](https://github.com/kristofferR/ha-adjustable-bed/blob/3bbe58262ed902a3892153b08e9c096cd67cd0da/docs/beds/sleep_number.md) records changing characteristic handle layouts and distinct Auth failures. Resolve UUIDs after discovery and distinguish zero/short Auth replies from valid sessions. Cloud sleep scores require a separate data source.
 
 ### RadiaCode
 
@@ -48,7 +48,7 @@ The [upstream transport account](https://github.com/kristofferR/ha-adjustable-be
 
 [xDrip glucose decoding](https://github.com/NightscoutFoundation/xDrip/blob/c42cf55c6b972215654bc2a34ce563c87a7aa594/app/src/main/java/com/eveningoutpost/dexdrip/cgm/dex/g7/EGlucoseRxMessage.java#L56) and [native backfill](https://github.com/NightscoutFoundation/xDrip/blob/c42cf55c6b972215654bc2a34ce563c87a7aa594/app/src/main/java/com/eveningoutpost/dexdrip/g5model/BackFillStream.java#L59) supply captured-packet layouts. Gattelier authenticates through EC J-PAKE and an AES challenge, coordinates BLE bonding, subscribes to control/backfill, and sends current, bounded history, and identity requests. Sensor-start display is an estimate anchored to original receive time; supported packets do not supply an exact stop time or a model-independent expiry.
 
-[Juggluco's BLE state machine](https://github.com/j-kaltes/Juggluco/blob/e41f4aa239d389bee78cdb8fc7d0dbe9ceb4df53/Common/src/dex/java/tk/glucodata/DexGattCallback.java#L376) and [EC J-PAKE](https://github.com/j-kaltes/Juggluco/blob/e41f4aa239d389bee78cdb8fc7d0dbe9ceb4df53/Common/src/main/cpp/dexcom/ecJPake.cpp#L452) supply the direct reader protocol. Independent OpenSSL fixtures and upstream captured proofs cover the crypto; scripted transports cover pairing and session resumption. Sensor testing is left to the user. The four-digit applicator code enters the G7 module authentication form. Saved sessions are scoped to the browser, board endpoint, and sensor address/type. The code is not saved. See [source and license notices](../DEXCOM-CRYPTO-NOTICE.md).
+[Juggluco's BLE state machine](https://github.com/j-kaltes/Juggluco/blob/e41f4aa239d389bee78cdb8fc7d0dbe9ceb4df53/Common/src/dex/java/tk/glucodata/DexGattCallback.java#L376) and [EC J-PAKE](https://github.com/j-kaltes/Juggluco/blob/e41f4aa239d389bee78cdb8fc7d0dbe9ceb4df53/Common/src/main/cpp/dexcom/ecJPake.cpp#L452) supply the direct reader protocol. Independent OpenSSL fixtures and upstream captured proofs cover the crypto; scripted transports cover pairing and session resumption. The four-digit applicator code enters the G7 module authentication form. Saved sessions are scoped to the browser, board endpoint, and sensor address/type. The code is not saved. See [source and license notices](../DEXCOM-CRYPTO-NOTICE.md).
 
 ### Thermometers and environmental sensors
 
@@ -118,4 +118,4 @@ Protocol facts support independently written decoders. Copying implementation co
 | OpenPlod | MIT for original contributions; [LICENSING.md](https://github.com/RemiPelloux/OpenPlod/blob/d5c27989b05837cd49ff7780595514e133bd1c0d/LICENSING.md) records an unresolved inherited-code grant gap |
 | bthome.io website; legacy ruuvi-sensor-protocols | No root LICENSE found in inspected checkouts; corroborate with explicitly licensed parsers and current specifications |
 
-Pin the linked revisions when implementing. Each new adapter needs protocol fixtures and the relevant build/browser checks; physical device behavior remains a separate validation step.
+Pin the linked revisions when implementing. Each new adapter needs protocol fixtures and passing build/browser checks.

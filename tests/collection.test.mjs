@@ -67,7 +67,7 @@ test('live capture verification reports record growth, silence, and a restart se
   after.collection.recordCount = 13;
   assert.match(captureCheck(before, after), /3 new records saved/);
   after.collection.recordCount = 10;
-  assert.match(captureCheck(before, after), /Live capture is unverified/);
+  assert.match(captureCheck(before, after), /no new records arrived/);
   after.collection.bootId++;
   assert.throws(() => captureCheck(before, after), /restarted/);
 });

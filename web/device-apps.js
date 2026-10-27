@@ -13,7 +13,7 @@ const NanoDeviceApps = (() => {
   const bose = load('bose-protocol', typeof NanoBoseProtocol === 'undefined' ? null : NanoBoseProtocol);
   const entries = [
     { id: 'tracker', title: 'Trackers & beacons', category: 'tracker', description: 'Signal history, Find My, Tile, iBeacon, and Eddystone broadcasts and configuration previews.', protocol: beacons },
-    { id: 'bose', title: 'Bose audio', category: 'vendor', description: 'Inspect saved BMAP traffic and prepare QC Ultra Gen1 reference commands. SoundLink Max support is unconfirmed.', protocol: bose },
+    { id: 'bose', title: 'Bose audio', category: 'vendor', description: 'Inspect saved BMAP traffic and prepare QC Ultra Gen1 reference commands.', protocol: bose },
     { id: 'sensor', title: 'Environmental sensors', category: 'sensor', description: 'BTHome and Ruuvi readings, charts, browser history, and encrypted sensor decoding.', protocol: sensors },
     { id: 'lg', title: 'LG webOS', category: 'appliance', description: 'LG device evidence, saved TV responses, and LAN request previews for apps, inputs, sound, and remote keys.', protocol: lg },
     { id: 'resmed', title: 'ResMed Air11', category: 'medical', description: 'Inspect FIG captures, validate frames, and prepare authenticated request templates.', protocol: resmed },

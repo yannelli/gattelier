@@ -106,7 +106,7 @@ test('name-only library matches retain candidate evidence without inferred devic
     assert.ok(result.evidence.includes(`Broadcast name: ${name}`));
     assert.equal(values(result)['Battery band'], undefined);
     assert.equal(values(result)['Model'], undefined);
-    assert.ok(result.limitations.some(value => value.includes('does not establish a TV')));
+    assert.ok(result.limitations.some(value => value.includes('does not identify the device type')));
   }
 });
 

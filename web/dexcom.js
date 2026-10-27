@@ -65,7 +65,7 @@ const NanoDexcom = (() => {
     const { el } = NanoDexcomView, storage = NanoDexcomStorage.create();
     const heading = el('div', 'panel-heading'), intro = el('div'), body = el('div', 'dexcom-body');
     intro.append(el('p', 'hint', 'Connect with your applicator code to request readings and history.'));
-    heading.append(intro, el('span', 'badge', 'Experimental'));
+    heading.append(intro);
     const selected = el('p', 'hint'), status = el('p', 'lab-status'), results = el('div', 'dexcom-results'); status.setAttribute('role', 'status');
     const form = el('form', 'dexcom-connect'), pinLabel = el('label', '', '4-digit applicator code'), pin = el('input');
     pin.type = 'password'; pin.inputMode = 'numeric'; pin.pattern = '[0-9]{4}'; pin.maxLength = 4; pin.autocomplete = 'off'; pin.placeholder = '0000'; pinLabel.append(pin);
@@ -92,7 +92,7 @@ const NanoDexcom = (() => {
     const hexLabel = el('label', '', 'Packet HEX'), input = el('textarea'); input.rows = 3; input.spellcheck = false; input.placeholder = 'Paste one received characteristic value'; hexLabel.append(input);
     const timeLabel = el('label', '', 'Original capture time (optional)'), time = el('input'); time.type = 'datetime-local'; time.step = '1'; timeLabel.append(time);
     const decode = button('Decode packet'); details.append(passiveActions, uuidLabel, hexLabel, timeLabel, decode);
-    const info = el('p', 'hint', 'Sensor compatibility is unverified. Readings use the sensor clock and browser receipt time. Exact stop and expiry times are unavailable in the supported G7 packets.');
+    const info = el('p', 'hint', 'Readings use the sensor clock and browser receipt time. Exact stop and expiry times are unavailable in the supported G7 packets.');
     const privacy = el('p', 'hint', 'The applicator code is used for authentication and is not saved. Saved sessions and readings stay in this browser, scoped to this board and sensor.');
     const sources = el('a', 'hint', 'Protocol sources and licenses'); sources.href = 'https://github.com/yannelli/gattelier/blob/main/DEXCOM-CRYPTO-NOTICE.md'; sources.target = '_blank'; sources.rel = 'noopener noreferrer';
     body.append(selected, form, status, toolbar, results, savedActions, details, info, privacy, sources); container.replaceChildren(heading, body);

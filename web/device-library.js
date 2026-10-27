@@ -18,17 +18,17 @@ const NanoDeviceLibrary = (() => {
   const read = (id, label, status, module, command) => ({ id, label, kind: 'read', status, ...(module ? { module, command } : {}) });
   const definitions = [
     {
-      id: 'sleep-fuzion', title: 'Sleep Number Fuzion', category: 'sleep', transport: 'BLE', status: 'Experimental reader', module: 'sleep',
+      id: 'sleep-fuzion', title: 'Sleep Number Fuzion', category: 'sleep', transport: 'BLE', status: 'Reader', module: 'sleep',
       services: ['09d23fae-90e6-44c2-95b6-0b3d0f1abf25'], characteristics: ['8d4675a5-b5fa-42b2-b587-0ee71c46b709', '421e00f3-ae76-4c49-ab6e-39e4df4a5333'],
       description: 'Read system capabilities, left/right firmness, and privacy state through the Fuzion session.',
       models: 'Transport documented for Climate 360, FlexFit, and FlexFit Smart; capability replies determine installed hardware.',
       authentication: 'Read Auth after discovery. Pair when link encryption is required. A valid 16-byte session UUID gates requests.',
-      limitations: 'Hardware validation is pending. Cloud sleep scores are outside this BLE reader.',
+      limitations: 'Cloud sleep scores are not available over BLE.',
       capabilities: [read('capabilities', 'System capabilities', 'implemented', 'sleep', 'capabilities'), read('left', 'Left firmness', 'implemented', 'sleep', 'left'), read('right', 'Right firmness', 'implemented', 'sleep', 'right'), read('privacy', 'Privacy state', 'implemented', 'sleep', 'privacy')],
       recipes: [], sources: [sources.sleep]
     },
     {
-      id: 'sleep-mcr', title: 'Sleep Number MCR', category: 'sleep', transport: 'BLE', status: 'Experimental reader', module: 'sleep',
+      id: 'sleep-mcr', title: 'Sleep Number MCR', category: 'sleep', transport: 'BLE', status: 'Reader', module: 'sleep',
       services: ['ffffd1fd-388d-938b-344a-939d1f6efee0'], characteristics: ['ffffd1fd-388d-938b-344a-939d1f6efee1', 'ffffd1fd-388d-938b-344a-939d1f6efee2'],
       description: 'Separate binary transport for older BAM and 360 foundations.',
       models: 'Documented for older BAM, i8, and 360 FlexFit 2. Read foundation capabilities to identify controls.',
@@ -40,7 +40,7 @@ const NanoDeviceLibrary = (() => {
     {
       id: 'health-thermometer', title: 'BLE health thermometer', category: 'sensor', transport: 'BLE', status: 'GATT recipes', services: ['1809'],
       description: 'Capture completed measurements or intermediate temperature updates from the standard Health Thermometer Service.',
-      models: 'Devices exposing service 0x1809; manufacturer and model remain unconfirmed until read from the device.',
+      models: 'Devices exposing Health Thermometer service 0x1809.',
       authentication: 'Use the discovered characteristic properties. Pair if the device reports insufficient authentication or encryption.',
       limitations: 'Start a measurement on the thermometer to receive a measurement indication.',
       capabilities: [read('temperature', 'Temperature measurements', 'recipe'), read('type', 'Measurement location', 'recipe'), read('interval', 'Measurement interval', 'recipe')],
@@ -60,7 +60,7 @@ const NanoDeviceLibrary = (() => {
       description: 'Recognize initialization, pairing, and operational services and inspect discovered security properties.',
       models: 'Nuki API covers generations 1-4 and Ultra with distinct pairing service UUIDs.',
       authentication: 'Reading lock state requires an authorized client identity and shared key. Pairing is an application protocol, separate from a BLE PIN.',
-      limitations: 'Encrypted state reader implementation is pending. No unlock, configuration, or authorization-change recipe is included.',
+      limitations: 'The encrypted state reader is not implemented. No unlock, configuration, or authorization-change recipe is included.',
       capabilities: [read('lock-state', 'Lock state and battery flags', 'adapter-required')], recipes: ['device-manufacturer', 'device-model', 'battery-read'], sources: [sources.nuki]
     },
     {
@@ -69,15 +69,15 @@ const NanoDeviceLibrary = (() => {
       description: 'Recognize the documented Air11 FIG transport and inspect service metadata.',
       models: 'AirSense 11 protocol research; an FD56 advertisement or ResMed name alone does not establish the model.',
       authentication: 'First pairing uses a displayed four-digit code and SRP. Reconnect uses the saved clientId and masterPairKey; RPC requires a fresh AES session.',
-      limitations: 'Encrypted RPC reader implementation is pending. No therapy-setting writes are included.',
+      limitations: 'The encrypted RPC reader is not implemented. No therapy-setting writes are included.',
       capabilities: [read('version', 'Device version through encrypted GetVersion', 'adapter-required')], recipes: ['device-manufacturer', 'device-model', 'device-firmware'], sources: [sources.resmed]
     },
     {
       id: 'ge-appliance', title: 'GE washer / dryer', category: 'appliance', transport: 'GEA over USB / UDP', status: 'External transport', services: [], names: ['^(?:GE|GEA)[ _-](?:Washer|Dryer)\\b'],
       description: 'GE publishes a GEA bus SDK with appliance identity and ERD read/subscription APIs.',
-      models: 'Exact appliance and adapter compatibility require confirmation. A broadcast name is a candidate match.',
+      models: 'Matched by broadcast name. Compatibility depends on the appliance and adapter.',
       authentication: 'Transport and access requirements depend on the appliance and adapter.',
-      limitations: 'The inspected SDK provides USB and UDP adapters. A local BLE cycle-data protocol was not established.',
+      limitations: 'The GE SDK provides USB and UDP adapters. No BLE cycle-data protocol is implemented.',
       capabilities: [read('identity', 'Model, serial, and appliance type over GEA', 'external-transport')], recipes: ['device-manufacturer', 'device-model', 'device-serial'], sources: [sources.ge]
     },
     {
@@ -85,16 +85,16 @@ const NanoDeviceLibrary = (() => {
       description: 'Published local clients read TV identity through the HTTP API and use WebSocket remote control.',
       models: 'Tizen compatibility varies by TV and firmware. Confirm model using the LAN device-info response.',
       authentication: 'Remote control requests TV approval and reuses the returned token. Device-info reads use the LAN endpoint.',
-      limitations: 'A Samsung manufacturer ID does not identify a TV. BLE remote-control support is unverified.',
+      limitations: 'A Samsung manufacturer ID does not identify a TV. Remote control runs over LAN, not BLE.',
       capabilities: [read('identity', 'Device information at /api/v2/', 'external-transport')], recipes: ['device-manufacturer', 'device-model'], sources: [sources.samsung]
     },
     {
       id: 'samsung-device', title: 'Samsung device', category: 'vendor', transport: 'BLE', status: 'Manufacturer metadata', companies: [0x0075],
       services: ['fddb', 'fd7e', 'fd6c', 'fd69', 'fd5a', 'fd59', 'fd4b', 'fd1d', 'fc91'], names: ['^Samsung(?:\\b|[ _-])', '^\\[TV\\]\\s*Samsung\\b'],
       description: 'Recognize Samsung Electronics manufacturer data, assigned services, and candidate broadcast names.',
-      models: 'Company and service assignments identify Samsung Electronics metadata. Device type and model require further evidence.',
+      models: 'Matched by Samsung Electronics company and service assignments.',
       authentication: 'Security and application authentication depend on the device and its discovered services.',
-      limitations: 'A Samsung match does not establish a TV, phone, earbuds, owner, or supported control protocol.',
+      limitations: 'A Samsung match does not identify the device type, model, owner, or a control protocol.',
       capabilities: [read('identity', 'Exposed identity metadata', 'recipe')], recipes: ['device-manufacturer', 'device-model'], sources: [sources.samsungCompany, sources.samsungServices]
     },
     {

@@ -40,9 +40,9 @@ const NanoBoseProtocol = (() => {
     if (company) { result.evidence.push('Company 0x009E is assigned to Bose Corporation.'); result.fields.push(field('Bluetooth company', 'Bose Corporation (0x009E)'), field('Manufacturer payload HEX', manufacturer.slice(4))); }
     if (advertised) { result.evidence.push('Advertised Bose-assigned service 0xFEBE.'); result.fields.push(field('Bose service', '0xFEBE')); }
     if (named) result.evidence.push(`Broadcast name: ${device.name}`);
-    result.fields.push(field('Documented reference model', 'QuietComfort Ultra Headphones (Gen 1)'), field('Selected model compatibility', 'Unconfirmed'));
+    result.fields.push(field('Documented reference model', 'QuietComfort Ultra Headphones (Gen 1)'));
     result.limitations.push('Bose company, service and name matches do not establish a model or BMAP payload layout. Manufacturer data remains uninterpreted.',
-      'The BLE reference implementation was tested with QC Ultra Headphones Gen 1. SoundLink Max compatibility is unconfirmed and QC templates are blocked for its name candidate.',
+      'QC Ultra Gen 1 command templates are unavailable for SoundLink Max.',
       'Saved captures are decoded locally. No connection, subscription, pairing, authentication or device execution is implemented.');
     if (device.payloadTruncated) result.limitations.push('The advertisement was truncated; manufacturer bytes are incomplete.');
     return result;
@@ -140,7 +140,7 @@ const NanoBoseProtocol = (() => {
   function buildCommand(id, values = {}) {
     const definition = definitions.find(item => item[0] === id), command = commands.find(item => item.id === id);
     if (!definition || !object(values)) throw new Error('Unsupported Bose reference command.');
-    if (maxName(values.device)) throw new Error('SoundLink Max compatibility is unconfirmed; QC Ultra reference commands are unavailable for this candidate.');
+    if (maxName(values.device)) throw new Error('QC Ultra Gen 1 command templates are unavailable for SoundLink Max.');
     if (!identify(values.device) || !(values.device.services || []).some(item => uuid(typeof item === 'string' ? item : item?.uuid) === 'febe')) throw new Error('Select a Bose candidate with captured FEBE service evidence.');
     if (!modelEvidence(values.identityHex)) throw new Error('Provide the captured BMAP product-ID Status response for QC Ultra Gen1 (0x4066).');
     if (![characteristics.secure, characteristics.unsecure].includes(values.characteristic)) throw new Error('Choose the observed BMAP characteristic UUID.');
@@ -162,7 +162,7 @@ const NanoBoseProtocol = (() => {
       prerequisites: ['Use an authorized external client and confirm the product ID, FEBE service, characteristic and its discovered properties on the same device.',
         'Both source characteristic variants use a one-byte BLE segmentation header. Secure/unsecure labels identify distinct UUIDs; no authentication or encryption implementation is supplied.',
         'The external client must satisfy device link-security requirements and collect complete response notifications. GET requests still require characteristic writes.'],
-      warnings: ['This preview has no execution method or sendable recipe steps. SoundLink Max compatibility is unconfirmed.',
+      warnings: ['This preview has no execution method or sendable recipe steps.',
         'Battery auxiliary bytes, charging state, ANC settings and firmware operations are not inferred.', ...(id === 'select-mode' ? ['Mode indices depend on the device; use an index from its captured mode response.'] : [])], sources: sources.map(source => ({ ...source })) };
   }
   return { identify, parse, reassemble, inspect, decode, decodeStatus, characteristics, service, sources, commands, buildCommand,
