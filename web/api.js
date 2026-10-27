@@ -143,7 +143,18 @@ var NanoAPI = (() => {
     }
   }
 
-  return { fetch: apiFetch, url, origin: () => endpoint, configured: () => mode === 'serial' ? serialStatus().connected : Boolean(endpoint), setOrigin, clearOrigin, validateOrigin, sameOriginDefault, addressSpace,
+  // GETs when body is undefined, otherwise POSTs it as JSON; result is undefined when the reply is not JSON.
+  async function requestJson(path, body, timeout = 8000) {
+    const controller = new AbortController(), timer = setTimeout(() => controller.abort(), timeout);
+    try {
+      const response = await apiFetch(path, { method: body === undefined ? 'GET' : 'POST', signal: controller.signal,
+        ...(body === undefined ? {} : { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }) });
+      let result; try { result = await response.json(); } catch {}
+      return { response, result };
+    } finally { clearTimeout(timer); }
+  }
+
+  return { fetch: apiFetch, requestJson, url, origin: () => endpoint, configured: () => mode === 'serial' ? serialStatus().connected : Boolean(endpoint), setOrigin, clearOrigin, validateOrigin, sameOriginDefault, addressSpace,
     transport: () => mode, selectTransport, connectSerial, disconnectSerial, serialStatus, setSerialWifiOff };
 })();
 globalThis.NanoAPI = NanoAPI;

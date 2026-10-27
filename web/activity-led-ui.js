@@ -10,14 +10,13 @@ const NanoActivityLedUI = (() => {
     async function request(body) {
       if (busy) return;
       busy = true; controls();
-      const controller = new AbortController(), timer = setTimeout(() => controller.abort(), 8000);
       try {
-        const response = await NanoAPI.fetch('activity-led', { signal: controller.signal, ...(body ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {}) });
-        const result = await response.json(); if (!response.ok) throw new Error(result.error || 'Could not change LED brightness.');
+        const { response, result } = await NanoAPI.requestJson('activity-led', body);
+        if (!response.ok || !result) throw new Error(result?.error || 'Could not change LED brightness.');
         slider.value = result.brightness; level.textContent = `${result.brightness}%`; initialized = true;
         status.textContent = !result.ready ? 'The activity light is unavailable.' : result.brightness ? '' : 'Off';
       } catch (error) { status.textContent = error.name === 'AbortError' ? 'The board did not respond.' : error.message; }
-      finally { clearTimeout(timer); busy = false; controls(); }
+      finally { busy = false; controls(); }
     }
     slider.addEventListener('input', () => { level.textContent = `${slider.value}%`; });
     slider.addEventListener('change', () => request({ brightness: Number(slider.value), test: true }));

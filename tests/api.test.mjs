@@ -113,3 +113,19 @@ test('transport change aborts HTTP work and suppresses stale response', async ()
   await assert.rejects(pending, { name: 'AbortError' });
   api.selectTransport('http');
 });
+
+test('JSON requests GET without a body, POST JSON with one, and tolerate non-JSON replies', async () => {
+  api.setOrigin('http://192.168.4.1');
+  const calls = [];
+  globalThis.fetch = async (url, options) => { calls.push({ url, options }); return new Response(calls.length === 3 ? 'oops' : '{"ok":true}', { status: calls.length === 3 ? 502 : 200 }); };
+  assert.deepEqual((await api.requestJson('usb-mode')).result, { ok: true });
+  assert.equal(calls[0].options.method, 'GET');
+  assert.equal(calls[0].options.body, undefined);
+  await api.requestJson('usb-mode', { mode: 'hci' });
+  assert.equal(calls[1].options.method, 'POST');
+  assert.equal(calls[1].options.headers['Content-Type'], 'application/json');
+  assert.equal(calls[1].options.body, '{"mode":"hci"}');
+  const failed = await api.requestJson('usb-mode');
+  assert.equal(failed.response.status, 502);
+  assert.equal(failed.result, undefined);
+});

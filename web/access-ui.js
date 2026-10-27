@@ -7,15 +7,12 @@ const NanoAccessUI = (() => {
     panel.querySelector('.api-network').append(details);
     const input = details.querySelector('[data-access-origin]'), status = details.querySelector('[data-access-message]');
     async function request(body) {
-      const controller = new AbortController(), timer = setTimeout(() => controller.abort(), 8000);
       try {
-        const response = await NanoAPI.fetch('access', { signal: controller.signal, ...(body === undefined ? {} : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }) });
-        const value = await response.json();
-        if (!response.ok) throw new Error(value.error || 'Could not read hosted app access.');
+        const { response, result: value } = await NanoAPI.requestJson('access', body);
+        if (!response.ok || !value) throw new Error(value?.error || 'Could not read hosted app access.');
         input.value = value.origin || '';
         status.textContent = value.origin ? `Allowed: ${value.origin}` : 'Hosted app access is disabled.';
       } catch (error) { status.textContent = error.name === 'AbortError' ? 'The board did not respond.' : error.message; }
-      finally { clearTimeout(timer); }
     }
     details.querySelector('[data-access-load]').addEventListener('click', () => request());
     details.querySelector('form').addEventListener('submit', event => {

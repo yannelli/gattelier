@@ -66,16 +66,12 @@ const NanoCollection = (() => {
       }
     }
     async function request(path, body, wholeState = false) {
-      const controller = new AbortController(), timer = setTimeout(() => controller.abort(), 20000);
-      try {
-        const response = await NanoAPI.fetch(path, { method: body === undefined ? 'GET' : 'POST', signal: controller.signal,
-          ...(body === undefined ? {} : { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }) });
-        let result; try { result = await response.json(); } catch { throw new Error('The board returned an incomplete collection response.'); }
-        if (!response.ok) throw new Error(result.error || `Collection request failed (${response.status}).`);
-        const value = wholeState ? result?.collection : result;
-        if (!value || typeof value.enabled !== 'boolean' || typeof value.storageReady !== 'boolean') throw new Error('The board returned an invalid collection response.');
-        return result;
-      } finally { clearTimeout(timer); }
+      const { response, result } = await NanoAPI.requestJson(path, body, 20000);
+      if (result === undefined) throw new Error('The board returned an incomplete collection response.');
+      if (!response.ok) throw new Error(result?.error || `Collection request failed (${response.status}).`);
+      const value = wholeState ? result?.collection : result;
+      if (!value || typeof value.enabled !== 'boolean' || typeof value.storageReady !== 'boolean') throw new Error('The board returned an invalid collection response.');
+      return result;
     }
     async function refresh() {
       if (reading || pending || verifying) return;

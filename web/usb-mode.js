@@ -18,14 +18,9 @@ var NanoUSB = (() => {
       for (const [name, key] of Object.entries({ host: 'hostPackets', controller: 'controllerPackets', dropped: 'droppedPackets', rejected: 'rejectedBytes' })) get(name).textContent = String(current?.[key] || 0);
     }
     async function request(body) {
-      const controller = new AbortController(), timeout = setTimeout(() => controller.abort(), 8000);
-      try {
-        const response = await NanoAPI.fetch('/api/usb-mode', { signal: controller.signal,
-          ...(body ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {}) });
-        const result = await response.json();
-        if (!response.ok) throw new Error(result.error || 'USB mode request failed.');
-        return result;
-      } finally { clearTimeout(timeout); }
+      const { response, result } = await NanoAPI.requestJson('/api/usb-mode', body);
+      if (!response.ok || !result) throw new Error(result?.error || 'USB mode request failed.');
+      return result;
     }
     async function refresh() {
       try { current = await request(); available = true; }
