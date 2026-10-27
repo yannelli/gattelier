@@ -42,7 +42,7 @@ struct AppState {
   bool busy = false, connected = false, scanCompleted = false;
   bool scanning = false, scanEnabled = true;
   String operation = "idle", address, error;
-  String discoveryScope = "all services";
+  const char* discoveryScope = "all services";
   uint16_t mtu = 23;
   uint32_t connectionAttempt = 0;
   uint8_t addressType = 0;

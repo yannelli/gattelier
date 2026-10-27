@@ -61,7 +61,7 @@ void sendState(BoardServer& server) {
     cJSON_AddBoolToObject(ble, "scanning", state.scanning);
     cJSON_AddBoolToObject(ble, "scanEnabled", state.scanEnabled);
     addText(ble, "operation", state.operation);
-    addText(ble, "discoveryScope", state.discoveryScope);
+    cJSON_AddStringToObject(ble, "discoveryScope", state.discoveryScope);
     addText(ble, "address", state.address);
     addText(ble, "error", state.error);
     addText(ble, "captureAddress", state.captureAddress);
