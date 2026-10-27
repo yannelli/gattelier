@@ -79,6 +79,7 @@ class ScanCallbacks : public NimBLEScanCallbacks {
     StateLock lock;
     if (!state.scanning) return;
     recordAdvertisement(advertised);
+    if (state.captureAddress.isEmpty()) return;
     const String address = advertised->getAddress().toString().c_str();
     if (state.captureAddress == address) {
       const auto& payload = advertised->getPayload();

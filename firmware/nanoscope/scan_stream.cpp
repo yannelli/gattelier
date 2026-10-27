@@ -66,8 +66,10 @@ static DeviceInfo deviceFrom(const ScanAdvertisement& record) {
 
 void recordAdvertisement(const NimBLEAdvertisedDevice* advertised) {
   ScanAdvertisement record;
-  const String address = advertised->getAddress().toString().c_str();
-  memcpy(record.address, address.c_str(), 18); record.addressType = advertised->getAddressType();
+  // Same text as NimBLEAddress::toString(), without its two heap copies per advertisement.
+  const auto address = advertised->getAddress(); const uint8_t* bytes = address.getVal();
+  snprintf(record.address, sizeof(record.address), "%02x:%02x:%02x:%02x:%02x:%02x", bytes[5], bytes[4], bytes[3], bytes[2], bytes[1], bytes[0]);
+  record.addressType = advertised->getAddressType();
   const auto& payload = advertised->getPayload();
   record.payloadBytes = std::min(payload.size(), size_t(UINT16_MAX));
   memcpy(record.payload, payload.data(), std::min(payload.size(), ScanPayloadCapacity));
@@ -78,7 +80,7 @@ void recordAdvertisement(const NimBLEAdvertisedDevice* advertised) {
     record.id = nextId++; if (!nextId) ++nextId;
     journal.append(record); ++cacheSkipped; return;
   }
-  auto found = std::find_if(state.devices.begin(), state.devices.end(), [&](const DeviceInfo& device) { return device.address == address && device.addressType == record.addressType; });
+  auto found = std::find_if(state.devices.begin(), state.devices.end(), [&](const DeviceInfo& device) { return device.address == record.address && device.addressType == record.addressType; });
   record.id = found == state.devices.end() ? nextId++ : found->id;
   if (!nextId) ++nextId;
   if (found != state.devices.end() && !record.name[0]) strncpy(record.name, found->name.c_str(), sizeof(record.name) - 1);
