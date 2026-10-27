@@ -60,7 +60,7 @@ const NanoProtocolApp = (() => {
         plan = protocol.buildCommand(command.value, values);
         preview.textContent = JSON.stringify({ summary: plan.summary, transport: plan.transport || 'BLE GATT', hex: plan.hex, steps: plan.steps, request: plan.request, ...plan }, null, 2); preview.hidden = false;
         const sensitive = plan.sensitive || protocol.commands.find(item => item.id === command.value)?.sensitive;
-        save.disabled = Boolean(sensitive); message.textContent = sensitive ? 'Secret preview is temporary. Export is disabled; close this app to clear it.' : plan.steps ? 'Preview ready. Export to import this recipe in Workbench. No request was sent.' : 'Preview ready. No request was sent.';
+        save.disabled = Boolean(sensitive); message.textContent = sensitive ? 'Secret preview is temporary. Export is disabled; close this app to clear it.' : plan.steps ? 'Preview ready. Export it to run in Workbench.' : 'Preview ready.';
       } catch (error) { message.textContent = error.message; }
     });
     save.addEventListener('click', () => {

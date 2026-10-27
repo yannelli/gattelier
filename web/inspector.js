@@ -60,8 +60,9 @@ function buildDeviceDetail(device, fullPage = false) {
     data.append(metadata('Recorder', recorder.product));
   }
   const fallback = vendorStatus === 'loading' ? 'Loading vendor database…' : vendorStatus === 'failed' ? 'Vendor database unavailable' : 'No registered vendor found';
-  const company = vendor.manufacturer || (vendor.companyId === null ? 'Not advertised' : `Company ID 0x${vendor.companyId.toString(16).padStart(4, '0').toUpperCase()}`);
-  data.append(metadata('BLE manufacturer', company), metadata('Address vendor', vendor.addressNote || vendor.addressVendor || fallback));
+  const company = vendor.manufacturer || (vendor.companyId === null ? '' : `Company ID 0x${vendor.companyId.toString(16).padStart(4, '0').toUpperCase()}`);
+  if (company) data.append(metadata('BLE manufacturer', company));
+  data.append(metadata('Address vendor', vendor.addressNote || vendor.addressVendor || fallback));
   if (device.services?.length) data.append(metadata('Advertised services', device.services.join('\n'), true, true));
   detail.append(top, NanoConnection.controls(device, fullPage ? 'page-connect' : 'inspector-connect'), personal, data);
   if (profile.category !== 'other') {
@@ -109,7 +110,7 @@ function appendDeviceServices(detail, connected) {
   } else {
     const message = connected ? (state.ble.busy ? 'Discovering services…' : 'No services were returned by this device.')
       : state.ble.connected ? 'Use Switch and connect to inspect this device.'
-      : device?.connectable === false ? 'This device is broadcasting an advertisement and does not accept a connection.'
+      : device?.connectable === false ? 'Broadcast only. This device does not accept connections.'
       : 'Connect to see services and values.';
     detail.append(node('p', 'hint', message));
   }

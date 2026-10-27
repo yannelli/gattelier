@@ -26,7 +26,7 @@ const NanoInsights = (() => {
   }
   function signalChart(device) {
     const section = el('section', 'signal-card'), samples = (device.history || []).filter(item => Number.isFinite(item.rssi));
-    section.append(el('h3', '', 'Signal over time'), el('p', 'vendor-note', 'Observed RSSI in dBm. Signal strength is not a distance measurement.'));
+    section.append(el('h3', '', 'Signal over time (dBm)'));
     if (samples.length < 2) { section.append(el('p', 'hint', 'Keep scanning to collect signal samples for this address.')); return section; }
     const values = samples.map(item => item.rssi), low = Math.min(...values) - 3, high = Math.max(...values) + 3;
     const start = samples[0].at, span = Math.max(1, samples.at(-1).at - start);
@@ -53,7 +53,7 @@ const NanoInsights = (() => {
     if (trackers.length) {
       const list = el('section', 'tracker-list'); list.append(el('h3', '', 'Tracker broadcasts'));
       for (const item of trackers) { const row = el('button', 'tracker-row', `${item.label || item.name || item.address} · ${item.rssi} dBm · ${age(item.lastSeenMs)}`); row.type = 'button'; row.addEventListener('click', () => select(item)); list.append(row); }
-      list.append(el('p', 'vendor-note', 'Lists nearby broadcasts only. It cannot tell who owns a tracker or whether one is following you.')); fragment.append(list);
+      fragment.append(list);
     }
     container.replaceChildren(fragment);
   }

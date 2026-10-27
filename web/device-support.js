@@ -31,7 +31,7 @@ const NanoDeviceSupport = (() => {
       const context = metadata(), matches = context.device ? NanoDeviceLibrary.match(context.device, context.state).filter(item => families[kind].includes(item.id)) : [];
       const next = JSON.stringify([context.device?.address, context.device?.addressType, context.connected, context.characteristics, context.online, context.pending, context.state.ble?.busy, running]);
       if (next === signature) return; signature = next;
-      summary.replaceChildren(el('h3', '', kind === 'locks' ? 'Lock metadata' : kind === 'samsung' ? 'Samsung device metadata' : entries.map(item => item.title).join(' / ')), el('p', 'vendor-note', matches.length ? matches.map(item => `${item.confidence}: ${item.evidence}`).join(' ') : context.device ? 'No documented service signature matched this device. Inspect its services to collect evidence.' : ''));
+      summary.replaceChildren(el('h3', '', kind === 'locks' ? 'Lock metadata' : kind === 'samsung' ? 'Samsung device metadata' : entries.map(item => item.title).join(' / ')), el('p', 'vendor-note', matches.length ? matches.map(item => `${item.confidence}: ${item.evidence}`).join(' ') : context.device ? 'No known service signature matched.' : ''));
       read.disabled = !context.online || !context.device || context.device.connectable === false || context.pending || running;
       inspect.disabled = !context.device || context.pending || context.state.ble?.busy;
       results.replaceChildren();

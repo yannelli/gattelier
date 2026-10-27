@@ -116,7 +116,7 @@ const NanoSnapshots = (() => {
     });
     get('delete').addEventListener('click', () => {
       const index = Number(get('current').value); if (!snapshots[index]) return;
-      deleted = { snapshot: snapshots[index], index }; snapshots.splice(index, 1); persist(); refresh(); message('Snapshot deleted. Undo is available until this tab closes or another snapshot is deleted.');
+      deleted = { snapshot: snapshots[index], index }; snapshots.splice(index, 1); persist(); refresh(); message('Snapshot deleted.');
     });
     get('undo').addEventListener('click', () => {
       if (!deleted) return;

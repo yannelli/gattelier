@@ -113,8 +113,8 @@ const NanoCollection = (() => {
     }
     get('form').addEventListener('input', () => { dirty = true; sync(); });
     get('form').addEventListener('submit', event => { event.preventDefault(); try { change('/api/collection', payload(Boolean(state?.enabled)), 'Collection settings applied.'); } catch (error) { message(error.message, true); } });
-    get('start').addEventListener('click', () => { try { change('/api/collection', payload(true), 'Collection started. The browser can close while the board stays powered.'); } catch (error) { message(error.message, true); } });
-    get('stop').addEventListener('click', () => change('/api/collection', { enabled: false }, 'Collection stopped. Saved records remain on the board.'));
+    get('start').addEventListener('click', () => { try { change('/api/collection', payload(true), 'Collection started.'); } catch (error) { message(error.message, true); } });
+    get('stop').addEventListener('click', () => change('/api/collection', { enabled: false }, 'Collection stopped.'));
     get('use-selected').addEventListener('click', () => {
       const device = NanoConnection.snapshot().selected;
       if (!device) { message('Select a device in Discover first.', true); return; }

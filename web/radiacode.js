@@ -191,7 +191,7 @@ const NanoRadiaCode = (() => {
       if (result.kind === 'spectrum') section.append(spectrumChart(result, el));
       if (result.kind === 'measurements') section.append(el('p', 'radiacode-note', `${result.records.length ? 'Latest available value for each measurement.' : 'The device returned no buffered measurements.'} Dose values use device units.`));
       if (result.warning) section.append(el('p', 'radiacode-note', result.warning));
-      if (result.kind === 'status') section.append(el('p', 'radiacode-note', 'Raw device status flags. Flag meanings are not decoded.'));
+      if (result.kind === 'status') section.append(el('p', 'radiacode-note', 'Raw status flags (not decoded).'));
       sections.set(result.kind, section);
       results.replaceChildren(...Object.keys(titles).filter(kind => sections.has(kind)).map(kind => sections.get(kind)));
     }
