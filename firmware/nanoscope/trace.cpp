@@ -90,6 +90,7 @@ void sendTrace(BoardServer& server, uint32_t after) {
   server.send(200, "application/json", "");
   String chunk = "{\"bootId\":\"" + bootId + "\",\"oldestSeq\":" + String(oldest) +
     ",\"nextSeq\":" + String(end) + ",\"events\":[";
+  if (begin <= end) chunk.reserve(4608);  // Room for the 3 KB flush threshold plus one maximum-size event.
   bool first = true;
   for (uint32_t seq = begin; seq <= end && seq > 0; ++seq) {
     xSemaphoreTake(traceMutex, portMAX_DELAY);
