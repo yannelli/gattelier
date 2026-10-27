@@ -39,7 +39,7 @@ const NanoMetadata = (() => {
     });
     return { schema: 1, revision: value.revision, entries };
   }
-  function create({ storage = globalThis.localStorage, fetcher = (...args) => fetch(...args) } = {}) {
+  function create({ storage = (() => { try { return globalThis.localStorage; } catch { return null; } })(), fetcher = (...args) => fetch(...args) } = {}) {
     let bundled = null, supplemental = null, enabled = false, origin = DEFAULT_ORIGIN, updatedAt = null;
     try {
       const saved = JSON.parse(storage?.getItem(KEY) || 'null');

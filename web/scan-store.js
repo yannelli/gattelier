@@ -40,7 +40,7 @@ const NanoScanStore = (() => {
     for (const key of ['connectable', 'favorite', 'remembered', 'payloadTruncated']) if (value[key] !== undefined && typeof value[key] !== 'boolean') reject(key);
     if (value.payloadBytes !== undefined && (!Number.isSafeInteger(value.payloadBytes) || value.payloadBytes < 0 || value.payloadBytes > 65535)) reject('payload byte count');
     for (const key of ['rssi', 'txPower']) {
-      if (value[key] !== undefined && !(key === 'txPower' && value[key] === null) && (!Number.isFinite(value[key]) || value[key] < -127 || value[key] > 127)) reject(key);
+      if (value[key] !== undefined && !(key === 'txPower' && value[key] === null) && (!Number.isFinite(value[key]) || value[key] < -128 || value[key] > 127)) reject(key);
     }
     if (value.advType !== undefined && (!Number.isInteger(value.advType) || value.advType < 0 || value.advType > 255)) reject('advertisement type');
     for (const key of ['firstSeenMs', 'lastSeenMs']) if (!Number.isFinite(value[key]) || value[key] < 0 || value[key] > Number.MAX_SAFE_INTEGER) reject(key);
@@ -48,7 +48,7 @@ const NanoScanStore = (() => {
     for (const key of ['boardSeenSeconds', 'boardStartedMs']) if (value[key] !== undefined && (!Number.isFinite(value[key]) || value[key] < -1 || value[key] > Number.MAX_SAFE_INTEGER)) reject(key);
     if (value.services !== undefined && (!Array.isArray(value.services) || value.services.length > 64 || !value.services.every(validUUID))) reject('services');
     if (value.serviceData !== undefined && (!Array.isArray(value.serviceData) || value.serviceData.length > 64 || !value.serviceData.every(item => plainObject(item) && validUUID(item.uuid) && validHex(item.hex, 512)))) reject('service data');
-    if (value.history !== undefined && (!Array.isArray(value.history) || value.history.length > 60 || !value.history.every(item => plainObject(item) && Number.isFinite(item.at) && item.at >= 0 && item.at <= Number.MAX_SAFE_INTEGER && Number.isFinite(item.rssi) && item.rssi >= -127 && item.rssi <= 127))) reject('history');
+    if (value.history !== undefined && (!Array.isArray(value.history) || value.history.length > 60 || !value.history.every(item => plainObject(item) && Number.isFinite(item.at) && item.at >= 0 && item.at <= Number.MAX_SAFE_INTEGER && Number.isFinite(item.rssi) && item.rssi >= -128 && item.rssi <= 127))) reject('history');
     const record = savedRecord(value);
     record.lastSeenMs = Math.min(record.lastSeenMs, time);
     record.firstSeenMs = Math.min(record.firstSeenMs, record.lastSeenMs);

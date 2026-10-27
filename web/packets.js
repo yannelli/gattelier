@@ -49,8 +49,10 @@ const NanoPackets = (() => {
       bootId = batch.bootId;
       const dropped = Math.max(0, Number(batch.dropped) || 0);
       stats.boardDropped += dropped;
-      const fresh = [];
-      for (const source of [...(batch.events || [])].sort((a, b) => a.seq - b.seq)) {
+      const fresh = [], sources = [...(batch.events || [])].sort((a, b) => a.seq - b.seq);
+      // The request cursor came from the previous boot, so retained events below it were skipped; refetch from zero.
+      if (reboot && sources.length && sources[0].seq > Math.max(1, Number(batch.oldestSeq) || 1)) sources.length = 0;
+      for (const source of sources) {
         if (!Number.isInteger(source.seq) || source.seq <= nextSeq) continue;
         stats.gaps += Math.max(0, source.seq - nextSeq - 1);
         nextSeq = source.seq;

@@ -22,12 +22,14 @@ const NanoDexcomSession = (() => {
     function check(token) { if (destroyed || generation !== token) throw new Error('Dexcom operation cancelled.'); transport.guard(); }
     function eraseKey() { key?.fill(0); key = null; jpake?.destroy(); jpake = null; }
     function scheduleReconnect() {
-      if (!reconnect || !active() || !key || retryTimer !== null || reconnectAttempt >= (options.maxReconnectAttempts ?? 3)) return;
+      if (!reconnect || destroyed || !key || retryTimer !== null || reconnectAttempt >= (options.maxReconnectAttempts ?? 3)) return;
       const delay = reconnectAttempt === 0 && lastReadingAt ? Math.max(5000, lastReadingAt + (options.reconnectPeriodMs ?? 270000) - now()) : [5000, 15000, 30000][Math.min(reconnectAttempt, 2)];
       changed('waiting', 'Waiting for the sensor to advertise');
-      retryTimer = setTimeout(async () => {
+      retryTimer = setTimeout(async function attempt() {
         retryTimer = null;
-        if (!active() || !reconnect || busy) return;
+        if (!reconnect || destroyed) return;
+        // A hidden tab or running operation postpones the attempt; returning would leave the session stuck in "waiting".
+        if (!active() || busy) { retryTimer = setTimeout(attempt, options.reconnectDelayMs ?? 5000); return; }
         reconnectAttempt++; const saved = p.hex(key);
         try { await connect(device, { sessionKey: saved, remember, reconnect: true, retry: true }); }
         catch { scheduleReconnect(); }
@@ -184,7 +186,7 @@ const NanoDexcomSession = (() => {
       return snapshot();
     }
     return { connect, readLatest: () => run(async () => { await control('latest'); return snapshot(); }), readIdentity: () => run(async () => { await control('identity'); return snapshot(); }),
-      readTime: () => Promise.reject(new Error('A direct G7 time query is not established by the inspected protocol.')), readHistory, cancel, disconnect, snapshot,
+      readTime: () => Promise.reject(new Error('The G7 protocol has no direct time query.')), readHistory, cancel, disconnect, snapshot,
       async forgetSession() { cancel(); eraseKey(); await options.forgetSession?.(device); },
       destroy() { cancel(); destroyed = true; eraseKey(); transport.destroy(); offState?.(); } };
   }

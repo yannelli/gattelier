@@ -29,7 +29,7 @@ static void sendAsset(const char* contentType, const uint8_t* data, size_t size)
   server.sendHeader("Content-Encoding", "gzip");
   server.sendHeader("Cache-Control", "no-cache");
   server.sendHeader("X-Content-Type-Options", "nosniff");
-  server.sendHeader("Content-Security-Policy", "default-src 'self'; style-src 'self'; script-src 'self'; connect-src 'self' http: https:; object-src 'none'; frame-ancestors 'none'; base-uri 'none'");
+  server.sendHeader("Content-Security-Policy", "default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' data:; connect-src 'self' http: https:; object-src 'none'; frame-ancestors 'none'; base-uri 'none'");
   server.send_P(200, contentType, reinterpret_cast<const char*>(data), size);
 }
 

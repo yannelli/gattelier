@@ -19,7 +19,7 @@ const NanoBrowserCache = (() => {
     let db;
     try {
       db = await open();
-      await new Promise((resolve, reject) => { const transaction = db.transaction('resources', 'readwrite'); transaction.objectStore('resources').put({ data, savedAt: Date.now() }, 'vendors'); transaction.oncomplete = resolve; transaction.onerror = () => reject(transaction.error); });
+      await new Promise((resolve, reject) => { const transaction = db.transaction('resources', 'readwrite'); transaction.objectStore('resources').put({ data, savedAt: Date.now() }, 'vendors'); transaction.oncomplete = resolve; transaction.onerror = transaction.onabort = () => reject(transaction.error); });
     } catch {} finally { db?.close(); }
   }
   return { readVendors, saveVendors };

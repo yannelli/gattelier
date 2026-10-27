@@ -144,15 +144,19 @@ const NanoPocket = (() => {
     document.addEventListener('nanoscope:credentials-changed', () => { loadSaved(); sync(); });
     document.addEventListener('nanoscope:selection', () => { loadSaved(); sync(); });
     key.addEventListener('input', sync);
-    unlock.addEventListener('click', () => perform(async () => {
-      const device = selection(), secret = key.value.trim() || NanoCredentials.getPocket(device.address);
-      if (!/^[A-Za-z0-9]{16}$/.test(secret)) throw new Error('Enter the existing 16-character Pocket session key.');
-      const h = p.handles(current);
-      await lab.action('subscribe', { handle: h.response, mode: 'notify' });
-      await command(`APP&SK&${secret}`, message => message === 'MCU&SK&OK');
-      authenticated = true; const result = NanoCredentials.savePocket(device.address, secret); key.value = '';
-      status.textContent = result.error || 'Authenticated. Key saved for reconnection.';
-    }, true));
+    unlock.addEventListener('click', () => {
+      // Read before perform(): switching devices disconnects the old one, and that clears the key field.
+      const typed = key.value.trim();
+      perform(async () => {
+        const device = selection(), secret = typed || NanoCredentials.getPocket(device.address);
+        if (!/^[A-Za-z0-9]{16}$/.test(secret)) throw new Error('Enter the existing 16-character Pocket session key.');
+        const h = p.handles(current);
+        await lab.action('subscribe', { handle: h.response, mode: 'notify' });
+        await command(`APP&SK&${secret}`, message => message === 'MCU&SK&OK');
+        authenticated = true; const result = NanoCredentials.savePocket(device.address, secret); key.value = '';
+        status.textContent = result.error || 'Authenticated. Key saved for reconnection.';
+      }, true);
+    });
     directories.addEventListener('click', () => perform(async () => {
       const replies = await command('APP&LIST_DIRS', message => /^MCU&DIRS_SUM&\d+$/.test(message));
       const found = replies.filter(message => message.startsWith('MCU&DIRS&')).map(message => message.slice(9));

@@ -1,7 +1,7 @@
 'use strict';
 
 const NanoSnapshotModel = (() => {
-  const MAX_BYTES = 512 * 1024, properties = ['read', 'write', 'write-no-response', 'notify', 'indicate', 'broadcast', 'authenticated-signed-writes', 'extended-properties'];
+  const MAX_BYTES = 512 * 1024, properties = ['read', 'write', 'write-no-response', 'notify', 'indicate', 'broadcast', 'signed-write', 'extended-properties'];
   const fail = message => { throw new Error(message); };
   function object(value) { return value && typeof value === 'object' && !Array.isArray(value) ? value : fail('Expected a snapshot object.'); }
   function text(value, maximum = 256) { return typeof value === 'string' && value.length <= maximum ? value : fail('Invalid snapshot text.'); }

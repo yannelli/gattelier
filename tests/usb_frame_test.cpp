@@ -1,5 +1,5 @@
 #include <assert.h>
-#include "../artifacts/usb-draft/h4_frame.h"
+#include "../firmware/nanoscope/h4_frame.h"
 int main() {
   H4Frame frame;
   assert(!frame.feed(0xff));

@@ -1,5 +1,5 @@
 #include <assert.h>
-#include "network_button.h"
+#include "../firmware/nanoscope/network_button.h"
 
 using Event = NetworkButtonEvent;
 

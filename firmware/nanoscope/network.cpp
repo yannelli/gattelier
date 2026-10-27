@@ -10,13 +10,18 @@
 #include <ESPmDNS.h>
 #include <Preferences.h>
 #include <esp_mac.h>
-#include <esp_random.h>
 #include <ctype.h>
 #include <algorithm>
 
+#ifndef HOTSPOT_PASSWORD
+#define HOTSPOT_PASSWORD "nanoscope"
+#endif
+static_assert(sizeof(HOTSPOT_PASSWORD) - 1 >= 8 && sizeof(HOTSPOT_PASSWORD) - 1 <= 63, "HOTSPOT_PASSWORD must contain 8 to 63 bytes");
+
 static Preferences preferences;
 static NetworkButton button;
-static String stationSSID = WIFI_SSID, stationPassword = WIFI_PASSWORD, apSSID, apPassword;
+// The board has no display, so a fresh board uses a documented hotspot password until the user changes it.
+static String stationSSID = WIFI_SSID, stationPassword = WIFI_PASSWORD, apSSID, apPassword = HOTSPOT_PASSWORD;
 static String requestedMode = "station", actualMode = "station", pendingMode, networkError, resumeMode;
 static bool storageReady = false, apActive = false, previousConnected = false, mdnsActive = false;
 static bool wifiSuspended = false;
@@ -70,8 +75,10 @@ static void station() {
   MDNS.end(); mdnsActive = false; previousConnected = false; networkError = "";
   WiFi.softAPdisconnect(false); apActive = false; actualMode = "station";
   connectingSince = lastRetry = millis();
+  // The core applies the hostname to the STA netif inside WiFi.mode(), so it must be set first.
+  WiFi.setHostname("nanoscope");
   if (!WiFi.mode(WIFI_STA)) { networkError = "Station interface could not start."; hotspot(true); return; }
-  WiFi.setHostname("nanoscope"); WiFi.setAutoReconnect(true);
+  WiFi.setAutoReconnect(true);
   WiFi.begin(stationSSID.c_str(), stationPassword.isEmpty() ? nullptr : stationPassword.c_str());
 }
 
@@ -141,7 +148,7 @@ void addNetworkState(cJSON* wifi) {
   cJSON_AddStringToObject(wifi, "apIP", apIP.toString().c_str()); cJSON_AddStringToObject(wifi, "led", led);
   cJSON_AddStringToObject(wifi, "error", wifiSuspended ? "" : networkError.c_str()); cJSON_AddNumberToObject(wifi, "buttonPin", 9);
   cJSON_AddBoolToObject(wifi, "passwordSet", !stationPassword.isEmpty()); cJSON_AddBoolToObject(wifi, "stationPasswordSet", !stationPassword.isEmpty());
-  cJSON_AddBoolToObject(wifi, "apPasswordSet", !apPassword.isEmpty()); cJSON_AddBoolToObject(wifi, "pending", !pendingMode.isEmpty());
+  cJSON_AddBoolToObject(wifi, "apPasswordSet", !apPassword.isEmpty()); cJSON_AddBoolToObject(wifi, "apPasswordDefault", apPassword == HOTSPOT_PASSWORD); cJSON_AddBoolToObject(wifi, "pending", !pendingMode.isEmpty());
   cJSON_AddNumberToObject(wifi, "applyAfterMs", pendingMode.isEmpty() ? 0 : std::max(int32_t(0), int32_t(applyAt - millis())));
 }
 
@@ -152,9 +159,6 @@ void startNetwork() {
   uint8_t mac[6]; esp_read_mac(mac, ESP_MAC_WIFI_STA);
   char generatedSSID[32]; snprintf(generatedSSID, sizeof(generatedSSID), "NanoScope-%02X%02X%02X", mac[3], mac[4], mac[5]);
   apSSID = generatedSSID;
-  uint8_t random[12]; esp_fill_random(random, sizeof(random));
-  const char* hex = "0123456789abcdef";
-  for (uint8_t byte : random) { apPassword += hex[byte >> 4]; apPassword += hex[byte & 15]; }
   storageReady = preferences.begin("nanoscope-net", false);
   String stored = storageReady ? preferences.getString("config", "") : "";
   auto json = cJSON_Parse(stored.c_str());

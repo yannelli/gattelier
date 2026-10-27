@@ -95,7 +95,7 @@ const NanoProtocolApp = (() => {
       currentSnapshot = device && NanoDeviceApps.snapshot(id, device, state);
       exportSnapshot.disabled = !currentSnapshot; inspect.disabled = !currentSnapshot; prepare.disabled = !currentSnapshot;
       raw.textContent = currentSnapshot ? JSON.stringify({ address: device.address, addressType: device.addressType, manufacturer: device.manufacturer, services: device.services, serviceData: device.serviceData, payloadHex: device.payloadHex }, null, 2) : '';
-      if (!currentSnapshot) { context.textContent = 'Choose a matching device from Apps or Discover.'; readings.replaceChildren(); packetFields.replaceChildren(); packetDetails.hidden = true; evidence.replaceChildren(); historyList.replaceChildren(); return; }
+      if (!currentSnapshot) { lastSignature = ''; context.textContent = 'Choose a matching device from Apps or Discover.'; readings.replaceChildren(); packetFields.replaceChildren(); packetDetails.hidden = true; evidence.replaceChildren(); historyList.replaceChildren(); return; }
       context.textContent = `${currentSnapshot.title} · ${Number.isFinite(device.rssi) ? `${device.rssi} dBm · ` : ''}${device.lastSeenMs ? NanoInsights.age(device.lastSeenMs) : 'Saved observation'}`;
       mode.textContent = device.streamLive || device.liveId != null ? 'Broadcast updates' : 'Saved observation';
       const signature = JSON.stringify([currentSnapshot.fields, currentSnapshot.limitations]);

@@ -1,5 +1,5 @@
 #include <assert.h>
-#include "collection_rules.h"
+#include "../firmware/nanoscope/collection_rules.h"
 
 int main() {
   CollectionConfig config;

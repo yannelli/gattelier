@@ -9,6 +9,7 @@ const NanoDexcomTransport = (() => {
     function fail(message) {
       if (!target || failed) return;
       failed = message; queue.length = 0;
+      lab.setFastCapture?.(false);
       for (const item of [...waiters]) item.reject(new Error(message));
       options.onFailure?.(new Error(message));
     }

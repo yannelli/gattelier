@@ -4,7 +4,7 @@ const NanoDexcomStorage = (() => {
   const PREFIX = 'gattelier.dexcom.v1.';
   function create(options = {}) {
     const storage = options.storage || globalThis.localStorage;
-    const origin = options.origin || (() => globalThis.NanoAPI?.origin() || '');
+    const origin = options.origin || (() => globalThis.NanoAPI?.transport?.() === 'serial' ? 'usb' : globalThis.NanoAPI?.origin() || '');
     const now = options.now || Date.now;
     function scope(device, kind) {
       const board = origin(), address = String(device?.address || '').toLowerCase();
