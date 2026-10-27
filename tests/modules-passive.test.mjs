@@ -33,8 +33,11 @@ test('opening or selecting a passive app preserves an active G7 operation and gl
   context.apps.mount({ selected: () => globalDevice, devices: () => [globalDevice, coffee], select: () => { selectionCalls++; } });
   context.apps.render(globalDevice, [globalDevice, coffee]);
   const nodes = []; const visit = element => { nodes.push(element); element.children.forEach(visit); }; visit(get('apps-catalog'));
-  nodes.find(node => node.tag === 'article' && node.children.some(child => child.tag === 'h3' && child.textContent === 'Nespresso')).children.find(child => child.tag === 'button').listeners.click();
+  nodes.find(node => node.tag === 'button' && node.children.some(child => child.tag === 'h3' && child.textContent === 'Nespresso')).listeners.click();
   assert.equal(active, 'nespresso'); assert.equal(renderedTarget, coffee); assert.equal(selectionCalls, 0);
-  const picker = nodes.find(node => node.tag === 'select' && node.dataset.focus === 'app-device-nespresso'); picker.value = `${coffee.address}/0`; picker.listeners.change();
+  const coffee2 = { ...coffee, address: '02:00:00:00:00:03' };
+  context.apps.render(globalDevice, [globalDevice, coffee, coffee2]);
+  const again = []; const collect = element => { again.push(element); element.children.forEach(collect); }; collect(get('apps-catalog'));
+  const picker = again.find(node => node.tag === 'select' && node.dataset.focus === 'app-device-nespresso'); picker.value = `${coffee.address}/0`; picker.listeners.change();
   assert.equal(selectionCalls, 0); assert.equal(renderedTarget, coffee);
 });

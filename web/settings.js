@@ -38,7 +38,7 @@ document.addEventListener('toggle', event => {
   for (const help of document.querySelectorAll('details.help[open]')) if (help !== event.target) help.open = false;
 }, true);
 document.addEventListener('click', event => {
-  for (const help of document.querySelectorAll('details.help[open]')) if (!help.contains(event.target)) help.open = false;
+  for (const menu of document.querySelectorAll(':is(details.help, .traffic-filter-menu, .traffic-export-menu)[open]')) if (!menu.contains(event.target)) menu.open = false;
 });
 document.addEventListener('keydown', event => {
   const open = event.key === 'Escape' && document.querySelector('details.help[open]');

@@ -89,11 +89,11 @@ const NanoModules = (() => {
       const heading = document.createElement('h3'); heading.textContent = app.title;
       const description = document.createElement('p'); description.textContent = app.description;
       const found = devices.filter(item => matches(item).includes(app.id)), status = document.createElement('span'); status.className = 'badge'; status.textContent = match.includes(app.id) ? 'Matches selection' : found.length ? `${found.length} nearby` : '';
-      const open = document.createElement('button'); open.className = 'button secondary'; open.type = 'button'; open.textContent = 'Open'; open.setAttribute('aria-label', `Open ${app.title}`);
+      const open = document.createElement('button'); open.className = 'app-card-open'; open.type = 'button'; open.setAttribute('aria-label', `Open ${app.title}`);
       open.addEventListener('click', () => { if (!match.includes(app.id) && found.length === 1) selectAppDevice(app.id, found[0]); NanoWorkspace.openModule(app.id); render(hooks.selected(), hooks.devices()); });
-      card.append(...status.textContent ? [status] : [], heading, description, open);
-      if (found.length) {
-        const label = document.createElement('label'); label.textContent = 'Nearby';
+      open.append(heading, description, ...status.textContent ? [status] : []); card.append(open);
+      if (found.length > 1) {
+        const label = document.createElement('label');
         const select = document.createElement('select'); select.setAttribute('aria-label', `${app.title} device`); select.dataset.focus = `app-device-${app.id}`;
         const placeholder = document.createElement('option'); placeholder.value = ''; placeholder.textContent = 'Choose a device'; select.append(placeholder);
         for (const item of found) { const option = document.createElement('option'); option.value = `${item.address}/${item.addressType}`; option.textContent = `${item.label || item.name || item.address}${item.liveId == null && !item.streamLive ? ' · history' : ''}`; select.append(option); }
