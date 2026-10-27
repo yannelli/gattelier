@@ -110,7 +110,7 @@ function appendDeviceServices(detail, connected) {
     const message = connected ? (state.ble.busy ? 'Discovering services…' : 'No services were returned by this device.')
       : state.ble.connected ? 'Use Switch and connect to inspect this device.'
       : device?.connectable === false ? 'This device is broadcasting an advertisement and does not accept a connection.'
-      : 'Connect to discover services and readable values. Protected values require device authentication.';
+      : 'Connect to see services and values.';
     detail.append(node('p', 'hint', message));
   }
   return detail;

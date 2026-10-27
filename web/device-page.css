@@ -11,6 +11,7 @@
 .metadata-module { padding:var(--panel-inset); }
 .pairing-body { padding:0 var(--panel-inset) var(--panel-inset); display:grid; gap:var(--section-gap); }
 .pairing-body h3 { font-size:16px; }
+.pairing-heading { display:flex; align-items:center; justify-content:space-between; gap:12px; padding-top:var(--panel-inset); }
 .pairing-body p:empty { display:none; }
 .pairing-facts { display:flex; flex-wrap:wrap; gap:8px; }
 .pairing-code { font:600 32px var(--mono); letter-spacing:5px; }
