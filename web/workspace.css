@@ -3,7 +3,6 @@
 .topbar { position: sticky; top: 0; z-index: 20; min-height: var(--toolbar-height); padding: 16px max(28px, calc((100vw - 1280px) / 2)); gap: 24px; }
 .brand { font-size: 18px; letter-spacing: -.45px; }
 .brand-mark { width: 36px; height: 36px; border-radius: 11px; }
-.brand-subtitle { font-size: 10px; font-weight: 450; letter-spacing: .15px; margin-top: 1px; }
 .topbar .network { margin-left: auto; font-size: 11px; }
 .topbar > .button { min-width: 148px; font-size: 12px; padding: 10px 14px; }
 .topbar > .button svg { width: 18px; height: 18px; }
@@ -15,8 +14,6 @@ main { max-width: 1336px; padding: 22px 28px 16px; }
 .workspace-tabs button[aria-selected="true"], .subnav button[aria-selected="true"] { background: var(--surface); color: var(--text); box-shadow: var(--tab-shadow); }
 .workspace-tabs button[aria-selected="true"] svg { color: var(--accent); }
 .workspace-tabs svg { width: 18px; height: 18px; stroke-width: 1.65; }
-.workspace-local { display: inline-flex; align-items: center; gap: 7px; color: var(--muted); font-size: 10px; white-space: nowrap; padding-right: 2px; }
-.workspace-local .dot { width: 5px; height: 5px; background: var(--success); }
 .workspace-view { min-width: 0; }
 .workspace-view:focus { outline: none; }
 .workspace-view:focus-visible { outline: 2px solid var(--accent); outline-offset: 5px; border-radius: 16px; }
@@ -65,9 +62,6 @@ main { max-width: 1336px; padding: 22px 28px 16px; }
 .workspace-view > .lab-panel { margin-top: 0; }
 .workspace-view .lab-panel > .panel-heading { padding-top: 22px; }
 .view-empty { min-height: 400px; }
-.insights-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
-.insight-card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 22px; }
-.insight-value { font-size: 32px; font-weight: 650; letter-spacing: -1px; }
 .settings-card .panel-heading { padding: 22px 24px 18px; }
 .setting-row { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 22px 24px; border-top: 1px solid var(--line); cursor: pointer; }
 .setting-row > span { min-width: 0; }
@@ -82,7 +76,6 @@ main { max-width: 1336px; padding: 22px 28px 16px; }
 footer { padding: 20px 2px 4px; }
 @media (prefers-color-scheme: dark) { :root { --danger: #ff8c82; --tab-shadow: 0 1px 4px #00000026, 0 0 0 1px #ffffff08; } }
 @media (max-width: 1000px) {
-  .workspace-local { display: none; }
   .workspace-tabs { flex: 1; }
   .workspace-tabs button { flex: 1; padding: 10px 12px; }
   .workspace { grid-template-columns: minmax(300px, .9fr) minmax(0, 1.1fr); gap: 16px; }
@@ -108,7 +101,6 @@ footer { padding: 20px 2px 4px; }
   .view-heading .subnav { width: 100%; }
   .subnav button { flex: 1 1 auto; padding-inline: 12px; }
   .view-empty { min-height: 300px; }
-  .insights-grid { grid-template-columns: minmax(0, 1fr); }
   .setting-row, .settings-actions { padding: 20px; }
   .settings-card .panel-heading { padding: 20px; }
   .discovery-options select, .filter-grid select { font-size: 16px; min-height: 44px; padding-left: 8px; }
