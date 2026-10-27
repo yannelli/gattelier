@@ -230,3 +230,12 @@ test('continuous 500ms stream batches do not postpone browser persistence', asyn
   context.mock.timers.tick(200); await Promise.resolve(); await Promise.resolve();
   assert.equal(storage.writes, before + 1); assert.equal(storage.value.records[0].observations, 2);
 });
+test('tabs sharing one database keep each other\'s history, and clearing replaces it', async () => {
+  const shared = memoryStorage();
+  shared.update = async function (build) { this.value = copy(build(copy(this.value))); };
+  const first = create({ storage: shared }), second = create({ storage: shared }); await first.init(); await second.init();
+  first.ingest(board([device()]), 1000000); await first.flush();
+  second.ingest(board([device({ address: 'AA:BB:CC:DD:EE:02' })]), 1000000); await second.flush();
+  assert.deepEqual(shared.value.records.map(record => record.key).sort(), [key, 'aa:bb:cc:dd:ee:02/0']);
+  await first.clearHistory(); assert.equal(shared.value.records.length, 0);
+});

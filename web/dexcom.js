@@ -107,11 +107,12 @@ const NanoDexcom = (() => {
         if (selectedScope !== nextScope) { selectedScope = nextScope; pin.value = ''; uiError = ''; keep.checked = Boolean(storage.loadReadings(device)); saveStamp = ''; client.select(device); }
         const direct = session.snapshot(), captured = client.snapshot(), same = scope(direct.device || direct.scope) === nextScope;
         const active = same && (direct.busy || direct.authenticated || ['waiting', 'reconnecting'].includes(direct.status));
-        const saved = storage.loadReadings(device), fresh = same && direct.packets ? direct : captured.packets ? captured : null;
-        displayed = fresh || saved || { records: [] };
+        const fresh = same && direct.packets ? direct : captured.packets ? captured : null;
         if (fresh && keep.checked && fresh.packets && saveStamp !== `${nextScope}:${fresh.packets}`) {
           try { storage.saveReadings(device, fresh); saveStamp = `${nextScope}:${fresh.packets}`; } catch (error) { uiError = error.message; }
         }
+        const saved = storage.loadReadings(device);
+        displayed = fresh && saved && saveStamp === `${nextScope}:${fresh.packets}` ? { ...fresh, records: saved.records } : fresh || saved || { records: [] };
         selected.textContent = device ? `${device.label || device.name || 'Dexcom'} · ${device.address}` : 'Choose a Dexcom sensor in Discover.';
         const savedSession = storage.hasSession(device);
         pin.placeholder = savedSession ? 'Saved session available' : '0000'; pin.required = !savedSession; pin.disabled = active;

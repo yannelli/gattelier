@@ -32,3 +32,10 @@ test('saved readings are bounded and omit authentication and unrelated trace fie
   assert.ok(![...f.entries.values()].join().includes('secret'));
   f.store.clearReadings(device); assert.equal(f.store.loadReadings(device), null);
 });
+test('readings from separate page loads merge by sensor clock instead of replacing each other', () => {
+  const f = fixture(), reading = (clock, glucoseMgDl) => ({ clock, glucoseMgDl, state: 6, stateLabel: 'OK' });
+  f.store.saveReadings(device, { records: [reading(300, 110), reading(600, 115)], latest: reading(600, 115), identity: { serial: 'A' } });
+  const merged = f.store.saveReadings(device, { records: [reading(600, 116), reading(900, 120)], latest: reading(900, 120), identity: null });
+  assert.deepEqual(merged.records.map(item => [item.clock, item.glucoseMgDl]), [[300, 110], [600, 116], [900, 120]]);
+  assert.equal(f.store.loadReadings(device).records.length, 3); assert.equal(merged.latest.clock, 900); assert.deepEqual(merged.identity, { serial: 'A' });
+});

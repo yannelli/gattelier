@@ -167,3 +167,12 @@ test('G7 auth and extra-data TX are redacted while protocol RX remains available
   assert.equal(saved.events[2].hex, '03abcdef'); assert.equal(saved.events[3].hex, '01234567');
   assert.ok(!packets.csv(saved).includes('deadbeef'));
 });
+
+test('a reboot batch that skipped retained events is refetched from the start', () => {
+  const capture = packets.createCapture();
+  capture.ingest(batch([event(1), event(2), event(3), event(4), event(5)]));
+  const skipped = capture.ingest(batch([event(6), event(7), event(8)], { bootId: 'boot-2' }));
+  assert.equal(skipped.events.length, 0); assert.equal(capture.snapshot().nextSeq, 0);
+  const refetched = capture.ingest(batch([1, 2, 3, 4, 5, 6, 7, 8].map(seq => event(seq)), { bootId: 'boot-2' }));
+  assert.deepEqual(refetched.events.map(item => item.seq), [1, 2, 3, 4, 5, 6, 7, 8]); assert.equal(refetched.meta.gaps, 0);
+});

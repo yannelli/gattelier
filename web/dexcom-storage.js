@@ -33,11 +33,17 @@ const NanoDexcomStorage = (() => {
       write(device, 'session', { version: 1, key: session.key.toLowerCase(), savedAt: now() });
     }
     function saveReadings(device, snapshot) {
-      const records = (snapshot.records || []).slice(-5000).map(item => ({
+      // A new page load starts with an empty reader, so earlier saved readings are merged by sensor clock.
+      const previous = loadReadings(device), merged = new Map();
+      for (const item of [...(previous?.records || []), ...(snapshot.records || [])]) if (Number.isFinite(item?.clock)) merged.set(item.clock, item);
+      const records = [...merged.values()].sort((a, b) => a.clock - b.clock).slice(-5000).map(item => ({
         clock: item.clock, timestamp: item.timestamp, glucoseMgDl: item.glucoseMgDl, glucoseRaw: item.glucoseRaw,
         state: item.state, stateLabel: item.stateLabel, source: item.source, trendMgDlMinute: item.trendMgDlMinute
       }));
-      write(device, 'readings', { version: 1, savedAt: now(), records, latest: snapshot.latest, identity: snapshot.identity, estimatedStart: snapshot.estimatedStart });
+      const value = { version: 1, savedAt: now(), records, latest: snapshot.latest ?? previous?.latest ?? null, identity: snapshot.identity ?? previous?.identity ?? null,
+        estimatedStart: snapshot.estimatedStart ?? previous?.estimatedStart ?? null };
+      write(device, 'readings', value);
+      return value;
     }
     function loadReadings(device) {
       const value = read(device, 'readings');

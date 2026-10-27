@@ -84,12 +84,18 @@ const NanoScanStore = (() => {
       });
     }
     return { load: () => transaction('readonly', store => store.get('snapshot')),
-      save: value => transaction('readwrite', store => store.put(value, 'snapshot')) };
+      save: value => transaction('readwrite', store => store.put(value, 'snapshot')),
+      // Read and write in one transaction so another tab's save cannot land between them.
+      update: build => transaction('readwrite', store => {
+        const request = store.get('snapshot');
+        request.onsuccess = () => store.put(build(request.result), 'snapshot');
+        return request;
+      }) };
   }
   function create({ storage, now = Date.now } = {}) {
     const records = new Map(), preferences = { backgroundScan: false, persistent: true };
     let adapter = storage, available = false, error = '', evicted = 0, revision = 0, saved = 0, timer, initPromise;
-    let previousUptime = null, boardStartedMs = null, writing = Promise.resolve();
+    let previousUptime = null, boardStartedMs = null, writing = Promise.resolve(), replace = false, channel = null;
     let stream = { bootId: null, cursor: 0, received: 0, gaps: 0, reboots: 0, active: false, error: '' };
     try {
       const stored = JSON.parse(globalThis.localStorage?.getItem('nanoscope.scan.preferences') || '{}');
@@ -116,7 +122,13 @@ const NanoScanStore = (() => {
       if (initPromise) return initPromise;
       initPromise = (async () => {
         try {
-          if (adapter === undefined) adapter = indexedStorage();
+          if (adapter === undefined) {
+            adapter = indexedStorage();
+            if (typeof BroadcastChannel === 'function') {
+              channel = new BroadcastChannel('nanoscope-scan-history');
+              channel.onmessage = ({ data }) => { if (data === 'cleared') { records.clear(); evicted = 0; replace = true; changed(); } };
+            }
+          }
           if (!adapter?.load || !adapter?.save) throw new Error('IndexedDB is unavailable');
           const snapshot = await adapter.load();
           if (preferences.persistent !== false && snapshot?.schemaVersion === 1 && Array.isArray(snapshot.records)) {
@@ -222,7 +234,16 @@ const NanoScanStore = (() => {
       preferences.persistent = Boolean(enabled); savePreferences(); changed();
       return flush();
     }
-    function clearHistory() { records.clear(); evicted = 0; changed(); return flush(); }
+    function clearHistory() { records.clear(); evicted = 0; replace = true; channel?.postMessage('cleared'); changed(); return flush(); }
+    // Each tab saves its whole history, so records another tab saved are adopted before writing.
+    function adopt(snapshot) {
+      if (snapshot?.schemaVersion !== 1 || !Array.isArray(snapshot.records)) return;
+      for (const value of snapshot.records) {
+        const record = savedRecord(value);
+        if (record && !records.has(record.key)) records.set(record.key, { ...record, liveId: null });
+      }
+      trim();
+    }
     function setOffline() {
       for (const record of records.values()) { record.liveId = null; record.streamLive = false; }
       stream.active = false;
@@ -252,8 +273,13 @@ const NanoScanStore = (() => {
       writing = writing.then(async () => {
         if (!available) return false;
         while (saved < revision) {
-          const version = revision, snapshot = preferences.persistent !== false ? exportData() : { schemaVersion: 1, records: [], evicted: 0 };
-          try { await adapter.save(snapshot); saved = version; }
+          const version = revision, persistent = preferences.persistent !== false, replacing = replace;
+          replace = false;
+          try {
+            if (persistent && !replacing && adapter.update) await adapter.update(stored => { adopt(stored); return exportData(); });
+            else await adapter.save(persistent ? exportData() : { schemaVersion: 1, records: [], evicted: 0 });
+            saved = version;
+          }
           catch (failure) { available = false; error = `Scan history is kept in memory: ${failure.message}`; return false; }
         }
         return true;

@@ -33,10 +33,16 @@ var NanoSerialWire = (() => {
       return cleanup;
     }
 
+    // The timeout measures silence, so large responses keep the request alive while frames arrive.
+    function arm(item) {
+      timers.clearTimeout(item.timer);
+      item.timer = timers.setTimeout(() => close(new Error('USB board response timed out. Switch the board to workbench mode with a triple press, or update its firmware.')), item.timeout);
+    }
+
     function pump() {
       if (stopped || current || !queue.length) return;
       const item = current = queue.shift();
-      item.timer = timers.setTimeout(() => close(new Error('USB board response timed out. Switch the board to workbench mode with a triple press, or update its firmware.')), item.timeout);
+      arm(item);
       const bytes = synchronized ? item.bytes : Uint8Array.of(10, ...item.bytes);
       writer.write(bytes).catch(error => close(error));
     }
@@ -48,12 +54,13 @@ var NanoSerialWire = (() => {
       const item = current;
       if (frame.event === 'start') {
         if (item.start || !Number.isInteger(frame.status) || frame.status < 200 || frame.status > 599 || typeof frame.type !== 'string') throw new Error('Invalid USB response start.');
-        synchronized = true;
+        synchronized = true; arm(item);
         item.start = frame;
         item.headers = new Headers(frame.headers || {});
         if (frame.type) item.headers.set('Content-Type', frame.type);
       } else if (frame.event === 'data') {
         if (!item.start) throw new Error('USB response data arrived before its headers.');
+        arm(item);
         const bytes = codec.decode(frame.data);
         item.size += bytes.length;
         if (item.size > codec.limits.response) throw new Error('USB response exceeds 2 MiB.');
