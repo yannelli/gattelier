@@ -3,76 +3,28 @@
 const NanoRadiaCode = (() => {
   const protocol = () => typeof NanoRadiaCodeProtocol !== 'undefined' ? NanoRadiaCodeProtocol : require('./radiacode-protocol.js');
   function createClient(lab, options = {}) {
-    const p = protocol(), connection = options.connection || NanoConnection, timeout = options.timeoutMs ?? 12000;
-    let current = lab.getState(), online = false, target = '', boot = '', cursor = 0, gaps, pending = null, priming = null;
-    let initialized = false, firmware = null, format = null, sequence = 0, running = false, failure = '', poisoned = false, lastAddress = '', latest = {};
-    function fail(message) {
-      if (!running) return;
-      failure = message; poisoned = Boolean(target); initialized = false;
-      pending?.reject(new Error(message)); priming?.reject(new Error(message));
-    }
-    function guard() {
-      if (failure) throw new Error(failure);
-      if (!online || !current.ble?.connected || current.ble.address?.toLowerCase() !== target) throw new Error('RadiaCode connection changed. Reconnect the selected device.');
-      const handles = p.handles(current);
-      if (!handles) throw new Error('The connected device does not expose the documented RadiaCode characteristics.');
-      if (!handles.write.properties?.includes('write-no-response') || !handles.notify.properties?.includes('notify')) throw new Error('RadiaCode requires write-without-response and notification properties.');
-      return handles;
-    }
-    function wait(holder, label) {
-      let resolve, reject; const promise = new Promise((yes, no) => { resolve = yes; reject = no; }); promise.catch(() => {});
-      const item = { promise, after: cursor, timer: setTimeout(() => fail(`${label} timed out. Reconnect before retrying.`), timeout) };
-      const finish = (fn, value) => { clearTimeout(item.timer); if (holder === 'pending') pending = null; else priming = null; fn(value); };
-      item.resolve = value => finish(resolve, value); item.reject = error => finish(reject, error); return item;
-    }
-    async function query(kind) {
-      const handles = guard(), frame = p.request(kind, sequence); sequence = (sequence + 1) % 32;
-      const item = wait('pending', 'RadiaCode response'); item.frame = frame; item.assembler = new p.Assembler(); pending = item;
-      try {
-        const size = Math.min(18, Math.max(1, (current.ble.mtu || 23) - 3));
-        for (let offset = 0; offset < frame.length; offset += size) { guard(); await lab.action('write', { handle: handles.write.handle, hex: p.hex(frame.slice(offset, offset + size)), response: false }); }
-        guard(); return await item.promise;
-      } catch (error) { fail(error.message); item.reject(error); throw error; }
-    }
-    const offEvents = lab.onEvents((events, meta = {}) => {
-      const changedBoot = boot && meta.bootId && boot !== meta.bootId;
-      if (changedBoot) { initialized = false; sequence = 0; poisoned = false; if (target) fail('The board restarted during the RadiaCode transfer.'); }
-      if (meta.bootId) boot = meta.bootId;
-      if (running && !priming && (meta.dropped || gaps !== undefined && Number(meta.gaps) > gaps)) fail('RadiaCode packet capture has a gap. Reconnect before retrying.');
-      gaps = Number(meta.gaps) || 0;
-      for (const event of events) {
-        cursor = Math.max(cursor, event.seq || 0);
-        if (!pending || event.seq <= pending.after || event.address?.toLowerCase() !== target) continue;
-        if (event.kind === 'disconnect') { fail('RadiaCode disconnected during the transfer.'); continue; }
-        const handles = p.handles(current);
-        if (!handles || event.handle !== handles.notify.handle || !['notification', 'indication'].includes(event.kind)) continue;
-        if (event.truncated || event.redacted || event.success === false) { fail('RadiaCode notification is incomplete or unavailable.'); continue; }
-        try {
-          const item = pending;
-          for (const frame of item.assembler.append(event.hex)) { if (pending !== item) break; item.resolve(p.response(frame, item.frame)); }
-        } catch (error) { fail(error.message); }
-      }
-      cursor = meta.reboot ? meta.cursor || meta.nextSeq || 0 : Math.max(cursor, meta.cursor || meta.nextSeq || 0);
-      priming?.resolve();
+    const p = protocol(), notify = typeof NanoNotifyClient !== 'undefined' ? NanoNotifyClient : require('./notify-client.js');
+    let initialized = false, firmware = null, format = null, sequence = 0, latest = {};
+    const link = notify.create(lab, p, {
+      name: 'RadiaCode', connection: options.connection || NanoConnection, timeout: options.timeoutMs ?? 12000, chunk: 18,
+      text: { changed: 'RadiaCode connection changed. Reconnect the selected device.', moved: 'RadiaCode connection changed during the transfer.', disconnect: 'RadiaCode disconnected during the transfer.', select: 'Select a RadiaCode device first.', poisoned: 'Reconnect RadiaCode after the interrupted transfer before reading again.' },
+      check(handles) {
+        if (!handles) throw new Error('The connected device does not expose the documented RadiaCode characteristics.');
+        if (!handles.write.properties?.includes('write-no-response') || !handles.notify.properties?.includes('notify')) throw new Error('RadiaCode requires write-without-response and notification properties.');
+      },
+      writeResponse: () => false,
+      reset(scope) {
+        initialized = false;
+        if (scope !== 'fail') sequence = 0;
+        if (scope === 'address') { firmware = null; format = null; latest = {}; }
+      },
+      onFrame: (frame, item) => item.resolve(p.response(frame, item.frame))
     });
-    const offState = lab.onState((state, available = true) => {
-      const address = state.ble?.connected ? state.ble.address?.toLowerCase() || '' : '';
-      if (address !== lastAddress) { initialized = false; firmware = null; format = null; sequence = 0; poisoned = false; lastAddress = address; latest = {}; }
-      current = state; online = available;
-      if (running && target && (!online || address !== target)) fail('RadiaCode connection changed during the transfer.');
-    });
-    async function perform(kind, device) {
-      if (running || lab.isActing()) throw new Error('Wait for the current Bluetooth operation to finish.');
-      if (!device?.address) throw new Error('Select a RadiaCode device first.');
-      running = true; failure = ''; target = '';
-      try {
-        current = await connection.ensure(device); target = device.address.toLowerCase(); guard();
-        if (poisoned) throw new Error('Reconnect RadiaCode after the interrupted transfer before reading again.');
-        priming = wait('priming', 'Live packet capture'); const prime = priming.promise; lab.setFastCapture(true); await prime; guard();
-        if (!initialized) {
-          const handles = guard(); await lab.action('subscribe', { handle: handles.notify.handle, mode: 'notify' }); guard();
-          await query('exchange'); firmware = p.version(await query('version')); initialized = true;
-        }
+    const query = kind => link.request(kind, 'RadiaCode response', () => { const frame = p.request(kind, sequence); sequence = (sequence + 1) % 32; return frame; });
+    function perform(kind, device) {
+      return link.run(device, async () => {
+        await link.prime();
+        if (!initialized) { await link.subscribe(); await query('exchange'); firmware = p.version(await query('version')); initialized = true; }
         if (kind === 'identity') {
           const serial = p.ascii(p.virtualString(await query('serial')));
           return { kind, serial, ...firmware, fields: [{ label: 'Serial number', value: serial }, { label: 'Firmware', value: `${firmware.firmware.major}.${firmware.firmware.minor} ${firmware.firmware.date}` }, { label: 'Boot firmware', value: `${firmware.boot.major}.${firmware.boot.minor} ${firmware.boot.date}` }] };
@@ -91,14 +43,13 @@ const NanoRadiaCode = (() => {
           if (latest[key] !== undefined) fields.push({ label, value: `${latest[key]}${suffix}` });
         }
         return { kind, records, fields, warning: records.warning || '' };
-      } catch (error) { if (pending || priming) fail(error.message); throw error; }
-      finally { pending?.reject(new Error('RadiaCode read ended.')); priming?.reject(new Error('RadiaCode read ended.')); running = false; target = ''; lab.setFastCapture(false); }
+      });
     }
     return {
       read(kind, device) { if (!['identity', 'status', 'measurements', 'spectrum'].includes(kind)) return Promise.reject(new Error('Unsupported RadiaCode read.')); return perform(kind, device); },
       resetDose(device, confirmed = false) { if (confirmed !== true) return Promise.reject(new Error('Confirm the accumulated dose reset first.')); return perform('resetDose', device); },
-      stop: () => fail('RadiaCode operation stopped. Reconnect before retrying.'), busy: () => running,
-      destroy() { fail('RadiaCode reader closed.'); offEvents?.(); offState?.(); }
+      stop: () => link.fail('RadiaCode operation stopped. Reconnect before retrying.'), busy: link.busy,
+      destroy: () => link.close('RadiaCode reader closed.')
     };
   }
   function createPoller({ read, onResult = () => {}, onError = () => {}, onChange = () => {}, stopRead = () => {}, intervalMs = 5000, schedule = setTimeout, cancel = clearTimeout }) {
