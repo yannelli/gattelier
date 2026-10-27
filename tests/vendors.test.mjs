@@ -29,10 +29,11 @@ test('public addresses use the longest matching registry prefix', () => {
 });
 
 test('grouped vendor prefixes expand to a prefix lookup', () => {
-  const expanded = expand({ updated: 'today', vendors: { 'MA-L vendor': 'AABBCC', 'MA-S vendor': '000000 AABBCCDDE' }, company: {} });
-  assert.deepEqual(expanded.oui, { AABBCC: 'MA-L vendor', '000000': 'MA-S vendor', AABBCCDDE: 'MA-S vendor' });
+  const expanded = expand({ updated: 'today', vendors: { 'MA-L vendor': 'aabbcc', 'Mixed vendor': '0,1;a;aabbccdde' }, company: [] });
+  assert.deepEqual(expanded.oui, { AABBCC: 'MA-L vendor', '000000': 'Mixed vendor', '000001': 'Mixed vendor', '000000A': 'Mixed vendor', AABBCCDDE: 'Mixed vendor' });
   assert.equal(expanded.vendors, undefined);
-  assert.equal(addressVendor('aa:bb:cc:dd:ee:ff', 0, expanded), 'MA-S vendor');
+  assert.equal(addressVendor('aa:bb:cc:dd:ee:ff', 0, expanded), 'Mixed vendor');
+  assert.equal(identify({ manufacturer: '4c00', addressType: 1 }, { company: [...Array(76).fill(null), 'Apple, Inc.'] }).manufacturer, 'Apple, Inc.');
   assert.equal(expand(database), database);
 });
 

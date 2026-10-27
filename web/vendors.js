@@ -30,11 +30,16 @@ const NanoVendors = (() => {
     }
     return '';
   }
-  // vendors.json groups IEEE prefixes by organization to shrink the embedded copy; lookups need them keyed by prefix.
+  // vendors.json stores each organization's IEEE prefixes as hex deltas, one ';' group per width; lookups need a prefix map.
   function expand(data) {
     if (!data?.vendors) return data;
     const { vendors, ...rest } = data, oui = {};
-    for (const [name, prefixes] of Object.entries(vendors)) for (const prefix of String(prefixes).split(' ')) oui[prefix] = name;
+    for (const [name, groups] of Object.entries(vendors)) {
+      String(groups).split(';').forEach((deltas, index) => {
+        let prefix = 0;
+        for (const delta of deltas ? deltas.split(',') : []) oui[(prefix += parseInt(delta, 16)).toString(16).toUpperCase().padStart([6, 7, 9][index], '0')] = name;
+      });
+    }
     return { ...rest, oui };
   }
   function identify(device, database) {

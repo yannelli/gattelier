@@ -45,11 +45,27 @@ def company_names(source):
 
 
 def group_prefixes(oui):
-    # One entry per organization ("Name": "P1 P2") is about 120 KB smaller gzipped than a prefix-keyed map.
+    # Grouping by organization and storing hex deltas between its sorted prefixes, one ";" group per
+    # registry width (6, 7, 9 digits), keeps the embedded copy about 140 KB smaller than a prefix map.
     groups = {}
     for prefix, name in oui.items():
         groups.setdefault(name, []).append(prefix)
-    return {name: " ".join(sorted(prefixes)) for name, prefixes in sorted(groups.items())}
+    encoded = {}
+    for name, prefixes in sorted(groups.items()):
+        widths = []
+        for width in (6, 7, 9):
+            previous, deltas = 0, []
+            for value in sorted(int(prefix, 16) for prefix in prefixes if len(prefix) == width):
+                deltas.append(format(value - previous, "x"))
+                previous = value
+            widths.append(",".join(deltas))
+        encoded[name] = ";".join(widths).rstrip(";")
+    return encoded
+
+
+def company_list(companies):
+    # Identifiers are dense, so an array indexed by identifier is smaller than an object keyed by it.
+    return [companies.get(str(identifier)) for identifier in range(max(map(int, companies)) + 1)]
 
 
 def main():
@@ -64,7 +80,7 @@ def main():
     if len(oui) < 40000:
         raise ValueError("Incomplete IEEE database")
     companies = company_names(download(SOURCES["Bluetooth SIG"]))
-    data = {"updated": datetime.now(timezone.utc).date().isoformat(), "sources": SOURCES, "vendors": group_prefixes(oui), "company": companies}
+    data = {"updated": datetime.now(timezone.utc).date().isoformat(), "sources": SOURCES, "vendors": group_prefixes(oui), "company": company_list(companies)}
     payload = json.dumps(data, ensure_ascii=True, separators=(",", ":")).encode()
     (ROOT / "web/vendors.json").write_bytes(payload + b"\n")
     print(f"{len(oui)} IEEE prefixes; {len(companies)} BLE company IDs; {len(gzip.compress(payload))} bytes compressed")
