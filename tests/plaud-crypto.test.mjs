@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import { generateKeyPairSync, publicEncrypt, constants, createCipheriv, randomBytes } from 'node:crypto';
-const context = vm.createContext({ Uint8Array, ArrayBuffer, DataView, TextEncoder, TextDecoder, crypto: globalThis.crypto, setTimeout, clearTimeout });
+const context = vm.createContext({ Uint8Array, ArrayBuffer, DataView, TextEncoder, TextDecoder, crypto: globalThis.crypto, setTimeout, clearTimeout, atob });
 context.window = context;
 vm.runInContext(readFileSync(new URL('../web/plaud-crypto.js', import.meta.url), 'utf8'), context);
 const c = context.NanoPlaudCrypto;
@@ -15,6 +15,15 @@ test('browser RSA decrypts a PKCS8 account key and rejects damaged padding', () 
   const encrypted = publicEncrypt({ key: publicKey, padding: constants.RSA_PKCS1_PADDING }, plain);
   assert.deepEqual(Buffer.from(c.decryptRSA(pem, encrypted)), plain);
   assert.throws(() => c.decryptRSA(pem, new Uint8Array(256)));
+  const pkcs1 = privateKey.export({ format: 'pem', type: 'pkcs1' });
+  assert.deepEqual(Buffer.from(c.decryptRSA(pkcs1, encrypted)), plain);
+  const empty = publicEncrypt({ key: publicKey, padding: constants.RSA_PKCS1_PADDING }, Buffer.alloc(0));
+  assert.equal(c.decryptRSA(pem, empty).length, 0);
+  const raw = Buffer.alloc(256); raw[1] = 2; raw.fill(1, 2, 9);
+  assert.throws(() => c.decryptRSA(pem, publicEncrypt({ key: publicKey, padding: constants.RSA_NO_PADDING }, raw)));
+  assert.throws(() => c.decryptRSA(pem.replace('PRIVATE KEY', 'PUBLIC KEY'), encrypted), /RSA private key/);
+  const small = generateKeyPairSync('rsa', { modulusLength: 1024 }).privateKey.export({ format: 'pem', type: 'pkcs8' });
+  assert.throws(() => c.decryptRSA(small, encrypted), /RSA-2048/);
 });
 test('browser session AEAD matches independent OpenSSL encryption and rejects a changed tag', () => {
   const key = randomBytes(32), nonce = randomBytes(12), aad = randomBytes(12), plain = randomBytes(96);
