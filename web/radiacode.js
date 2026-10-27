@@ -159,7 +159,7 @@ const NanoRadiaCode = (() => {
       const connected = Boolean(context.online && device && context.state.ble?.connected && String(context.state.ble.address || '').toLowerCase() === address);
       const disconnected = wasConnected && !connected; wasConnected = connected;
       if (disconnected) { selectionVersion++; poller.stop(); }
-      connectionBadge.textContent = connected ? 'Connected' : 'Not connected';
+      connectionBadge.textContent = connected ? 'Connected' : '';
       connectionBadge.className = `badge${connected ? ' connected' : ''}`; connectionBadge.hidden = !device;
       for (const button of buttons) button.disabled = !device || client.busy() || poller.active() || !context.online || context.pending || context.state.ble?.busy;
       live.disabled = !poller.active() && (!device || client.busy() || !context.online || context.pending || context.state.ble?.busy);

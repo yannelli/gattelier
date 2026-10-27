@@ -33,7 +33,6 @@ h1, h2, h3, p { margin: 0; }
 .topbar { min-height: 86px; padding: 20px max(32px, calc((100vw - 1248px) / 2)); display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--line); background: var(--surface); gap: 16px; }
 .brand { display: flex; align-items: center; gap: 11px; font-size: 19px; font-weight: 650; letter-spacing: -.5px; }
 .brand-mark { display: grid; place-items: center; width: 40px; height: 40px; background: var(--text); color: var(--surface); border-radius: 12px; }
-.brand-subtitle { display: block; color: var(--muted); font-size: 10px; font-weight: 550; letter-spacing: 1.2px; }
 .network { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; min-width: 0; }
 .network span:last-child { overflow-wrap: anywhere; }
 .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); flex-shrink: 0; }
@@ -42,7 +41,6 @@ main { max-width: 1312px; padding: 45px 32px 24px; margin: auto; }
 .intro { display: flex; justify-content: space-between; align-items: center; gap: 28px; margin-bottom: 32px; }
 .eyebrow { color: var(--muted); font-size: 11px; font-weight: 650; letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 8px; }
 h1 { font-size: clamp(25px, 2.65vw, 34px); letter-spacing: -1.1px; font-weight: 650; line-height: 1.2; }
-.intro-copy { color: var(--muted); font-size: 14px; margin-top: 12px; }
 .button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; border: 0; border-radius: var(--radius-small); min-height: 44px; max-width: 100%; padding: 10px 17px; font-size: 13px; font-weight: 600; line-height: 1.5; text-align: center; text-decoration: none; white-space: normal; transition: background .15s; }
 .primary { background: var(--accent); color: white; }
 .primary:hover:enabled { background: var(--accent-hover); }
@@ -80,6 +78,7 @@ p.vendor-note:empty, .snapshot-message:empty { display: none; }
 .empty { display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; padding: 32px 20px; color: var(--muted); }
 .empty h3 { color: var(--text); font-size: 15px; font-weight: 600; margin-bottom: 7px; letter-spacing: -.2px; }
 .empty p { font-size: 12px; line-height: 1.8; max-width: 290px; }
+.empty p:empty { display: none; }
 .compact { min-height: 334px; }
 .empty-symbol { font-size: 39px; color: var(--muted); margin-bottom: 16px; font-weight: 300; }
 .inspector-empty { min-height: 438px; }
@@ -136,7 +135,6 @@ footer { display: flex; justify-content: space-between; gap: 16px; padding: 22px
   main { padding: 30px 16px 16px; }
   .intro { display: block; padding: 0 4px; margin-bottom: 24px; }
   h1 { max-width: 330px; font-size: 30px; }
-  .intro-copy { max-width: 320px; font-size: 13px; }
   .intro > .button { margin-top: 22px; width: 100%; }
   .workspace { grid-template-columns: minmax(0, 1fr); gap: 18px; }
   .devices { min-height: 230px; max-height: 390px; }

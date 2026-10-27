@@ -26,7 +26,7 @@ const NanoConnection = (() => {
     const ble = context.state.ble || {}, connected = Boolean(device && ble.connected && address(device) === String(ble.address).toLowerCase());
     const live = (context.state.devices || []).find(item => same(item, device)) || (device?.streamLive ? device : null);
     const result = { connected, live, enabled: false, label: connected ? 'Disconnect' : 'Connect', status: connected ? 'Connected' : 'Disconnected', reason: '' };
-    if (!device) return { ...result, status: 'No device selected', reason: 'Choose one in Discover.' };
+    if (!device) return { ...result, status: 'Choose a device in Discover', reason: '' };
     if (!context.online) return { ...result, status: 'Board offline', reason: 'Reconnect the board first.' };
     if (context.state.usb?.mode === 'hci') return { ...result, status: 'USB controller mode', reason: 'Restore Bluetooth workbench mode in Settings to connect from this page.' };
     const local = inFlight && attempt && same(attempt.device, device), remote = ble.busy && ['connecting', 'discovering', 'cancelling'].includes(ble.operation) && address(device) === String(ble.address).toLowerCase() && device.addressType === ble.addressType && Number.isInteger(ble.connectionAttempt) && ble.connectionAttempt > 0;

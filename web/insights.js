@@ -11,7 +11,7 @@ const NanoInsights = (() => {
     card.append(el('h3', '', profile.title), el('span', 'badge', profile.confidence));
     if (profile.fields?.length) {
       const fields = el('dl', 'metadata');
-      for (const field of profile.fields) { const row = el('div'); row.append(el('dt', '', field.label), el('dd', '', String(field.value))); fields.append(row); }
+      for (const field of profile.fields.filter(item => item.value !== 'Not available')) { const row = el('div'); row.append(el('dt', '', field.label), el('dd', '', String(field.value))); fields.append(row); }
       card.append(fields);
     }
     // Match evidence, limitations and sources are reference material, so they start collapsed.

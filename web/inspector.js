@@ -28,7 +28,7 @@ function renderCharacteristic(characteristic, serviceUuid = '') {
 function renderInspector() {
   const device = selectedDevice();
   const connected = Boolean(device && state.ble.connected && state.ble.address === device.address);
-  $('connection-badge').textContent = NanoConnection.describe(device).status;
+  $('connection-badge').textContent = device ? NanoConnection.describe(device).status : '';
   $('connection-badge').classList.toggle('connected', connected);
   const signature = JSON.stringify([device, connected ? state.services : [], state.ble, state.security, online, NanoConnection.snapshot().pending]);
   if (signature === detailSignature) return;
@@ -36,7 +36,7 @@ function renderInspector() {
   replacePreservingFocus($('inspector'), buildDeviceDetail(device));
 }
 function buildDeviceDetail(device, fullPage = false) {
-  if (!device) return empty('No device selected', 'Choose a device from the list.', 'inspector-empty');
+  if (!device) return empty('Choose a device from the list', '', 'inspector-empty');
   const live = device.streamLive === true || device.liveId != null || state.devices.some(item => deviceKey(item) === deviceKey(device));
   const connected = Boolean(state.ble.connected && state.ble.address === device.address);
   const detail = node('div', 'detail');

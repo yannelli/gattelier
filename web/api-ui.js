@@ -43,7 +43,7 @@ var NanoAPIUI = (() => {
       disconnect.hidden = status.state !== 'connected'; connect.hidden = !disconnect.hidden;
       wifiOff.disabled = wifiChanging || ['connecting', 'closing'].includes(status.state);
       if (status.connected) wifiOff.checked = status.wifiSuspended;
-      state.textContent = usb ? ({ connected: 'Connected', connecting: 'Connecting', closing: 'Disconnecting', disconnected: 'Not connected' }[status.state]) : origin ? 'Saved' : 'Not set up';
+      state.textContent = usb ? ({ connected: 'Connected', connecting: 'Connecting', closing: 'Disconnecting', disconnected: '' }[status.state]) : origin ? 'Saved' : 'Not set up';
       state.classList.toggle('online', usb && status.connected);
       const usbText = !status.secure ? 'USB requires HTTPS or localhost.' : !status.supported ? 'Web Serial is unavailable. Open this app in desktop Chrome.' : status.error || (status.connected ? `Wi-Fi is ${status.wifiSuspended ? 'paused' : 'on'}.` : '');
       message.textContent = text || (usb ? usbText : '');

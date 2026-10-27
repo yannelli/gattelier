@@ -39,7 +39,7 @@ const NanoNetwork = (() => {
       get('current-mode').textContent = config.suspendedForUsb ? 'Connected over USB' : config.mode === 'hotspot' ? 'Device hotspot' : 'Wi-Fi connection';
       get('current-status').textContent = reachable ? statusNames[config.status] || config.status || 'Unknown status' : 'Board unavailable';
       get('led').dataset.led = config.led || '';
-      get('current-ssid').textContent = config.suspendedForUsb ? 'Wi-Fi paused for USB' : config.networkSSID || (config.mode === 'hotspot' ? config.apSSID : config.ssid) || 'Not connected';
+      get('current-ssid').textContent = config.suspendedForUsb ? 'Wi-Fi paused for USB' : config.networkSSID || (config.mode === 'hotspot' ? config.apSSID : config.ssid) || 'None';
       get('current-ip').textContent = config.suspendedForUsb ? 'USB serial' : config.ip || 'No address assigned';
       get('saved-ssid').textContent = config.configuredSSID || 'None';
       get('ap-name').textContent = config.apSSID || 'None';
