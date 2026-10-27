@@ -30,9 +30,12 @@ const names = {
   '2a24': 'Model Number', '2a25': 'Serial Number', '2a26': 'Firmware Revision',
   '2a27': 'Hardware Revision', '2a28': 'Software Revision', '2a29': 'Manufacturer Name'
 };
-function uuidName(uuid, fallback, serviceUuid = '') {
+function shortUuid(uuid) {
   const normalized = String(uuid).toLowerCase().replace(/^0x/, '');
-  const short = /^0000[0-9a-f]{4}-0000-1000-8000-00805f9b34fb$/.test(normalized) ? normalized.slice(4, 8) : normalized;
+  return /^0000[0-9a-f]{4}-0000-1000-8000-00805f9b34fb$/.test(normalized) ? normalized.slice(4, 8) : normalized;
+}
+function uuidName(uuid, fallback, serviceUuid = '') {
+  const short = shortUuid(uuid);
   if (/^(?:0x)?1910$|^00001910-0000-1000-8000-00805f9b34fb$/i.test(serviceUuid) && ['2bb0', '2bb1'].includes(short)) return short === '2bb1' ? 'PLAUD commands' : 'PLAUD responses';
   return names[short] || (typeof NanoMetadata !== 'undefined' ? NanoMetadata.lookup(short)?.name : '') || fallback;
 }
@@ -66,8 +69,10 @@ function replacePreservingFocus(container, content) {
   const focused = container.contains(document.activeElement) ? document.activeElement : null;
   const active = focused?.dataset.focus, start = focused?.selectionStart, end = focused?.selectionEnd;
   const expanded = new Set(Array.from(container.querySelectorAll('details[open][data-persist]'), item => item.dataset.persist));
+  const collapsed = new Set(Array.from(container.querySelectorAll('details[data-collapse]:not([open])'), item => item.dataset.collapse));
   container.replaceChildren(content);
   for (const item of container.querySelectorAll('details[data-persist]')) item.open = expanded.has(item.dataset.persist);
+  for (const item of container.querySelectorAll('details[data-collapse]')) item.open = !collapsed.has(item.dataset.collapse);
   if (active) {
     const next = Array.from(container.querySelectorAll('[data-focus]')).find(element => element.dataset.focus === active);
     next?.focus({ preventScroll: true });
@@ -298,5 +303,5 @@ async function boot() {
   document.addEventListener('visibilitychange', () => { clearTimeout(timer); if (!document.hidden || scanStore?.getPreference('backgroundScan', false)) tick(); });
   tick(); loadVendors();
 }
-if (typeof module !== 'undefined') module.exports = { deviceKey, visibleDevices, canScan, canConnect, canRead, uuidName, operationLabel, scanAction, scanStatus, lastSeenLabel, needsStatePoll };
+if (typeof module !== 'undefined') module.exports = { deviceKey, visibleDevices, canScan, canConnect, canRead, shortUuid, uuidName, operationLabel, scanAction, scanStatus, lastSeenLabel, needsStatePoll };
 if (typeof document !== 'undefined') boot();

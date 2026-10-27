@@ -50,10 +50,10 @@ details.credential-controls > * + * { margin-top: 10px; }
 .panel-foot { padding-inline: var(--panel-inset); }
 .settings-layout > * { min-width: 0; }
 .settings-layout input[type="range"] { padding: 0; min-height: 32px; }
-:is(.protocol-details, .settings-layout details:not(.help), .raw-details) > summary { display: flex; align-items: center; gap: 12px; min-height: 44px; list-style: none; }
-:is(.protocol-details, .settings-layout details:not(.help), .raw-details) > summary::-webkit-details-marker { display: none; }
-:is(.protocol-details, .settings-layout details:not(.help), .raw-details) > summary::after { content: ''; flex-shrink: 0; width: 16px; height: 16px; margin-left: auto; background: var(--select-arrow) center / 16px no-repeat; }
-:is(.protocol-details, .settings-layout details:not(.help), .raw-details)[open] > summary::after { transform: rotate(180deg); }
+:is(.protocol-details, .settings-layout details:not(.help), .raw-details, .service) > summary { display: flex; align-items: center; gap: 12px; min-height: 44px; list-style: none; }
+:is(.protocol-details, .settings-layout details:not(.help), .raw-details, .service) > summary::-webkit-details-marker { display: none; }
+:is(.protocol-details, .settings-layout details:not(.help), .raw-details, .service) > summary::after { content: ''; flex-shrink: 0; width: 16px; height: 16px; margin-left: auto; background: var(--select-arrow) center / 16px no-repeat; }
+:is(.protocol-details, .settings-layout details:not(.help), .raw-details, .service)[open] > summary::after { transform: rotate(180deg); }
 .settings-layout details:not(.help)[open] > summary { margin-bottom: 12px; }
 .beacon-signal, .protocol-evidence { display: grid; gap: 12px; min-width: 0; }
 .beacon-signal:empty, .protocol-evidence:empty { display: none; }

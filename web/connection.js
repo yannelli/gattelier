@@ -41,7 +41,7 @@ const NanoConnection = (() => {
     if (ble.connected) return { ...result, enabled: true, label: 'Switch and connect', status: 'Another device connected', reason: `Disconnects ${name(connectedDevice(context))} and connects this device.` };
     return { ...result, enabled: true, label: live ? 'Connect' : 'Try known address', status: live ? 'Available' : 'Saved device', reason: live ? '' : 'Not in the current scan. Private addresses can change.' };
   }
-  async function ensure(device) {
+  async function ensure(device, identify = false) {
     if (inFlight) throw new Error('A connection change is already running.');
     inFlight = true; const currentAttempt = attempt = { device, cancelled: false, posted: false }; hooks.changed();
     try {
@@ -58,6 +58,8 @@ const NanoConnection = (() => {
       const live = (current.devices || []).find(item => same(item, device));
       const body = { address: address(device), addressType: device.addressType };
       if (!live && hooks.recorder?.(device)?.product.includes('PLAUD')) body.scope = 'plaud';
+      // Only a user's Connect asks the board to read identity values; apps keep their own connection timing.
+      if (identify) body.identify = true;
       currentAttempt.posted = true;
       const result = await hooks.action('connect', body);
       if (!result.ble.connected || String(result.ble.address).toLowerCase() !== address(device)) throw new Error(result.ble.error || 'The device did not establish a connection. Try again.');
@@ -91,7 +93,7 @@ const NanoConnection = (() => {
   }
   async function perform(device) {
     hooks.notice('');
-    try { const status = describe(device); if (status.cancel) await cancel(device); else if (status.connected) await disconnect(); else await ensure(device); }
+    try { const status = describe(device); if (status.cancel) await cancel(device); else if (status.connected) await disconnect(); else await ensure(device, true); }
     catch (error) { hooks.notice(error.message); }
     finally { hooks.changed(); }
   }

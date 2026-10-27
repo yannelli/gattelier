@@ -49,6 +49,11 @@ test('saved addresses connect without a current firmware scan id', async () => {
   await connection.ensure(target);
   assert.deepEqual(calls, [{ action: 'connect', body: { address: target.address, addressType: 0 } }]);
 });
+test('the Connect button asks for identity reads; app connections do not', async () => {
+  const { calls } = harness({ ble: {}, devices: [] });
+  await connection.perform(target);
+  assert.deepEqual(calls, [{ action: 'connect', body: { address: target.address, addressType: 0, identify: true } }]);
+});
 test('already connected is reused without reconnecting and failures clear pending', async () => {
   const { calls } = harness({ ble: { connected: true, address: target.address }, devices: [] });
   await connection.ensure(target); assert.equal(calls.length, 0);

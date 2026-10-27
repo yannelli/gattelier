@@ -101,11 +101,17 @@ const NanoGattValues = (() => {
       }
       if (key === '2908' && bytes.length === 2 && bytes[1] >= 1 && bytes[1] <= 3) return [field('Report ID', bytes[0]), field('Report type', ['Reserved', 'Input', 'Output', 'Feature'][bytes[1]])];
       if (Object.hasOwn(strings, key)) {
-        if (!bytes.length) return [];
-        const text = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+        // Many firmwares send C strings, so trailing NUL terminators are not part of the text.
+        let end = bytes.length; while (end && !bytes[end - 1]) end--;
+        if (!end) return [];
+        const text = new TextDecoder('utf-8', { fatal: true }).decode(bytes.subarray(0, end));
         if (/[\u0000-\u001f\u007f-\u009f]/.test(text)) return [];
         return [field(strings[key], text)];
       }
+      if (key === '2a50' && bytes.length === 7) return [
+        field('Vendor ID', `${hex16(data.getUint16(1, true))} (${['Reserved source', 'Bluetooth SIG', 'USB-IF'][bytes[0]] || 'Reserved source'})`),
+        field('Product ID', hex16(data.getUint16(3, true))), field('Product version', hex16(data.getUint16(5, true)))
+      ];
       if (key === '2a19' && bytes.length === 1) {
         if (bytes[0] === 255) return [field('Battery level', 'Unknown / reserved (0xFF)')];
         return bytes[0] <= 100 ? [field('Battery level', `${bytes[0]}%`)] : [];

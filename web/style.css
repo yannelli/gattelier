@@ -95,7 +95,11 @@ dd { margin: 0; font-size: 12px; overflow-wrap: anywhere; }
 .mono { font-family: var(--mono); font-size: 11px; overflow-wrap: anywhere; white-space: pre-wrap; }
 .section-label { font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .8px; margin: 24px 0 12px; }
 .service { border: 1px solid var(--line); border-radius: 12px; margin-top: 12px; overflow: hidden; }
-.service-title { margin: 0; padding: 13px 15px; background: var(--surface-secondary); font-size: 12px; font-weight: 600; }
+.service-title { margin: 0; padding: 13px 15px; background: var(--surface-secondary); font-size: 12px; font-weight: 600; cursor: pointer; }
+.service-title h4 { margin: 0; font-size: 12px; font-weight: 600; }
+.gatt-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 24px 0 12px; }
+.gatt-header .section-label { margin: 0; }
+.gatt-identity { margin-top: 12px; }
 .uuid { display: block; margin-top: 3px; color: var(--muted); font: 10px/1.6 var(--mono); overflow-wrap: anywhere; }
 .characteristic { padding: 15px; border-top: 1px solid var(--line); }
 .characteristic-top { display: flex; justify-content: space-between; gap: 12px; align-items: center; }

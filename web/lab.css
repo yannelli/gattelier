@@ -31,6 +31,10 @@
 .descriptor-list, .advertisement-raw { margin-top: 10px; }
 .descriptor-list summary, .advertisement-raw summary { cursor: pointer; min-height: 44px; padding: 12px 0; color: var(--muted); font-size: 11px; }
 .descriptor-list p { padding: 7px 0; }
+.descriptor { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.descriptor p { font-size: 12px; }
+.descriptor .button { font-size: 11px; padding: 8px 12px; }
+.descriptor-list .descriptor-value { padding-top: 0; color: var(--muted); white-space: pre-wrap; overflow-wrap: anywhere; }
 .advertisement-tools { padding: 14px 0 0; border-top: 1px solid var(--line); }
 .advertisement-raw pre { padding: 12px; border-radius: 8px; background: var(--surface-secondary); overflow-wrap: anywhere; }
 .table-scroll { overflow: auto; max-width: 100%; border: 1px solid var(--line); border-radius: 10px; }

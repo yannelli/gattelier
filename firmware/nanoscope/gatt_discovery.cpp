@@ -29,10 +29,22 @@ static CharacteristicInfo characteristicInfo(NimBLERemoteCharacteristic* charact
   return result;
 }
 
-void discoverGatt(NimBLEClient* client, bool recorderOnly) {
+// Name, appearance, battery, Device Information strings and characteristic user descriptions.
+static const char* identityUuid(const String& uuid) {
+  static const char* const uuids[] = {"0x2a00", "0x2a01", "0x2a19", "0x2a24", "0x2a25", "0x2a26", "0x2a27", "0x2a28", "0x2a29", "0x2a50", "0x2901"};
+  for (auto candidate : uuids) if (uuid == candidate) return candidate;
+  return nullptr;
+}
+
+void discoverGatt(NimBLEClient* client, bool recorderOnly, bool identify) {
   const String address = client->getPeerAddress().toString().c_str();
   String error;
-  size_t serviceCount = 0, characteristicCount = 0, descriptorCount = 0;
+  size_t serviceCount = 0, characteristicCount = 0, descriptorCount = 0, identityCount = 0;
+  std::vector<std::pair<uint16_t, const char*>> identity;
+  const auto wantIdentity = [&](const String& uuid, uint16_t handle) {
+    const char* match = identify && identity.size() < 32 ? identityUuid(uuid) : nullptr;
+    if (match) identity.emplace_back(handle, match);
+  };
   {
     StateLock lock;
     std::vector<ServiceInfo>().swap(state.services);
@@ -54,6 +66,7 @@ void discoverGatt(NimBLEClient* client, bool recorderOnly) {
         for (auto characteristic : characteristics) {
           if (!discoveryReady(client, error)) break;
           CharacteristicInfo entry = characteristicInfo(characteristic);
+          if (entry.properties & GattRead) wantIdentity(entry.uuid, entry.handle);
           const auto& descriptors = characteristic->getDescriptors(true);
           if (discoveryReady(client, error)) entry.descriptors.reserve(descriptors.size());
           for (auto descriptor : descriptors) {
@@ -61,6 +74,7 @@ void discoverGatt(NimBLEClient* client, bool recorderOnly) {
             DescriptorInfo detail;
             detail.uuid = descriptor->getUUID().toString().c_str();
             detail.handle = descriptor->getHandle();
+            wantIdentity(detail.uuid, detail.handle);
             entry.descriptors.push_back(std::move(detail));
             ++descriptorCount;
           }
@@ -79,6 +93,15 @@ void discoverGatt(NimBLEClient* client, bool recorderOnly) {
         if (error.length()) break;
       }
     }
+    for (const auto& [handle, uuid] : identity) {
+      if (!error.isEmpty() || !discoveryReady(client, error)) break;
+      std::string value;
+      if (readAttribute(client, handle, value)) continue;  // Left unread; a manual Read can still pair if the device needs it.
+      const auto data = reinterpret_cast<const uint8_t*>(value.data());
+      updateValue(handle, data, value.size());
+      recordTrace("read", address, uuid, handle, data, value.size(), "Identity read after discovery");
+      ++identityCount;
+    }
     if (!client->isConnected()) error = "Device disconnected during GATT discovery.";
     else if (!serviceCount && !error.length()) error = "Connected, but GATT service discovery returned no services.";
   }
@@ -89,5 +112,6 @@ void discoverGatt(NimBLEClient* client, bool recorderOnly) {
   }
   String message = error.length() ? error : String(serviceCount) + " services, " +
     String(characteristicCount) + " characteristics, " + String(descriptorCount) + " descriptors";
+  if (identify && error.isEmpty()) message += ", " + String(identityCount) + " identity values";
   recordTrace(error.length() ? "error" : "discovery", address, "", 0, nullptr, 0, message, !error.length());
 }

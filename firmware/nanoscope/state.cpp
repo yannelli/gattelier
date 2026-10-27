@@ -137,6 +137,7 @@ void sendState(BoardServer& server) {
           auto entry = cJSON_CreateObject();
           addText(entry, "uuid", descriptor.uuid);
           cJSON_AddNumberToObject(entry, "handle", descriptor.handle);
+          if (descriptor.hasValue) addText(entry, "valueHex", descriptor.valueHex); else cJSON_AddNullToObject(entry, "valueHex");
           cJSON_AddItemToArray(descriptors, entry);
         }
         if (characteristic.hasValue) {

@@ -23,7 +23,7 @@ struct DeviceInfo {
   std::vector<ServiceDataInfo> serviceData;
 };
 
-struct DescriptorInfo { String uuid; uint16_t handle = 0; };
+struct DescriptorInfo { String uuid, valueHex; uint16_t handle = 0; bool hasValue = false; };
 
 struct CharacteristicInfo {
   String uuid, valueHex, valueText, readError;

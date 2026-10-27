@@ -50,8 +50,9 @@ static void submit(Action action, const char* argument = nullptr) {
   if (direct) {
     String normalized = address->valuestring; normalized.toLowerCase();
     memcpy(command.data, normalized.c_str(), 18); command.mode = addressType->valueint;
+    // Connect has no payload, so length carries flags: bit 0 limits discovery to PLAUD, bit 1 reads identity values.
     auto scope = cJSON_GetObjectItemCaseSensitive(json, "scope");
-    command.length = cJSON_IsString(scope) && !strcmp(scope->valuestring, "plaud") ? 1 : 0;
+    command.length = (cJSON_IsString(scope) && !strcmp(scope->valuestring, "plaud") ? 1 : 0) | (cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(json, "identify")) ? 2 : 0);
   }
   if (action == Action::Write) {
     auto hex = cJSON_GetObjectItemCaseSensitive(json, "hex");

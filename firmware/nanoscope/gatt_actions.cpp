@@ -11,6 +11,15 @@ static CharacteristicInfo* findEntry(uint32_t handle) {
   return nullptr;
 }
 
+static DescriptorInfo* findDescriptor(uint32_t handle) {
+  for (auto& service : state.services) {
+    for (auto& characteristic : service.characteristics) {
+      for (auto& descriptor : characteristic.descriptors) if (descriptor.handle == handle) return &descriptor;
+    }
+  }
+  return nullptr;
+}
+
 static bool hasProperty(const CharacteristicInfo& entry, GattProperty property) {
   return (entry.properties & property) != 0;
 }
@@ -18,6 +27,7 @@ static bool hasProperty(const CharacteristicInfo& entry, GattProperty property) 
 bool validateGatt(const Command& command, String& error) {
   if (!state.connected) { error = "No device is connected."; return false; }
   auto entry = findEntry(command.argument);
+  if (!entry && command.action == Action::Read && findDescriptor(command.argument)) return true;
   if (!entry) { error = "Characteristic handle is not part of the current connection."; return false; }
   switch (command.action) {
     case Action::Read:
@@ -46,12 +56,16 @@ static String printableBytes(const uint8_t* data, size_t length) {
   return text;
 }
 
-static void updateValue(uint16_t handle, const uint8_t* data, size_t length, const String& error = "") {
+void updateValue(uint16_t handle, const uint8_t* data, size_t length, const String& error) {
   String hex = error.length() ? "" : hexBytes(data, length);
-  String text = error.length() ? "" : printableBytes(data, length);
   StateLock lock;
   auto entry = findEntry(handle);
-  if (!entry) return;
+  if (!entry) {
+    auto descriptor = findDescriptor(handle);
+    if (descriptor && error.isEmpty()) { descriptor->valueHex = std::move(hex); descriptor->hasValue = true; }
+    return;
+  }
+  String text = error.length() ? "" : printableBytes(data, length);
   entry->valueHex = std::move(hex);
   entry->valueText = std::move(text);
   entry->readError = error;
@@ -137,12 +151,49 @@ static void subscribeCharacteristic(NimBLERemoteCharacteristic* characteristic, 
   recordTrace("subscribe-result", address, uuid, command.argument, nullptr, 0, String("Subscription active: ") + mode);
 }
 
+static int onAttributeRead(uint16_t, const ble_gatt_error* error, ble_gatt_attr* attr, void* arg) {
+  auto& task = *static_cast<NimBLETaskData*>(arg);
+  auto& value = *static_cast<std::string*>(task.m_pBuf);
+  if (!error->status && attr) {
+    for (const os_mbuf* om = attr->om; om; om = SLIST_NEXT(om, om_next)) value.append(reinterpret_cast<const char*>(om->om_data), om->om_len);
+    return 0;
+  }
+  // A value exactly one MTU long ends with a blob read some servers reject; the first chunk is the whole value.
+  const bool complete = error->status == BLE_HS_EDONE || (!value.empty() &&
+    (error->status == BLE_HS_ATT_ERR(BLE_ATT_ERR_ATTR_NOT_LONG) || error->status == BLE_HS_ATT_ERR(BLE_ATT_ERR_INVALID_OFFSET)));
+  NimBLEUtils::taskRelease(task, complete ? 0 : error->status);
+  return 0;
+}
+
+// Unlike NimBLE's readValue, a plain ATT read never starts pairing, so reads the user did not ask for cannot bond.
+int readAttribute(NimBLEClient* client, uint16_t handle, std::string& value) {
+  NimBLETaskData task(nullptr, 0, &value);
+  const int rc = ble_gattc_read_long(client->getConnHandle(), handle, 0, onAttributeRead, &task);
+  if (rc) return rc;
+  NimBLEUtils::taskWait(task, BLE_NPL_TIME_FOREVER);
+  return task.m_flags;
+}
+
+static void readDescriptor(NimBLEClient* client, const String& address, uint16_t handle) {
+  String uuid;
+  { StateLock lock; if (auto descriptor = findDescriptor(handle)) uuid = descriptor->uuid; }
+  std::string value;
+  const int rc = readAttribute(client, handle, value);
+  const auto data = reinterpret_cast<const uint8_t*>(value.data());
+  if (rc) { failOperation(address, uuid, handle, "Descriptor read failed (BLE code " + String(rc) + "). Pair first if the device requires encryption."); return; }
+  updateValue(handle, data, value.size());
+  recordTrace("read", address, uuid, handle, data, value.size());
+}
+
 void executeGatt(NimBLEClient* client, const Command& command) {
   const String address = client->getPeerAddress().toString().c_str();
   if (!client->isConnected()) {
     failOperation(address, "", command.argument, "Device disconnected before the GATT operation.");
     return;
   }
+  bool descriptor;
+  { StateLock lock; descriptor = !findEntry(command.argument) && findDescriptor(command.argument); }
+  if (descriptor && command.action == Action::Read) { readDescriptor(client, address, command.argument); return; }
   auto characteristic = client->getCharacteristic(command.argument);
   if (!characteristic) {
     failOperation(address, "", command.argument, "Characteristic is no longer available. Reconnect and inspect again.");

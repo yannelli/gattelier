@@ -1,10 +1,41 @@
 'use strict';
 
+const identityUuids = ['2a00', '2a29', '2a24', '2a25', '2a26', '2a27', '2a28', '2a19', '2a01', '2a50'];
+function userDescription(characteristic) {
+  const descriptor = (characteristic.descriptors || []).find(item => shortUuid(item.uuid) === '2901' && item.valueHex);
+  return descriptor ? NanoGattValues.decode('2901', descriptor.valueHex)[0]?.value || '' : '';
+}
+function identityFields(services) {
+  const values = new Map(services.flatMap(service => service.characteristics).filter(item => item.valueHex).map(item => [shortUuid(item.uuid), item.valueHex]));
+  return identityUuids.flatMap(key => {
+    const fields = values.has(key) ? NanoGattValues.decode(key, values.get(key)) : [];
+    // Without the hosted appearance catalog the name is bare hex, so fall back to the category name.
+    if (key === '2a01' && fields.length) return [{ label: 'Appearance', value: /^0x[\dA-F]{4}$/.test(fields[0].value) ? `${fields[1].value} (${fields[0].value})` : fields[0].value }];
+    const vendor = key === '2a50' && /Bluetooth SIG/.test(fields[0]?.value) ? vendorDatabase?.company?.[String(parseInt(fields[0].value.slice(2, 6), 16))] : '';
+    return vendor ? [{ label: 'Vendor', value: `${vendor} (${fields[0].value.slice(0, 6)})` }, ...fields.slice(1)] : fields;
+  });
+}
+function readableHandles(services) {
+  return services.flatMap(service => service.characteristics.flatMap(item => [...(item.properties.includes('read') ? [item.handle] : []), ...(item.descriptors || []).map(descriptor => descriptor.handle)]));
+}
+async function readAllValues() {
+  const handles = readableHandles(state.services), address = state.ble.address;
+  if (pending || !online || state.ble.busy || !handles.length) return;
+  pending = true; notice = ''; render();
+  let failed = 0;
+  try {
+    for (const handle of handles) {
+      if (!online || !state.ble.connected || state.ble.address !== address) break;
+      try { await NanoLab.action('read', { handle }); } catch { failed++; }
+    }
+    if (failed) notice = `${failed} of ${handles.length} reads failed. Values that require encryption can be read after pairing.`;
+  } finally { pending = false; render(); }
+}
 function renderCharacteristic(characteristic, serviceUuid = '') {
   const section = node('div', 'characteristic');
   const top = node('div', 'characteristic-top');
   const title = node('div');
-  title.append(node('p', 'characteristic-name', uuidName(characteristic.uuid, `Characteristic · ${characteristic.handle}`, serviceUuid)), node('span', 'uuid', characteristic.uuid));
+  title.append(node('p', 'characteristic-name', uuidName(characteristic.uuid, '', serviceUuid) || userDescription(characteristic) || `Characteristic · ${characteristic.handle}`), node('span', 'uuid', characteristic.uuid));
   top.append(title);
   if (characteristic.properties.includes('read')) top.append(button('Read', 'secondary', () => mutate('read', { handle: characteristic.handle }), !canRead(state, characteristic, online, pending), `read-${characteristic.handle}`));
   const properties = node('div', 'properties');
@@ -93,13 +124,23 @@ function buildDeviceDetail(device, fullPage = false) {
 }
 function appendDeviceServices(detail, connected) {
   const device = selectedDevice();
-  detail.append(node('h3', 'section-label', connected ? `GATT services · ${state.services.length}` : 'GATT services'));
-  if (connected) detail.append(node('p', 'hint', `Discovery scope: ${state.ble.discoveryScope || 'all services'}.`));
+  const header = node('div', 'gatt-header');
+  header.append(node('h3', 'section-label', connected ? `GATT services · ${state.services.length}` : 'GATT services'));
+  if (connected && state.services.length) header.append(button('Read all values', 'secondary', readAllValues, pending || !online || state.ble.busy || !readableHandles(state.services).length, 'read-all'));
+  detail.append(header);
+  if (connected) detail.append(node('p', 'hint', `Discovery scope: ${state.ble.discoveryScope || 'all services'} · MTU ${state.ble.mtu || 23}.`));
+  const identity = connected ? identityFields(state.services) : [];
+  if (identity.length) {
+    const summary = node('dl', 'metadata gatt-identity');
+    for (const field of identity) summary.append(metadata(field.label, String(field.value)));
+    detail.append(summary);
+  }
   if (connected && state.services.length) {
-    for (const service of state.services) {
-      const section = node('section', 'service');
-      const heading = node('h4', 'service-title', uuidName(service.uuid, 'Custom service'));
-      heading.append(node('span', 'uuid', service.uuid)); section.append(heading);
+    for (const [index, service] of state.services.entries()) {
+      const section = node('details', 'service'); section.open = true; section.dataset.collapse = `service-${index}-${service.uuid}`;
+      const heading = node('summary', 'service-title'), title = node('div'), count = service.characteristics.length;
+      title.append(node('h4', '', uuidName(service.uuid, 'Custom service')), node('span', 'uuid', `${service.uuid} · ${count} ${count === 1 ? 'characteristic' : 'characteristics'}`));
+      heading.append(title); section.append(heading);
       const definition = NanoMetadata.lookup(service.uuid);
       if (definition?.description) section.append(node('p', 'hint', definition.description));
       else if (!definition && uuidName(service.uuid, '') === '') section.append(node('p', 'hint', 'Vendor-defined service. Its commands are not decoded.'));

@@ -85,7 +85,12 @@ const NanoConsole = (() => {
       const details = el('details', 'descriptor-list'); details.dataset.persist = `descriptors-${characteristic.handle}`; details.append(el('summary', '', `Descriptors · ${characteristic.descriptors.length}`));
       for (const descriptor of characteristic.descriptors) {
         const name = typeof NanoMetadata !== 'undefined' ? NanoMetadata.lookup(descriptor.uuid)?.name : '';
-        details.append(el('p', '', name || 'Unknown descriptor'), el('p', 'mono', `${descriptor.handle} · ${descriptor.uuid}`));
+        const row = el('div', 'descriptor'), label = el('div'), read = button('Read', () => perform('read', { handle: descriptor.handle }), unavailable());
+        read.dataset.focus = `descriptor-${descriptor.handle}`;
+        label.append(el('p', '', name || 'Unknown descriptor'), el('p', 'mono', `${descriptor.handle} · ${descriptor.uuid}`)); row.append(label, read); details.append(row);
+        if (typeof descriptor.valueHex !== 'string') continue;
+        const decoded = typeof NanoGattValues !== 'undefined' ? NanoGattValues.decode(descriptor.uuid, descriptor.valueHex) : [];
+        details.append(el('p', 'mono descriptor-value', decoded.length ? decoded.map(field => `${field.label}: ${field.value}`).join('\n') : descriptor.valueHex || '(empty value)'));
       }
       section.append(details);
     }

@@ -130,3 +130,13 @@ test('standard descriptors and declarations expose fields without guessing vendo
   assert.equal(value('2803', '08030000000000000000b000405104e1ff00f0'), 'f000ffe1-0451-4000-b000-000000000000');
   assert.deepEqual(values.decode('2803', '120000192a'), []);
 });
+test('string values drop C-string terminators but still reject embedded control bytes', () => {
+  assert.equal(value('2a00', '483130000000'), 'H10');
+  assert.equal(value('2901', '525800'), 'RX');
+  for (const hex of ['00', '0000', '410042']) assert.deepEqual(values.decode('2a00', hex), []);
+});
+test('PnP ID decodes the vendor source and little-endian identifiers', () => {
+  assert.deepEqual(values.decode('2a50', '016b000d000100').map(field => field.value), ['0x006B (Bluetooth SIG)', '0x000D', '0x0001']);
+  assert.equal(value('2a50', '02ac05221301ff'), '0x05AC (USB-IF)');
+  assert.deepEqual(values.decode('2a50', '016b000d0001'), []);
+});

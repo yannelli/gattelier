@@ -161,7 +161,7 @@ static void connectDevice(const Command& command) {
   if (connectionCancellation.requested(command.connectionAttempt)) return;
   scanDevices(false);
   const String address = reinterpret_cast<const char*>(command.data);
-  bool recorderOnly = command.length == 1;
+  bool recorderOnly = command.length & 1;
   {
     StateLock lock;
     for (const auto& candidate : state.devices) {
@@ -177,7 +177,7 @@ static void connectDevice(const Command& command) {
   connectionOutcome.store(0);
   connectionTimedOut.store(false);
   startedAttempt.store(command.connectionAttempt);
-  const bool started = address.length() == 17 && client->connect(NimBLEAddress(address.c_str(), command.mode), true, true, false);
+  const bool started = address.length() == 17 && client->connect(NimBLEAddress(address.c_str(), command.mode), true, true, true);
   if (!started) connectionOutcome.store(-1);
   const uint32_t began = millis();
   while (started && connectionOutcome.load() == 0 && !connectionCancellation.requested(command.connectionAttempt) && uint32_t(millis() - began) < 35000) vTaskDelay(pdMS_TO_TICKS(10));
@@ -200,8 +200,7 @@ static void connectDevice(const Command& command) {
     state.discoveryScope = recorderOnly ? "PLAUD recorder service 0x1910" : "all services";
   }
   recordTrace("connect", address, "", 0, nullptr, 0, "Connected");
-  discoverGatt(client, recorderOnly);
-  if (client->isConnected() && !connectionCancellation.requested(command.connectionAttempt)) client->exchangeMTU();
+  discoverGatt(client, recorderOnly, command.length & 2);
 }
 
 static void bleWorker(void*) {

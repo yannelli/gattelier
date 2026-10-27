@@ -12,7 +12,7 @@ The board address is `http://nanoscope.local`. Existing NanoScope storage keys a
 ## What works
 
 - Continuous BLE discovery streamed into browser history, with bounded board RAM, filters, signal history, OUI lookup, and a company database
-- GATT service discovery, reads, writes, notifications, pairing prompts, packet capture, snapshots, and saved recipes
+- GATT service discovery with a device identity summary, characteristic and descriptor reads, writes, notifications, pairing prompts, packet capture, snapshots, and saved recipes
 - Contextual apps selected from discovered device metadata
 - PacketLogger and Android/BlueZ btsnoop H4/H1 imports, shared ATT decoding, exact timestamps, loss counters, and authentication redaction
 - Tracker and beacon signal statistics, Eddystone configuration decoding, and offline configuration previews
@@ -46,7 +46,7 @@ The board button controls its operating mode:
 
 The separate blue LED flashes for BLE advertisements, GATT traffic, connection events, and USB HCI traffic. Settings > Activity LED provides a brightness slider, test flash, and off button; the board saves the chosen brightness. Sustained activity produces spaced flashes. The RGB LED continues to show the operating mode.
 
-Discovery offload sends raw advertisements to the browser for decoding, filtering, matching, and optional IndexedDB storage. Compact transfers and a renewable 15-second browser lease keep advertisement decoding and history in the browser. During that lease, discovery skips the decoded board cache; it resumes when the browser stops collecting. The board keeps a fixed transfer buffer; missed updates and shortened advertisements appear in Settings > Browser storage. Keep the app open to receive updates, or enable background collection. Discovery offload does not write scan history to board flash. Raw transfer requires current firmware; older firmware still streams its decoded records. GATT discovery keeps compact property flags and releases duplicate descriptor caches after copying their metadata.
+Discovery offload sends raw advertisements to the browser for decoding, filtering, matching, and optional IndexedDB storage. Compact transfers and a renewable 15-second browser lease keep advertisement decoding and history in the browser. During that lease, discovery skips the decoded board cache; it resumes when the browser stops collecting. The board keeps a fixed transfer buffer; missed updates and shortened advertisements appear in Settings > Browser storage. Keep the app open to receive updates, or enable background collection. Discovery offload does not write scan history to board flash. Raw transfer requires current firmware; older firmware still streams its decoded records. GATT discovery keeps compact property flags and releases duplicate descriptor caches after copying their metadata. The board exchanges MTU at connection so discovery uses larger packets. A connection started with the Connect button also reads the device name, appearance, battery level, Device Information strings and characteristic user descriptions; these reads never start pairing, and apps connect without them. **Read all values** reads every readable characteristic and descriptor.
 
 Onboard collection stores up to 512 KiB of NDJSON. Active or passive scan mode, interval, window, and scheduled bursts are configurable and persist across restarts. Download the log from the Collection screen.
 
