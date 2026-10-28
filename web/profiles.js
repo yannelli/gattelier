@@ -40,7 +40,7 @@ const NanoProfiles = (() => {
   }
   function identify(device = {}, state = {}) {
     const schlage = typeof NanoSchlage !== 'undefined' ? NanoSchlage.identify?.(device, state) : null;
-    if (schlage) return { ...schlage, category: 'lock', confidence: schlage.modelConfirmed ? 'Device Information' : schlage.service ? 'Service match' : 'Name candidate', evidence: [schlage.evidence], fields: [], limitations: [], sources: NanoSchlage.source ? [{ title: 'Schlage uWeave protocol', url: NanoSchlage.source }] : [] };
+    if (schlage) return { ...schlage, category: 'lock', confidence: schlage.modelConfirmed ? 'Device Information' : schlage.service ? 'Service match' : 'Name candidate', evidence: [schlage.evidence], fields: Object.entries(schlage.identity || {}).map(([label, value]) => ({ label: label[0].toUpperCase() + label.slice(1), value })), limitations: [], sources: NanoSchlage.source ? [{ title: 'Schlage uWeave protocol', url: NanoSchlage.source }] : [] };
     const result = { category: 'other', title: 'BLE metadata', confidence: 'Unclassified', evidence: [], fields: [], limitations: [], sources: [references.ad] };
     const manufacturer = bytes(device.manufacturer), services = (device.services || []).map(uuid);
     const set = (category, title, confidence, evidence, source) => Object.assign(result, { category, title, confidence, evidence: [evidence], fields: [], limitations: [], sources: [references[source]] });
@@ -135,6 +135,7 @@ const NanoProfiles = (() => {
       { category: 'recorder', title: 'Recorders', description: 'PLAUD and Pocket protocol identification.' },
       { category: 'vendor', title: 'Vendor broadcasts', description: 'Apple, Samsung, and LG manufacturer evidence and decoded broadcast fields.' },
       { category: 'appliance', title: 'Home appliances', description: 'Nespresso, Levoit, and LG device identification, saved responses, and command previews.' },
+      { category: 'lock', title: 'Locks', description: 'Schlage identity and service evidence.' },
       { category: 'other', title: 'BLE metadata', description: 'Advertising structures and unclassified devices.' }
     ];
   }

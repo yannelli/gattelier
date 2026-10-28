@@ -4,6 +4,8 @@ import vm from 'node:vm';
 import { readFileSync } from 'node:fs';
 import profiles from '../web/profiles.js';
 import ui from '../web/app.js';
+import catalogs from '../web/catalogs.js';
+import schlage from '../web/schlage-protocol.js';
 
 class Element {
   constructor(tag) {
@@ -179,4 +181,15 @@ test('connected GATT identification updates selected profile and category counts
   assert.equal(count('sensor'), '0');
   refresh(device);
   assert.equal(count('other'), '3');
+});
+
+test('Locks counts and category navigation include recognized Schlage devices', () => {
+  const context = vm.createContext({ NanoCatalogs: catalogs, NanoSchlage: schlage });
+  vm.runInContext(readFileSync(new URL('../web/profiles.js', import.meta.url), 'utf8'), context);
+  const browserProfiles = vm.runInContext('NanoProfiles', context), insights = harness({ NanoProfiles: browserProfiles });
+  const container = new Element('div'), filtered = [], lock = { address: 'aa:bb:cc:dd:ee:02', addressType: 0, name: 'Schlage Test' };
+  insights.render(container, lock, [lock, target, { address: 'aa:bb:cc:dd:ee:03', addressType: 0 }], () => {}, category => filtered.push(category));
+  const card = all(container).find(item => item.dataset.focus === 'insights-category-lock');
+  assert.equal(card.children.find(item => item.className === 'profile-count').textContent, '1');
+  card.listeners.click(); assert.deepEqual(filtered, ['lock']);
 });

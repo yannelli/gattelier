@@ -133,3 +133,18 @@ test('browser fallback tolerates an absent standard app and uses its matcher whe
   context.NanoStandardApp = require('../web/standard-app.js');
   assert.equal(identify({ services: ['180d'] }).title, 'Heart rate');
 });
+
+test('Schlage profiles expose only identity values from the matching connected device', () => {
+  const context = vm.createContext({ NanoCatalogs: require('../web/catalogs.js'), NanoSchlage: require('../web/schlage-protocol.js') });
+  vm.runInContext(readFileSync(new URL('../web/profiles.js', import.meta.url), 'utf8'), context);
+  const browser = vm.runInContext('NanoProfiles', context);
+  const device = { address: 'aa:bb:cc:dd:ee:01', addressType: 0, name: 'Schlage Test' };
+  const state = { ble: { ...device, connected: true }, services: [{ uuid: '180a', characteristics: [
+    { uuid: '2a29', valueHex: Buffer.from('Schlage').toString('hex') }, { uuid: '2a24', valueHex: Buffer.from('BE489WB').toString('hex') }
+  ] }] };
+  const result = browser.identify(device, state);
+  assert.equal(result.category, 'lock'); assert.equal(result.title, 'Schlage Encode');
+  assert.deepEqual(fields(result), { Manufacturer: 'Schlage', Model: 'BE489WB' });
+  assert.equal(browser.identify({ ...device, addressType: 1 }, state).fields.length, 0);
+  assert.equal(browser.catalog().find(item => item.category === 'lock').title, 'Locks');
+});
