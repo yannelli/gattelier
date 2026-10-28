@@ -4,7 +4,9 @@ const NanoConnection = (() => {
   const address = device => String(device?.address || '').toLowerCase();
   const same = (a, b) => address(a) === address(b) && a?.addressType === b?.addressType;
   const name = device => typeof deviceDisplayName === 'function' ? deviceDisplayName(device) : device?.label || device?.name || device?.address || 'Device';
-  let hooks, inFlight = false, attempt = null, cancelling = false;
+  let hooks, inFlight = false, attempt = null, cancelling = false, generation = 0;
+  function checkBoard(token) { if (token !== generation) throw new Error('The board connection changed. Try again.'); }
+  function boardChanged() { generation++; inFlight = false; attempt = null; cancelling = false; hooks.changed(); }
   function snapshot() {
     return { state: hooks.state(), selected: hooks.selected(), online: hooks.online(), pending: hooks.pending() || inFlight };
   }
@@ -49,15 +51,18 @@ const NanoConnection = (() => {
   }
   async function ensure(device, identify = false) {
     if (inFlight) throw new Error('A connection change is already running.');
-    inFlight = true; const currentAttempt = attempt = { device, cancelled: false, posted: false }; hooks.changed();
+    inFlight = true; const token = generation, currentAttempt = attempt = { device, cancelled: false, posted: false }; hooks.changed();
     try {
       await hooks.refresh();
+      checkBoard(token);
       if (currentAttempt.cancelled) throw new Error('Connection cancelled.');
       const context = { ...snapshot(), pending: hooks.pending(), checking: true }, status = describe(device, context);
       if (status.connected && context.online && !context.pending && !context.state.ble.busy) return context.state;
       if (!status.enabled) throw new Error(status.reason);
       hooks.select(device); hooks.changed();
+      checkBoard(token);
       if (context.state.ble.connected) await hooks.action('disconnect');
+      checkBoard(token);
       if (currentAttempt.cancelled) throw new Error('Connection cancelled.');
       const current = snapshot().state;
       if (current.ble.connected) throw new Error('The current device did not disconnect.');
@@ -68,40 +73,44 @@ const NanoConnection = (() => {
       if (identify) body.identify = true;
       currentAttempt.posted = true;
       const result = await hooks.action('connect', body);
+      checkBoard(token);
       if (!result.ble.connected || !same(device, result.ble)) throw new Error(result.ble.error || 'The device did not establish a connection. Try again.');
       return result;
-    } finally { inFlight = false; attempt = null; hooks.changed(); }
+    } finally { if (token === generation) { inFlight = false; attempt = null; hooks.changed(); } }
   }
   async function cancel(device) {
     const status = describe(device);
     if (!status.cancel || !status.enabled) throw new Error(status.reason || 'This connection attempt is no longer active.');
-    const local = attempt && same(attempt.device, device) ? attempt : null;
+    const token = generation, local = attempt && same(attempt.device, device) ? attempt : null;
     cancelling = true; hooks.changed();
     try {
+      checkBoard(token);
       if (local && !local.posted) { local.cancelled = true; return; }
       const ble = snapshot().state.ble || {};
       const body = { address: address(device), addressType: device.addressType };
       if (ble.busy && address(device) === String(ble.address).toLowerCase() && device.addressType === ble.addressType) body.connectionAttempt = ble.connectionAttempt;
-      return await hooks.action('cancel-connect', body);
-    } finally { cancelling = false; hooks.changed(); }
+      const result = await hooks.action('cancel-connect', body); checkBoard(token); return result;
+    } finally { if (token === generation) { cancelling = false; hooks.changed(); } }
   }
   async function disconnect() {
     if (inFlight) throw new Error('A connection change is already running.');
-    inFlight = true; hooks.changed();
+    const token = generation; inFlight = true; hooks.changed();
     try {
       await hooks.refresh();
+      checkBoard(token);
       const context = { ...snapshot(), pending: hooks.pending() }, status = describe(connectedDevice(context), context);
       if (!status.connected) throw new Error('No device is connected.');
       if (!status.enabled) throw new Error(status.reason);
-      return await hooks.action('disconnect');
+      const result = await hooks.action('disconnect'); checkBoard(token); return result;
     }
-    finally { inFlight = false; hooks.changed(); }
+    finally { if (token === generation) { inFlight = false; hooks.changed(); } }
   }
   async function perform(device) {
+    const token = generation;
     hooks.notice('');
     try { const status = describe(device); if (status.cancel) await cancel(device); else if (status.connected) await disconnect(); else await ensure(device, true); }
-    catch (error) { hooks.notice(error.message); }
-    finally { hooks.changed(); }
+    catch (error) { if (token === generation) hooks.notice(error.message); }
+    finally { if (token === generation) hooks.changed(); }
   }
   function controls(device, focus = 'connection') {
     const status = describe(device), root = document.createElement('div'); root.className = 'connection-controls';
@@ -113,6 +122,6 @@ const NanoConnection = (() => {
     action.textContent = status.label; action.disabled = !status.enabled; action.title = status.cancel ? 'Cancel connection (Escape)' : status.reason; action.dataset.focus = focus;
     action.addEventListener('click', () => perform(device)); root.append(info, action); return root;
   }
-  return { init(options) { hooks = options; }, snapshot, describe, connectedDevice, pendingDevice, ensure, disconnect, cancel, perform, controls };
+  return { init(options) { hooks = options; globalThis.addEventListener?.('nanoscope:api-change', boardChanged); }, snapshot, describe, connectedDevice, pendingDevice, ensure, disconnect, cancel, perform, controls };
 })();
 if (typeof module !== 'undefined') module.exports = NanoConnection;
