@@ -38,13 +38,18 @@ const NanoInsights = (() => {
     section.append(el('p', 'signal-summary', `${Math.min(...values)} to ${Math.max(...values)} dBm · ${samples.length} recent samples · ${device.observations || samples.length} total observations`)); return section;
   }
   function render(container, device, devices, select, filter, boardState = {}) {
-    const fragment = document.createDocumentFragment();
+    const fragment = document.createDocumentFragment(), counts = new Map(), trackers = [];
+    for (const item of devices) {
+      const category = NanoProfiles.identify(item, boardState).category;
+      counts.set(category, (counts.get(category) || 0) + 1);
+      if (category === 'tracker') trackers.push(item);
+    }
     const catalog = el('div', 'profile-catalog');
     for (const tool of NanoProfiles.catalog()) {
       const card = el('button', 'profile-tool'); card.type = 'button'; card.dataset.focus = `insights-category-${tool.category}`;
-      const matches = devices.filter(item => NanoProfiles.identify(item, boardState).category === tool.category);
-      card.classList.toggle('empty-tool', !matches.length); card.setAttribute('aria-label', `${tool.title}: ${matches.length} seen. Show in Discover`); card.title = tool.description;
-      card.append(el('strong', '', tool.title), el('span', 'profile-count', String(matches.length)), el('span', '', tool.description));
+      const count = counts.get(tool.category) || 0;
+      card.classList.toggle('empty-tool', !count); card.setAttribute('aria-label', `${tool.title}: ${count} seen. Show in Discover`); card.title = tool.description;
+      card.append(el('strong', '', tool.title), el('span', 'profile-count', String(count)), el('span', '', tool.description));
       card.addEventListener('click', () => filter(tool.category)); catalog.append(card);
     }
     fragment.append(catalog);
@@ -54,7 +59,6 @@ const NanoInsights = (() => {
       const ad = NanoProfiles.advertisement(device.payloadHex || '');
       if (ad.fields.length) fragment.append(profileCard({ title: 'Advertisement metadata', confidence: 'Decoded bytes', evidence: ad.errors, fields: ad.fields, sources: [] }, `insights-advertisement-${key}`));
     } else fragment.append(el('p', 'hint', 'Select a device to see its signal history.'));
-    const trackers = devices.filter(item => NanoProfiles.identify(item, boardState).category === 'tracker');
     if (trackers.length) {
       const list = el('section', 'tracker-list'); list.append(el('h3', '', 'Tracker broadcasts'));
       for (const item of trackers) { const row = el('button', 'tracker-row', `${displayName(item)} · ${item.rssi} dBm · ${age(item.lastSeenMs)}`); row.type = 'button'; row.dataset.focus = `insights-tracker-${item.address.toLowerCase()}/${item.addressType}`; row.addEventListener('click', () => select(item)); list.append(row); }
