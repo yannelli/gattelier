@@ -22,7 +22,7 @@ void startTrace() {
 
 void recordTrace(const char* kind, const String& address, const String& uuid,
                  uint16_t handle, const uint8_t* data, size_t length,
-                 const String& message, bool success) {
+                 const String& message, bool success, const TraceProvenance& provenance) {
   for (const char* traffic : {"read", "write", "notification", "indication", "connect", "disconnect", "mtu", "subscribe-result"}) {
     if (!strcmp(kind, traffic)) { signalActivityLed(); break; }
   }
@@ -36,6 +36,7 @@ void recordTrace(const char* kind, const String& address, const String& uuid,
   event.success = success;
   event.truncated = length > 512;
   event.message = message;
+  event.provenance = provenance;
   if (data && length >= 7 && memcmp(data, "APP&SK&", 7) == 0) {
     event.message = "Pocket session key sent (redacted)";
     event.redacted = true;
@@ -51,7 +52,7 @@ void recordTrace(const char* kind, const String& address, const String& uuid,
     event.hex = hexBytes(data, std::min(length, size_t(512)));
   }
   xSemaphoreTake(traceMutex, portMAX_DELAY);
-  const size_t cost = event.hex.length() + event.uuid.length() + event.message.length() + 80;
+  const size_t cost = event.hex.length() + event.uuid.length() + event.message.length() + sizeof(TraceEvent);
   while (!retention.empty() && !retention.room(cost)) {
     events[(retention.first - 1) % events.size()] = TraceEvent{};
     retention.discard();
@@ -68,6 +69,8 @@ static String eventJson(const TraceEvent& event) {
   cJSON_AddNumberToObject(item, "ms", event.ms);
   cJSON_AddStringToObject(item, "kind", event.kind);
   cJSON_AddStringToObject(item, "address", event.address);
+  if (event.provenance.hasAddressType) cJSON_AddNumberToObject(item, "addressType", event.provenance.addressType);
+  if (event.provenance.hasConnectionAttempt) cJSON_AddNumberToObject(item, "connectionAttempt", event.provenance.connectionAttempt);
   cJSON_AddStringToObject(item, "uuid", event.uuid.c_str());
   cJSON_AddNumberToObject(item, "handle", event.handle);
   cJSON_AddStringToObject(item, "hex", event.hex.c_str());

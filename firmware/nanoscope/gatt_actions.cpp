@@ -56,9 +56,10 @@ static String printableBytes(const uint8_t* data, size_t length) {
   return text;
 }
 
-void updateValue(uint16_t handle, const uint8_t* data, size_t length, const String& error) {
+void updateValue(uint16_t handle, const uint8_t* data, size_t length, const String& error, const TracePeer* peer) {
   String hex = error.length() ? "" : hexBytes(data, length);
   StateLock lock;
+  if (peer && (!state.connected || !peer->matches(state.address.c_str(), state.addressType, state.connectionAttempt))) return;
   auto entry = findEntry(handle);
   if (!entry) {
     auto descriptor = findDescriptor(handle);
@@ -72,20 +73,17 @@ void updateValue(uint16_t handle, const uint8_t* data, size_t length, const Stri
   entry->hasValue = error.isEmpty();
 }
 
-static void failOperation(const String& address, const String& uuid, uint16_t handle, const String& error) {
+static void failOperation(const TracePeer& peer, const String& uuid, uint16_t handle, const String& error) {
   {
     StateLock lock;
     state.error = error;
   }
-  recordTrace("error", address, uuid, handle, nullptr, 0, error, false);
+  recordTrace("error", peer.address, uuid, handle, nullptr, 0, error, false, peer.provenance);
 }
 
-static void notificationReceived(NimBLERemoteCharacteristic* characteristic, uint8_t* data, size_t length, bool isNotify) {
-  const String address = characteristic->getClient()->getPeerAddress().toString().c_str();
-  const String uuid = characteristic->getUUID().toString().c_str();
-  const uint16_t handle = characteristic->getHandle();
-  recordTrace(isNotify ? "notification" : "indication", address, uuid, handle, data, length);
-  updateValue(handle, data, length);
+static void notificationReceived(const TracePeer& peer, const String& uuid, uint16_t handle, uint8_t* data, size_t length, bool isNotify) {
+  recordTrace(isNotify ? "notification" : "indication", peer.address, uuid, handle, data, length, "", true, peer.provenance);
+  updateValue(handle, data, length, "", &peer);
 }
 
 static String readError(int result) {
@@ -98,13 +96,14 @@ static String readError(int result) {
   return prefix + "Inspect the connection and characteristic permissions.";
 }
 
-static void readCharacteristic(NimBLERemoteCharacteristic* characteristic, const String& address, const String& uuid) {
+static void readCharacteristic(NimBLERemoteCharacteristic* characteristic, const TracePeer& peer, const String& uuid) {
+  const uint16_t handle = characteristic->getHandle();
   std::string value;
-  const int result = readAttribute(characteristic->getClient(), characteristic->getHandle(), value);
+  const int result = readAttribute(characteristic->getClient(), handle, value);
   const String error = readError(result);
   const auto data = reinterpret_cast<const uint8_t*>(value.data());
-  updateValue(characteristic->getHandle(), data, value.size(), error);
-  recordTrace("read", address, uuid, characteristic->getHandle(), result ? nullptr : data, result ? 0 : value.size(), error, result == 0);
+  updateValue(handle, data, value.size(), error, &peer);
+  recordTrace("read", peer.address, uuid, handle, result ? nullptr : data, result ? 0 : value.size(), error, result == 0, peer.provenance);
   if (error.length()) {
     StateLock lock;
     state.error = error;
@@ -112,53 +111,57 @@ static void readCharacteristic(NimBLERemoteCharacteristic* characteristic, const
 }
 
 static void writeCharacteristic(NimBLEClient* client, NimBLERemoteCharacteristic* characteristic, const Command& command,
-                                const String& address, const String& uuid) {
+                                const TracePeer& peer, const String& uuid) {
   if (command.length > sizeof(command.data) || command.mode > 1) {
-    failOperation(address, uuid, command.argument, "Invalid write payload or write mode.");
+    failOperation(peer, uuid, command.argument, "Invalid write payload or write mode.");
     return;
   }
   if ((!command.mode && !characteristic->canWriteNoResponse()) || (command.mode && !characteristic->canWrite())) {
-    failOperation(address, uuid, command.argument, "The selected write mode is no longer available.");
+    failOperation(peer, uuid, command.argument, "The selected write mode is no longer available.");
     return;
   }
   if (!command.mode && command.length > client->getMTU() - 3) {
-    failOperation(address, uuid, command.argument, "Write without response exceeds negotiated MTU payload of " + String(client->getMTU() - 3) + " bytes.");
+    failOperation(peer, uuid, command.argument, "Write without response exceeds negotiated MTU payload of " + String(client->getMTU() - 3) + " bytes.");
     return;
   }
-  recordTrace("write", address, uuid, command.argument, command.data, command.length,
-              command.mode ? "Write request with response" : "Write request without response");
+  recordTrace("write", peer.address, uuid, command.argument, command.data, command.length,
+              command.mode ? "Write request with response" : "Write request without response", true, peer.provenance);
   if (!characteristic->writeValue(command.data, command.length, command.mode == 1)) {
-    failOperation(address, uuid, command.argument, "GATT write failed (BLE code " + String(client->getLastError()) + "). Check the connection, permissions, and selected write mode.");
+    failOperation(peer, uuid, command.argument, "GATT write failed (BLE code " + String(client->getLastError()) + "). Check the connection, permissions, and selected write mode.");
     return;
   }
-  recordTrace("write-result", address, uuid, command.argument, nullptr, 0,
-              command.mode ? "Write acknowledged" : "Write submitted without response");
+  recordTrace("write-result", peer.address, uuid, command.argument, nullptr, 0,
+              command.mode ? "Write acknowledged" : "Write submitted without response", true, peer.provenance);
 }
 
 static void subscribeCharacteristic(NimBLERemoteCharacteristic* characteristic, const Command& command,
-                                    const String& address, const String& uuid) {
+                                    const TracePeer& peer, const String& uuid) {
   if (command.mode > 2 || (command.mode == 1 && !characteristic->canNotify()) ||
       (command.mode == 2 && !characteristic->canIndicate())) {
-    failOperation(address, uuid, command.argument, "The selected subscription mode is unavailable.");
+    failOperation(peer, uuid, command.argument, "The selected subscription mode is unavailable.");
     return;
   }
   if (!characteristic->getDescriptor(NimBLEUUID(uint16_t(0x2902)))) {
-    failOperation(address, uuid, command.argument, "Subscription requires a client configuration descriptor (0x2902), which was not found.");
+    failOperation(peer, uuid, command.argument, "Subscription requires a client configuration descriptor (0x2902), which was not found.");
     return;
   }
   const char* mode = SubscriptionModes[command.mode];
-  recordTrace("subscribe", address, uuid, command.argument, nullptr, 0, String("Subscription requested: ") + mode);
-  bool success = command.mode ? characteristic->subscribe(command.mode == 1, notificationReceived, true) : characteristic->unsubscribe(true);
+  const uint16_t handle = characteristic->getHandle();
+  const auto callback = [peer, uuid, handle](NimBLERemoteCharacteristic*, uint8_t* data, size_t length, bool isNotify) {
+    notificationReceived(peer, uuid, handle, data, length, isNotify);
+  };
+  recordTrace("subscribe", peer.address, uuid, command.argument, nullptr, 0, String("Subscription requested: ") + mode, true, peer.provenance);
+  bool success = command.mode ? characteristic->subscribe(command.mode == 1, callback, true) : characteristic->unsubscribe(true);
   if (!success) {
-    failOperation(address, uuid, command.argument, "Subscription update failed. The device rejected the request or disconnected.");
+    failOperation(peer, uuid, command.argument, "Subscription update failed. The device rejected the request or disconnected.");
     return;
   }
   {
     StateLock lock;
-    auto entry = findEntry(command.argument);
+    auto entry = state.connected && peer.matches(state.address.c_str(), state.addressType, state.connectionAttempt) ? findEntry(command.argument) : nullptr;
     if (entry) entry->subscription = command.mode;
   }
-  recordTrace("subscribe-result", address, uuid, command.argument, nullptr, 0, String("Subscription active: ") + mode);
+  recordTrace("subscribe-result", peer.address, uuid, command.argument, nullptr, 0, String("Subscription active: ") + mode, true, peer.provenance);
 }
 
 static int onAttributeRead(uint16_t, const ble_gatt_error* error, ble_gatt_attr* attr, void* arg) {
@@ -191,39 +194,38 @@ int readAttribute(NimBLEClient* client, uint16_t handle, std::string& value) {
   return task.m_flags;
 }
 
-static void readDescriptor(NimBLEClient* client, const String& address, uint16_t handle) {
+static void readDescriptor(NimBLEClient* client, const TracePeer& peer, uint16_t handle) {
   String uuid;
   { StateLock lock; if (auto descriptor = findDescriptor(handle)) uuid = descriptor->uuid; }
   std::string value;
   const int rc = readAttribute(client, handle, value);
   const auto data = reinterpret_cast<const uint8_t*>(value.data());
-  if (rc) { failOperation(address, uuid, handle, readError(rc)); return; }
-  updateValue(handle, data, value.size());
-  recordTrace("read", address, uuid, handle, data, value.size());
+  if (rc) { failOperation(peer, uuid, handle, readError(rc)); return; }
+  updateValue(handle, data, value.size(), "", &peer);
+  recordTrace("read", peer.address, uuid, handle, data, value.size(), "", true, peer.provenance);
 }
 
-void executeGatt(NimBLEClient* client, const Command& command) {
-  const String address = client->getPeerAddress().toString().c_str();
+void executeGatt(NimBLEClient* client, const Command& command, const TracePeer& peer) {
   if (!client->isConnected()) {
-    failOperation(address, "", command.argument, "Device disconnected before the GATT operation.");
+    failOperation(peer, "", command.argument, "Device disconnected before the GATT operation.");
     return;
   }
   bool descriptor;
   { StateLock lock; descriptor = !findEntry(command.argument) && findDescriptor(command.argument); }
-  if (descriptor && command.action == Action::Read) { readDescriptor(client, address, command.argument); return; }
+  if (descriptor && command.action == Action::Read) { readDescriptor(client, peer, command.argument); return; }
   auto characteristic = client->getCharacteristic(command.argument);
   if (!characteristic) {
-    failOperation(address, "", command.argument, "Characteristic is no longer available. Reconnect and inspect again.");
+    failOperation(peer, "", command.argument, "Characteristic is no longer available. Reconnect and inspect again.");
     return;
   }
   const String uuid = characteristic->getUUID().toString().c_str();
   switch (command.action) {
     case Action::Read:
-      if (characteristic->canRead()) readCharacteristic(characteristic, address, uuid);
-      else failOperation(address, uuid, command.argument, "This characteristic is no longer readable.");
+      if (characteristic->canRead()) readCharacteristic(characteristic, peer, uuid);
+      else failOperation(peer, uuid, command.argument, "This characteristic is no longer readable.");
       break;
-    case Action::Write: writeCharacteristic(client, characteristic, command, address, uuid); break;
-    case Action::Subscribe: subscribeCharacteristic(characteristic, command, address, uuid); break;
-    default: failOperation(address, uuid, command.argument, "Unsupported GATT operation.");
+    case Action::Write: writeCharacteristic(client, characteristic, command, peer, uuid); break;
+    case Action::Subscribe: subscribeCharacteristic(characteristic, command, peer, uuid); break;
+    default: failOperation(peer, uuid, command.argument, "Unsupported GATT operation.");
   }
 }

@@ -4,6 +4,7 @@ import { readFileSync, mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 
 test('characteristic reads report ATT results and bound long values without automatic pairing', () => {
   const source = readFileSync(new URL('../firmware/nanoscope/gatt_actions.cpp', import.meta.url), 'utf8');
@@ -16,6 +17,7 @@ test('characteristic reads report ATT results and bound long values without auto
 #include <cassert>
 #include <cstdint>
 #include <string>
+#include ${JSON.stringify(fileURLToPath(new URL('../firmware/nanoscope/trace_peer.h', import.meta.url)))}
 class String : public std::string {
  public:
   using std::string::string;
@@ -54,16 +56,23 @@ String reported;
 int readAttribute(NimBLEClient*, uint16_t handle, std::string& value) {
   assert(handle == 7); ++reads; value = result ? "partial" : ""; return result;
 }
-void updateValue(uint16_t handle, const uint8_t*, size_t, const String& error) { assert(handle == 7); reported = error; }
-void recordTrace(const char*, const String&, const String&, uint16_t, const uint8_t*, size_t size, const String&, bool ok) { success = ok; tracedBytes = size; }
+void updateValue(uint16_t handle, const uint8_t*, size_t, const String& error, const TracePeer* peer) {
+  assert(handle == 7 && peer && peer->matches("AA:BB:CC:DD:EE:FF", 0, 7)); reported = error;
+}
+void recordTrace(const char*, const String& address, const String&, uint16_t, const uint8_t*, size_t size, const String&, bool ok, const TraceProvenance& provenance) {
+  assert(address == "AA:BB:CC:DD:EE:FF" && provenance.hasAddressType && provenance.addressType == 0);
+  assert(provenance.hasConnectionAttempt && provenance.connectionAttempt == 7);
+  success = ok; tracedBytes = size;
+}
 ${source.slice(start, end)}
 ${source.slice(callbackStart, callbackEnd)}
 int main() {
   NimBLERemoteCharacteristic characteristic;
-  readCharacteristic(&characteristic, "address", "uuid");
+  const TracePeer peer("AA:BB:CC:DD:EE:FF", 0, 7);
+  readCharacteristic(&characteristic, peer, "uuid");
   assert(reads == 1 && success && reported.empty());
   for (const auto code : { 0x105, 0x108, 0x10c, 0x10f, 534 }) {
-    result = code; readCharacteristic(&characteristic, "address", "uuid");
+    result = code; readCharacteristic(&characteristic, peer, "uuid");
     assert(!success && tracedBytes == 0 && reported == state.error);
     assert(reported.find("BLE code " + std::to_string(code)) != std::string::npos);
     assert(reported.find("BLE code 0") == std::string::npos);

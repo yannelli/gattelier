@@ -36,8 +36,7 @@ static const char* identityUuid(const String& uuid) {
   return nullptr;
 }
 
-void discoverGatt(NimBLEClient* client, bool recorderOnly, bool identify) {
-  const String address = client->getPeerAddress().toString().c_str();
+void discoverGatt(NimBLEClient* client, const TracePeer& peer, bool recorderOnly, bool identify) {
   String error;
   size_t serviceCount = 0, characteristicCount = 0, descriptorCount = 0, identityCount = 0;
   std::vector<std::pair<uint16_t, const char*>> identity;
@@ -51,7 +50,7 @@ void discoverGatt(NimBLEClient* client, bool recorderOnly, bool identify) {
     state.mtu = client->getMTU();
   }
   if (discoveryReady(client, error)) {
-    recordTrace("discovery-progress", address, "", 0, nullptr, 0, recorderOnly ? "Discovering PLAUD service 0x1910" : "Discovering all services");
+    recordTrace("discovery-progress", peer.address, "", 0, nullptr, 0, recorderOnly ? "Discovering PLAUD service 0x1910" : "Discovering all services", true, peer.provenance);
     if (recorderOnly && !client->getService(NimBLEUUID(uint16_t(0x1910)))) error = "PLAUD recorder service 0x1910 was not found.";
     if (error.isEmpty() && discoveryReady(client, error)) {
       const auto& services = client->getServices(!recorderOnly);
@@ -59,7 +58,7 @@ void discoverGatt(NimBLEClient* client, bool recorderOnly, bool identify) {
         if (!error.isEmpty() || !discoveryReady(client, error)) break;
         ServiceInfo info;
         info.uuid = service->getUUID().toString().c_str();
-        recordTrace("discovery-progress", address, info.uuid, 0, nullptr, 0, "Discovering characteristics");
+        recordTrace("discovery-progress", peer.address, info.uuid, 0, nullptr, 0, "Discovering characteristics", true, peer.provenance);
         const auto& characteristics = service->getCharacteristics(true);
         if (!discoveryReady(client, error)) break;
         info.characteristics.reserve(characteristics.size());
@@ -100,8 +99,8 @@ void discoverGatt(NimBLEClient* client, bool recorderOnly, bool identify) {
       std::string value;
       if (readAttribute(client, handle, value)) continue;  // Left unread; a manual Read can still pair if the device needs it.
       const auto data = reinterpret_cast<const uint8_t*>(value.data());
-      updateValue(handle, data, value.size());
-      recordTrace("read", address, uuid, handle, data, value.size(), "Identity read after discovery");
+      updateValue(handle, data, value.size(), "", &peer);
+      recordTrace("read", peer.address, uuid, handle, data, value.size(), "Identity read after discovery", true, peer.provenance);
       ++identityCount;
     }
     if (!client->isConnected()) error = "Device disconnected during GATT discovery.";
@@ -115,5 +114,5 @@ void discoverGatt(NimBLEClient* client, bool recorderOnly, bool identify) {
   String message = error.length() ? error : String(serviceCount) + " services, " +
     String(characteristicCount) + " characteristics, " + String(descriptorCount) + " descriptors";
   if (identify && error.isEmpty()) message += ", " + String(identityCount) + " identity values";
-  recordTrace(error.length() ? "error" : "discovery", address, "", 0, nullptr, 0, message, !error.length());
+  recordTrace(error.length() ? "error" : "discovery", peer.address, "", 0, nullptr, 0, message, !error.length(), peer.provenance);
 }

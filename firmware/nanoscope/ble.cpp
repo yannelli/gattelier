@@ -14,6 +14,7 @@
 
 static QueueHandle_t commands;
 static NimBLEClient* client;
+static TracePeer workerPeer;
 static ConnectionCancellation connectionCancellation;
 static SemaphoreHandle_t cancellationMutex;
 static uint32_t lastCancellation = 0;
@@ -80,10 +81,11 @@ class ScanCallbacks : public NimBLEScanCallbacks {
     if (!state.scanning) return;
     recordAdvertisement(advertised);
     if (state.captureAddress.isEmpty()) return;
-    const String address = advertised->getAddress().toString().c_str();
+    const auto peerAddress = advertised->getAddress();
+    const String address = peerAddress.toString().c_str();
     if (state.captureAddress == address) {
       const auto& payload = advertised->getPayload();
-      recordTrace("advertisement", address, "", 0, payload.data(), payload.size(), "RSSI " + String(advertised->getRSSI()) + " dBm");
+      recordTrace("advertisement", address, "", 0, payload.data(), payload.size(), "RSSI " + String(advertised->getRSSI()) + " dBm", true, TraceProvenance(peerAddress.getType()));
     }
   }
 };
@@ -102,15 +104,17 @@ class ClientCallbacks : public NimBLEClientCallbacks {
   uint32_t onPassKeyDisplay(NimBLEConnInfo& info) override { return securityPasskeyDisplay(info); }
   void onAuthenticationComplete(NimBLEConnInfo& info) override { securityAuthenticationComplete(info); }
   void onMTUChange(NimBLEClient* peer, uint16_t mtu) override {
+    const auto peerAddress = peer->getPeerAddress();
     StateLock lock;
     state.mtu = mtu;
-    recordTrace("mtu", peer->getPeerAddress().toString().c_str(), "", 0, nullptr, 0, "Negotiated MTU " + String(mtu));
+    recordTrace("mtu", peerAddress.toString().c_str(), "", 0, nullptr, 0, "Negotiated MTU " + String(mtu), true, TraceProvenance(peerAddress.getType()));
   }
-  void onDisconnect(NimBLEClient*, int reason) override {
+  void onDisconnect(NimBLEClient* peer, int reason) override {
+    const auto peerAddress = peer->getPeerAddress();
     connectionOutcome.store(-1);
     securityDisconnected();
     StateLock lock;
-    recordTrace("disconnect", state.address, "", 0, nullptr, 0, "BLE reason " + String(reason));
+    recordTrace("disconnect", peerAddress.toString().c_str(), "", 0, nullptr, 0, "BLE reason " + String(reason), true, TraceProvenance(peerAddress.getType()));
     state.connected = false;
     std::vector<ServiceInfo>().swap(state.services);
     if (state.operation != "disconnecting" && state.operation != "cancelling") state.error = "Device disconnected (BLE code " + String(reason) + ").";
@@ -165,8 +169,9 @@ static void maintainScan() {
 
 static void connectDevice(const Command& command) {
   if (connectionCancellation.requested(command.connectionAttempt)) return;
+  const TracePeer peer(reinterpret_cast<const char*>(command.data), command.mode, command.connectionAttempt);
   scanDevices(false);
-  const String address = reinterpret_cast<const char*>(command.data);
+  const String address = peer.address;
   bool recorderOnly = command.length & 1;
   {
     StateLock lock;
@@ -186,7 +191,8 @@ static void connectDevice(const Command& command) {
   // 15 ms, the floor iOS accessories are built for, makes discovery about four times faster than NimBLE's 30-50 ms default.
   client->setConnectionParams(12, 12, 0, BLE_GAP_INITIAL_SUPERVISION_TIMEOUT);
   peerChoseInterval.store(false);
-  const bool started = address.length() == 17 && client->connect(NimBLEAddress(address.c_str(), command.mode), true, true, true);
+  workerPeer = peer;
+  const bool started = address.length() == 17 && client->connect(NimBLEAddress(address.c_str(), peer.provenance.addressType), true, true, true);
   if (!started) connectionOutcome.store(-1);
   const uint32_t began = millis();
   while (started && connectionOutcome.load() == 0 && !connectionCancellation.requested(command.connectionAttempt) && uint32_t(millis() - began) < 35000) vTaskDelay(pdMS_TO_TICKS(10));
@@ -208,8 +214,8 @@ static void connectDevice(const Command& command) {
     if (!connectionCancellation.requested(command.connectionAttempt)) state.operation = "discovering";
     state.discoveryScope = recorderOnly ? "PLAUD recorder service 0x1910" : "all services";
   }
-  recordTrace("connect", address, "", 0, nullptr, 0, "Connected");
-  discoverGatt(client, recorderOnly, command.length & 2);
+  recordTrace("connect", peer.address, "", 0, nullptr, 0, "Connected", true, peer.provenance);
+  discoverGatt(client, peer, recorderOnly, command.length & 2);
   // Restore the default afterwards so notification streams pace as before, unless the peer already chose an interval.
   if (peerChoseInterval.load() || !client->isConnected()) return;
   client->setConnectionParams(BLE_GAP_INITIAL_CONN_ITVL_MIN, BLE_GAP_INITIAL_CONN_ITVL_MAX, 0, BLE_GAP_INITIAL_SUPERVISION_TIMEOUT);
@@ -230,7 +236,7 @@ static void bleWorker(void*) {
       case Action::Pair: beginPairing(); break;
       case Action::Read:
       case Action::Write:
-      case Action::Subscribe: executeGatt(client, command); break;
+      case Action::Subscribe: executeGatt(client, command, workerPeer); break;
       case Action::Disconnect:
         if (client->isConnected()) client->disconnect();
         for (int i = 0; i < 100 && client->getConnHandle() != BLE_HS_CONN_HANDLE_NONE; ++i) vTaskDelay(pdMS_TO_TICKS(50));
