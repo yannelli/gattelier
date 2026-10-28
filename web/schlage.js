@@ -24,7 +24,7 @@ const NanoSchlageApp = (() => {
     const sources = el('details', 'protocol-details'), sourceTitle = el('summary', '', 'Protocol sources'), source = el('a', '', 'Schlage uWeave transport');
     source.href = NanoSchlage.source; source.target = '_blank'; source.rel = 'noopener noreferrer'; sources.append(sourceTitle, source);
     body.append(identity, transport, actions, status, label, stored, management, home, importer, sources); container.append(heading, body);
-    let running = false, selectedKey = '', saved = null, snapshot = null, signature = '';
+    let running = null, selectedKey = '', saved = null, snapshot = null, signature = '';
     const device = () => hooks.selected?.() || NanoConnection.snapshot().selected;
     const scope = target => `${NanoAPI.transport?.() === 'serial' ? 'usb' : NanoAPI.origin()}:${target.address.toLowerCase()}/${target.addressType}`;
     const storageKey = target => `gattelier.schlage:${scope(target)}`;
@@ -32,15 +32,18 @@ const NanoSchlageApp = (() => {
     function render() {
       const target = device(), state = lab.getState(), match = NanoSchlage.identify(target, state), nextKey = target ? scope(target) : '';
       if (nextKey !== selectedKey) {
-        selectedKey = nextKey; saved = null; status.textContent = ''; signature = ''; packet.value = ''; decoded.replaceChildren();
+        selectedKey = nextKey; running = null; saved = null; status.textContent = ''; signature = ''; packet.value = ''; decoded.replaceChildren();
         try { saved = target ? JSON.parse(localStorage.getItem(storageKey(target)) || 'null') : null; } catch {}
         if (saved?.version !== 1 || saved.scope !== selectedKey) saved = null;
         location.value = typeof saved?.label === 'string' ? saved.label : '';
       }
+      if (running?.connection && (!state.ble?.connected || !NanoSchlage.same(target, state.ble) || state.ble.connectionAttempt !== running.connection.connectionAttempt)) {
+        running = null; status.textContent = '';
+      }
       const services = NanoSchlage.gatt(target, state), fields = match?.identity || {};
       const current = services.length > 0;
       snapshot = target && match ? { version: 1, scope: nextKey, capturedAt: new Date().toISOString(), device: { address: target.address, addressType: target.addressType, name: target.name || '' }, identity: current ? fields : saved?.identity || fields, services: (current ? services : saved?.services || (target.services || []).map(uuid => ({ uuid, characteristics: [] }))).map(service => ({ uuid: service.uuid, characteristics: (service.characteristics || []).map(item => ({ uuid: item.uuid, handle: item.handle, properties: item.properties })) })) } : null;
-      const signatureNext = JSON.stringify([nextKey, fields, services.map(item => item.uuid), saved, running, NanoConnection.describe(target)]);
+      const signatureNext = JSON.stringify([nextKey, fields, snapshot?.services, saved, Boolean(running), NanoConnection.describe(target)]);
       if (signatureNext === signature) return; signature = signatureNext;
       title.textContent = match?.title || 'Schlage'; context.textContent = target ? `${target.label || target.name || target.address} · ${current ? 'Connected' : saved ? 'Saved snapshot' : 'Discovered'}` : 'Select a Schlage device';
       identity.replaceChildren();
@@ -55,24 +58,29 @@ const NanoSchlageApp = (() => {
         }
       }
       const connection = NanoConnection.describe(target);
-      read.disabled = !match || running || !connection.enabled; inspect.disabled = !target; save.disabled = !snapshot || running; exportButton.disabled = !saved && !snapshot;
+      read.disabled = !match || Boolean(running) || !connection.enabled; inspect.disabled = !target; save.disabled = !snapshot || Boolean(running); exportButton.disabled = !saved && !snapshot;
       location.disabled = !match; stored.textContent = saved?.capturedAt ? `Saved ${new Date(saved.capturedAt).toLocaleString()}` : '';
     }
     read.addEventListener('click', async () => {
       const target = device(); if (running || !NanoSchlage.identify(target, lab.getState())) return;
-      const selectedScope = scope(target); running = true; render(); status.textContent = 'Reading identity…';
+      const selectedScope = scope(target), operation = {}; running = operation; render(); status.textContent = 'Reading identity…';
+      const current = () => running === operation && NanoSchlage.same(target, device()) && scope(target) === selectedScope && (!operation.connection || lab.getState().ble?.connected && NanoSchlage.same(target, lab.getState().ble) && lab.getState().ble.connectionAttempt === operation.connection.connectionAttempt);
       try {
         const state = await NanoConnection.ensure(target);
+        operation.connection = { connectionAttempt: state.ble?.connectionAttempt };
+        if (!current()) return;
         const safe = new Set(['2a24', '2a25', '2a26', '2a27', '2a28', '2a29']);
         const readable = NanoSchlage.gatt(target, state).filter(item => NanoSchlage.uuid(item.uuid) === '180a').flatMap(item => item.characteristics || []).filter(item => safe.has(NanoSchlage.uuid(item.uuid)) && item.properties.includes('read'));
         let count = 0;
         for (const item of readable) {
-          if (!NanoSchlage.same(target, device()) || !lab.getState().ble?.connected || !NanoSchlage.same(target, lab.getState().ble)) throw new Error('The selected connection changed.');
-          await lab.action('read', { handle: item.handle }); count++;
+          if (!current()) return;
+          await lab.action('read', { handle: item.handle });
+          if (!current()) return;
+          count++;
         }
-        if (selectedKey === selectedScope) status.textContent = `Read ${count} identity fields.`;
-      } catch (error) { if (selectedKey === selectedScope) status.textContent = error.message; }
-      finally { running = false; render(); }
+        if (current()) status.textContent = `Read ${count} identity fields.`;
+      } catch (error) { if (current()) status.textContent = error.message; }
+      finally { if (running === operation) { running = null; render(); } }
     });
     inspect.addEventListener('click', () => { const target = device(); if (target) NanoDevicePage.services(target); });
     save.addEventListener('click', () => {
@@ -91,7 +99,9 @@ const NanoSchlageApp = (() => {
       if (!fields.length) row(decoded, 'Packet', 'Enter 1–512 bytes of hex.');
       else for (const field of fields) row(decoded, field.label, field.value);
     });
-    lab.onState(render); document.addEventListener('nanoscope:selection', render); render();
+    lab.onState(render); document.addEventListener('nanoscope:selection', render);
+    globalThis.addEventListener('nanoscope:api-change', () => { running = null; status.textContent = ''; signature = ''; render(); });
+    render();
     return { render };
   }
   return { mount };
