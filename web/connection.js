@@ -3,7 +3,7 @@
 const NanoConnection = (() => {
   const address = device => String(device?.address || '').toLowerCase();
   const same = (a, b) => address(a) === address(b) && a?.addressType === b?.addressType;
-  const name = device => device?.label || device?.name || device?.address || 'Device';
+  const name = device => typeof deviceDisplayName === 'function' ? deviceDisplayName(device) : device?.label || device?.name || device?.address || 'Device';
   let hooks, inFlight = false, attempt = null, cancelling = false;
   function snapshot() {
     return { state: hooks.state(), selected: hooks.selected(), online: hooks.online(), pending: hooks.pending() || inFlight };
@@ -25,14 +25,20 @@ const NanoConnection = (() => {
   function describe(device, context = snapshot()) {
     const ble = context.state.ble || {}, connected = Boolean(device && ble.connected && same(device, ble));
     const live = (context.state.devices || []).find(item => same(item, device)) || (device?.streamLive ? device : null);
-    const result = { connected, live, enabled: false, label: connected ? 'Disconnect' : 'Connect', status: connected ? 'Connected' : 'Disconnected', reason: '' };
+    const facts = [];
+    if (connected && Number.isFinite(ble.mtu) && ble.mtu > 0) facts.push(`MTU ${ble.mtu}`);
+    const security = context.state.security;
+    if (connected && security && address(security) === address(ble) && (security.addressType === undefined || security.addressType === ble.addressType) && typeof security.encrypted === 'boolean') facts.push(security.encrypted ? 'Encrypted' : 'Unencrypted');
+    const identifying = (context.state.services || []).some(service => (service.characteristics || []).some(item => typeof item.valueHex === 'string' || item.descriptors?.some(descriptor => typeof descriptor.valueHex === 'string')));
+    const discovery = Array.isArray(context.state.services) ? `${identifying ? 'Identifying device' : 'Discovering services'} · ${context.state.services.length} found` : 'Discovering services';
+    const result = { details: facts.join(' · '), connected, live, enabled: false, label: connected ? 'Disconnect' : 'Connect', status: connected ? 'Connected' : 'Disconnected', reason: '' };
     if (!device) return { ...result, status: 'Choose a device in Discover', reason: '' };
     if (!context.online) return { ...result, status: 'Board offline', reason: 'Reconnect the board first.' };
     if (context.state.usb?.mode === 'hci') return { ...result, status: 'USB controller mode', reason: 'Restore Bluetooth workbench mode in Settings to connect from this page.' };
     const local = inFlight && attempt && same(attempt.device, device), remote = ble.busy && ['connecting', 'discovering', 'cancelling'].includes(ble.operation) && address(device) === String(ble.address).toLowerCase() && device.addressType === ble.addressType && Number.isInteger(ble.connectionAttempt) && ble.connectionAttempt > 0;
     if (!context.checking && (local || remote)) {
       const stopping = cancelling || local && attempt.cancelled || remote && ble.operation === 'cancelling';
-      return { ...result, enabled: !stopping, cancel: true, label: stopping ? 'Cancelling...' : 'Cancel connection', status: stopping ? 'Cancelling' : remote && ble.operation === 'discovering' ? 'Discovering services' : 'Connecting', reason: stopping ? 'Waiting for the connection attempt to stop.' : 'Stop this connection attempt.' };
+      return { ...result, enabled: !stopping, cancel: true, label: stopping ? 'Cancelling...' : 'Cancel connection', status: stopping ? 'Cancelling' : remote && ble.operation === 'discovering' ? discovery : 'Connecting', reason: stopping ? 'Waiting for the connection attempt to stop.' : 'Stop this connection attempt.' };
     }
     if (context.pending || ble.busy) return { ...result, status: connected ? 'Connected' : 'Working', reason: `${ble.operation || 'Bluetooth operation'} in progress…` };
     if (connected) return { ...result, enabled: true, reason: context.state.security?.active ? 'Pairing needs attention in Security.' : '' };
@@ -100,9 +106,11 @@ const NanoConnection = (() => {
   function controls(device, focus = 'connection') {
     const status = describe(device), root = document.createElement('div'); root.className = 'connection-controls';
     const info = document.createElement('div'), label = document.createElement('strong'), reason = document.createElement('p');
+    info.setAttribute('role', 'status'); info.setAttribute('aria-live', 'polite');
     label.textContent = status.status; reason.textContent = status.reason; reason.className = 'hint'; info.append(label); if (status.reason) info.append(reason);
+    if (status.details) { const details = document.createElement('p'); details.className = 'hint'; details.textContent = status.details; info.append(details); }
     const action = document.createElement('button'); action.type = 'button'; action.className = `button ${status.connected ? 'secondary' : 'primary'}`;
-    action.textContent = status.label; action.disabled = !status.enabled; action.title = status.reason; action.dataset.focus = focus;
+    action.textContent = status.label; action.disabled = !status.enabled; action.title = status.cancel ? 'Cancel connection (Escape)' : status.reason; action.dataset.focus = focus;
     action.addEventListener('click', () => perform(device)); root.append(info, action); return root;
   }
   return { init(options) { hooks = options; }, snapshot, describe, connectedDevice, pendingDevice, ensure, disconnect, cancel, perform, controls };

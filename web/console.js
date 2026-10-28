@@ -2,6 +2,56 @@
 
 const NanoConsole = (() => {
   let api, latest = { ble: {}, services: [] }, online = false, signature = '', history = [];
+  const notificationCounts = new Map();
+  let offEvents, notificationBoot, notificationSeq = 0, notificationSession = null, notificationGeneration = 0, notificationUptime;
+  const notificationKey = item => `${notificationSession?.key}/${String(item.uuid || '').toLowerCase()}/${item.handle}`;
+  const notificationText = key => notificationSession?.ready && notificationCounts.has(key) && key.startsWith(`${notificationSession.key}/`)
+    ? `Captured notifications: ${notificationCounts.get(key)}` : '';
+  function refreshCounts() {
+    for (const count of document.querySelectorAll('[data-notification-key]')) count.textContent = notificationText(count.dataset.notificationKey);
+  }
+  function resetCounts() { notificationCounts.clear(); notificationSession = null; refreshCounts(); }
+  function trackConnection(state, available) {
+    if (Number.isFinite(state.uptime) && state.uptime < notificationUptime) resetCounts();
+    notificationUptime = state.uptime;
+    const ble = state.ble || {};
+    const key = available && ble.connected ? JSON.stringify([notificationGeneration, state.bootId, String(ble.address || '').toLowerCase(), ble.addressType, ble.connectionAttempt]) : null;
+    if (key !== (notificationSession?.key || null)) {
+      resetCounts();
+      if (key) notificationSession = { key, minMs: Number.isFinite(state.uptime) ? (Math.floor(state.uptime) + 1) * 1000 : null, ready: false, blocked: false };
+    }
+  }
+  function watchNotifications() {
+    offEvents?.();
+    const generation = notificationGeneration;
+    offEvents = api.onEvents?.((events, meta = {}) => {
+      if (generation !== notificationGeneration) return;
+      const first = notificationBoot === undefined;
+      if (meta.reboot || !first && meta.bootId !== notificationBoot) { resetCounts(); notificationSeq = 0; }
+      notificationBoot = meta.bootId;
+      for (const event of events) {
+        if (!Number.isInteger(event.seq) || event.seq <= notificationSeq) continue;
+        notificationSeq = event.seq;
+        const session = notificationSession, ble = latest.ble;
+        if (first || !session || session.blocked || session.minMs === null || !Number.isFinite(event.ms) || event.ms < session.minMs) continue;
+        if (event.bootId !== undefined && event.bootId !== notificationBoot || latest.bootId !== undefined && latest.bootId !== notificationBoot) continue;
+        if (['connect', 'disconnect'].includes(event.kind) || meta.dropped > 0) {
+          session.blocked = true; session.ready = false; notificationCounts.clear(); continue;
+        }
+        if (!['notification', 'indication'].includes(event.kind) || event.success === false) continue;
+        if (String(event.address || '').toLowerCase() !== String(ble.address || '').toLowerCase()) continue;
+        if (event.addressType !== undefined && event.addressType !== ble.addressType || event.connectionAttempt !== undefined && event.connectionAttempt !== ble.connectionAttempt) continue;
+        if (!characteristics().some(item => item.handle === event.handle && item.uuid.toLowerCase() === String(event.uuid || '').toLowerCase())) continue;
+        session.ready = true;
+        const key = notificationKey(event); notificationCounts.set(key, (notificationCounts.get(key) || 0) + 1);
+      }
+      refreshCounts();
+    });
+  }
+  function changeNotificationAPI() {
+    notificationGeneration++; notificationBoot = undefined; notificationSeq = 0; notificationUptime = undefined;
+    resetCounts(); watchNotifications();
+  }
   const el = (tag, className, text) => { const item = document.createElement(tag); if (className) item.className = className; if (text !== undefined) item.textContent = text; return item; };
   const get = id => document.getElementById(`console-${id}`);
   const characteristics = () => (latest.services || []).flatMap(service => service.characteristics || []);
@@ -22,7 +72,7 @@ const NanoConsole = (() => {
     get('limit').textContent = `MTU ${latest.ble.mtu || 23} · With response: 512 bytes · Without response: ${Math.min(512, (latest.ble.mtu || 23) - 3)} bytes`;
   }
   function update(state, available) {
-    latest = state; online = available;
+    trackConnection(state, available); latest = state; online = available;
     if (!get('handle')) return;
     const items = characteristics().filter(writable);
     const next = JSON.stringify([latest.ble.address, latest.ble.addressType, items.map(item => [item.handle, item.uuid, item.properties])]);
@@ -70,24 +120,44 @@ const NanoConsole = (() => {
     try { await api.action(path, body); }
     catch (error) { notify(error.message, true); get('status').scrollIntoView({ block: 'nearest' }); }
   }
-  function characteristicActions(characteristic) {
+  function characteristicActions(characteristic, readOnly = false) {
     const section = el('div', 'characteristic-tools');
     const controls = el('div', 'lab-actions');
     const target = { address: latest.ble.address, addressType: latest.ble.addressType };
-    const act = (path, body) => { if (NanoDeviceLibrary.connected(target, latest)) return perform(path, body); };
-    if (writable(characteristic)) controls.append(button('Write…', () => { if (NanoDeviceLibrary.connected(target, latest)) select(characteristic.handle); }, unavailable()));
-    for (const [property, mode, label] of [['notify', 'notify', 'Subscribe (notify)'], ['indicate', 'indicate', 'Subscribe (indicate)']]) {
-      if (characteristic.properties.includes(property)) controls.append(button(characteristic.subscription === mode ? `${label} active` : label,
-        () => act('subscribe', { handle: characteristic.handle, mode }), unavailable() || characteristic.subscription === mode));
+    const allowed = () => !readOnly && !unavailable() && NanoDeviceLibrary.connected(target, latest);
+    const act = (path, body) => { if (allowed()) return perform(path, body); };
+    if (writable(characteristic)) {
+      const write = button('Write…', () => { if (allowed()) select(characteristic.handle); }, !allowed());
+      write.dataset.focus = `${characteristic.handle}-write`; controls.append(write);
     }
-    if (characteristic.subscription && characteristic.subscription !== 'off') controls.append(button('Unsubscribe', () => act('subscribe', { handle: characteristic.handle, mode: 'off' }), unavailable()));
-    for (const control of controls.children) control.dataset.focus = `${characteristic.handle}-${control.textContent}`;
+    const modes = ['notify', 'indicate'].filter(mode => characteristic.properties.includes(mode));
+    if (modes.length) {
+      const subscribed = modes.includes(characteristic.subscription);
+      let mode = subscribed ? characteristic.subscription : modes[0];
+      if (modes.length === 2) {
+        const choice = el('select'); choice.setAttribute('aria-label', 'Subscription mode');
+        choice.dataset.focus = `${characteristic.handle}-subscription-mode`;
+        for (const value of modes) { const option = el('option', '', value === 'notify' ? 'Notify' : 'Indicate'); option.value = value; choice.append(option); }
+        choice.value = mode; choice.disabled = !allowed() || subscribed;
+        choice.addEventListener('change', () => { mode = choice.value; }); controls.append(choice);
+      }
+      const toggle = button(subscribed ? 'Subscribed' : 'Subscribe', () => {
+        const current = characteristics().find(item => item.handle === characteristic.handle && item.uuid === characteristic.uuid);
+        if (current) return act('subscribe', { handle: characteristic.handle, mode: modes.includes(current.subscription) ? 'off' : mode });
+      }, !allowed());
+      toggle.dataset.focus = `${characteristic.handle}-subscription`;
+      toggle.setAttribute('aria-pressed', String(subscribed)); controls.append(toggle);
+      if (typeof api.onEvents === 'function' && !readOnly) {
+        const count = el('span', 'vendor-note'); count.dataset.notificationKey = notificationKey({ ...characteristic, ...target });
+        count.textContent = notificationText(count.dataset.notificationKey); controls.append(count);
+      }
+    }
     if (controls.childElementCount) section.append(controls);
     if (characteristic.descriptors?.length) {
       const details = el('details', 'descriptor-list'); details.dataset.persist = `descriptors-${target.address}/${target.addressType}-${characteristic.handle}`; details.append(el('summary', '', `Descriptors · ${characteristic.descriptors.length}`));
       for (const descriptor of characteristic.descriptors) {
         const name = typeof NanoMetadata !== 'undefined' ? NanoMetadata.lookup(descriptor.uuid)?.name : '';
-        const row = el('div', 'descriptor'), label = el('div'), read = button('Read', () => act('read', { handle: descriptor.handle }), unavailable());
+        const row = el('div', 'descriptor'), label = el('div'), read = button('Read', () => act('read', { handle: descriptor.handle }), !allowed());
         read.dataset.focus = `descriptor-${descriptor.handle}`;
         label.append(el('p', '', name || 'Unknown descriptor'), el('p', 'mono', `${descriptor.handle} · ${descriptor.uuid}`)); row.append(label, read); details.append(row);
         if (typeof descriptor.valueHex !== 'string') continue;
@@ -114,7 +184,10 @@ const NanoConsole = (() => {
     section.append(details); return section;
   }
   function mount(container, sharedApi) {
-    api = sharedApi;
+    offEvents?.(); api = sharedApi;
+    globalThis.removeEventListener?.('nanoscope:api-change', changeNotificationAPI);
+    globalThis.addEventListener?.('nanoscope:api-change', changeNotificationAPI);
+    changeNotificationAPI();
     container.innerHTML = '<div class="panel-heading"><div><h2>Command console</h2></div></div><div class="lab-body"><div class="console-grid"><label>Characteristic handle<select id="console-handle" aria-label="Writable characteristic handle"></select></label><label>Write mode<select id="console-response"><option value="true">With response</option><option value="false">Without response</option></select></label><label>Input format<select id="console-format"><option value="hex">HEX bytes</option><option value="utf8">UTF-8 text</option></select></label></div><label class="payload-label" for="console-payload">Payload</label><textarea id="console-payload" rows="3" spellcheck="false" placeholder="01 02 03"></textarea><div class="console-footer"><p id="console-limit" class="vendor-note"></p><button id="console-send" class="button primary" type="button">Send command</button></div><div class="history-row"><label>Recent commands<select id="console-history"></select></label><button id="console-replay" class="button secondary" type="button">Replay selected</button></div><p id="console-status" class="lab-status" role="status">Connect to a writable characteristic.</p></div>';
     get('handle').addEventListener('change', modes); get('response').addEventListener('change', modes);
     get('send').addEventListener('click', () => send());

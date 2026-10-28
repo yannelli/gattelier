@@ -26,12 +26,12 @@ const NanoScanQuery = (() => {
       const profile = context.profile?.(device);
       const libraryNames = [...(device.services || []), ...(device.serviceData || []).map(item => item.uuid)].map(id => context.lookupUUID?.(id)?.name || '').join(' ');
       const protocols = (context.protocolMatches?.(device) || []).map(item => item.title).join(' ');
-      return `${device.name || ''} ${device.address || ''} ${device.label || ''} ${names} ${services} ${profile?.title || ''} ${profile?.category || ''} ${libraryNames} ${protocols}`.toLowerCase().includes(query);
+      return `${device.name || ''} ${device.gattName || ''} ${device.address || ''} ${device.label || ''} ${names} ${services} ${profile?.title || ''} ${profile?.category || ''} ${libraryNames} ${protocols}`.toLowerCase().includes(query);
     });
     const compare = {
       strength: (a, b) => number(b.rssi, -Infinity) - number(a.rssi, -Infinity),
       recent: (a, b) => number(b.lastSeenMs, 0) - number(a.lastSeenMs, 0),
-      name: (a, b) => order(String(a.label || a.name || '').toLowerCase(), String(b.label || b.name || '').toLowerCase()),
+      name: (a, b) => order(String(a.label || a.name || a.gattName || '').toLowerCase(), String(b.label || b.name || b.gattName || '').toLowerCase()),
       first: (a, b) => number(a.firstSeenMs, Infinity) - number(b.firstSeenMs, Infinity),
       observations: (a, b) => number(b.observations, 0) - number(a.observations, 0),
     }[filters.sort] || ((a, b) => number(b.rssi, -Infinity) - number(a.rssi, -Infinity));

@@ -22,7 +22,7 @@ const NanoScanStore = (() => {
     const unique = new Map(history.map(item => [item.at, { at: item.at, rssi: item.rssi }]));
     return { ...record, firstSeenMs: number(value.firstSeenMs), lastSeenMs: number(value.lastSeenMs),
       observations: Math.max(0, Math.floor(number(value.observations))), history: [...unique.values()].sort((a, b) => a.at - b.at).slice(-60),
-      favorite: value.favorite === true, label: text(value.label).slice(0, 160),
+      favorite: value.favorite === true, label: text(value.label).slice(0, 160), gattName: text(value.gattName).slice(0, 248),
       boardSeenSeconds: number(value.boardSeenSeconds, -1), boardStartedMs: number(value.boardStartedMs, -1) };
   }
   const plainObject = value => value !== null && typeof value === 'object' && [Object.prototype, null].includes(Object.getPrototypeOf(value));
@@ -31,7 +31,7 @@ const NanoScanStore = (() => {
     if (!plainObject(value)) reject('record');
     if (typeof value.address !== 'string' || !/^(?:[0-9a-f]{2}:){5}[0-9a-f]{2}$/i.test(value.address)) reject('address');
     if (!Number.isInteger(value.addressType) || value.addressType < 0 || value.addressType > 3) reject('address type');
-    for (const [key, limit] of [['key', 64], ['name', 80], ['label', 160]]) {
+    for (const [key, limit] of [['key', 64], ['name', 80], ['label', 160], ['gattName', 248]]) {
       if (value[key] !== undefined && (typeof value[key] !== 'string' || value[key].length > limit)) reject(key);
     }
     const validHex = (hex, max) => typeof hex === 'string' && hex.length <= max * 2 && /^(?:[0-9a-f]{2})*$/i.test(hex);
@@ -144,6 +144,7 @@ const NanoScanStore = (() => {
                 current.history = savedRecord({ ...current, history: [...record.history, ...current.history] }).history;
                 current.favorite = current.favorite || record.favorite;
                 current.label = current.label || record.label;
+                current.gattName = current.gattName || record.gattName;
               } else records.set(record.key, { ...record, liveId: null });
             }
             evicted += Math.max(0, Math.floor(number(snapshot.evicted)));
@@ -173,7 +174,7 @@ const NanoScanStore = (() => {
         const fields = sameBoot && seen !== null && current.boardSeenSeconds > seen ? advertisement(current) : advertised;
         const record = { ...fields, name: fields.name || current?.name || '', firstSeenMs: current?.firstSeenMs ?? at, lastSeenMs: current?.lastSeenMs ?? at,
           observations: current?.observations ?? 0, history: current?.history || [], favorite: current?.favorite || false,
-          label: current?.label || '', boardSeenSeconds: current?.boardSeenSeconds ?? -1, boardStartedMs: current?.boardStartedMs ?? boardStartedMs,
+          label: current?.label || '', gattName: current?.gattName || '', boardSeenSeconds: current?.boardSeenSeconds ?? -1, boardStartedMs: current?.boardStartedMs ?? boardStartedMs,
           liveId: Number.isInteger(value.id) && value.id > 0 ? value.id : incremental ? current?.liveId ?? null : null,
           streamLive: incremental || current?.streamLive === true };
         if (observed) {
@@ -220,6 +221,7 @@ const NanoScanStore = (() => {
       const record = records.get(key);
       if (!record) return false;
       if (typeof values.label === 'string') record.label = values.label.slice(0, 160);
+      if (typeof values.gattName === 'string') record.gattName = values.gattName.slice(0, 248);
       if (typeof values.favorite === 'boolean') record.favorite = values.favorite;
       changed(); return true;
     }
@@ -262,7 +264,7 @@ const NanoScanStore = (() => {
           firstSeenMs: Math.min(current.firstSeenMs, record.firstSeenMs), lastSeenMs: Math.max(current.lastSeenMs, record.lastSeenMs),
           observations: Math.max(current.observations, record.observations, history.size),
           history: [...history.values()].sort((a, b) => a.at - b.at).slice(-60),
-          label: current.label || record.label, favorite: current.favorite || record.favorite });
+          label: current.label || record.label, gattName: current.gattName || record.gattName, favorite: current.favorite || record.favorite });
       }
       records.clear(); for (const [key, value] of merged) records.set(key, value);
       trim(); if (imported.length) changed();

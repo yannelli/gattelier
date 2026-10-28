@@ -132,3 +132,64 @@ test('same address with another address type is a different connection', () => {
   assert.equal(status.connected, false);
   assert.equal(status.label, 'Switch and connect');
 });
+
+test('discovery reports the service count supplied by state without inventing an identity phase', () => {
+  const current = context({ ...target, connected: true, busy: true, operation: 'discovering', connectionAttempt: 2 });
+  current.state.services = [{ uuid: '1800' }, { uuid: '1801' }];
+  assert.equal(connection.describe(target, current).status, 'Discovering services · 2 found');
+  current.state.services = [];
+  assert.equal(connection.describe(target, current).status, 'Discovering services · 0 found');
+  delete current.state.services;
+  assert.equal(connection.describe(target, current).status, 'Discovering services');
+  current.state.ble.operation = 'connecting';
+  assert.equal(connection.describe(target, current).status, 'Connecting');
+});
+
+test('connected details use reported MTU and security for the connected peer', () => {
+  const current = context({ ...target, connected: true, mtu: 247 });
+  current.state.security = { address: target.address, encrypted: true };
+  assert.equal(connection.describe(target, current).details, 'MTU 247 · Encrypted');
+  current.state.security.encrypted = false;
+  assert.equal(connection.describe(target, current).details, 'MTU 247 · Unencrypted');
+  current.state.security.addressType = 1;
+  assert.equal(connection.describe(target, current).details, 'MTU 247');
+  current.state.security = { address: other.address, encrypted: true };
+  assert.equal(connection.describe(target, current).details, 'MTU 247');
+  delete current.state.ble.mtu;
+  assert.equal(connection.describe(target, current).details, '');
+  current.state.ble.connected = false;
+  assert.equal(connection.describe(target, current).details, '');
+});
+
+test('switching uses the shared display name when available', () => {
+  harness({ ble: {}, devices: [] });
+  globalThis.deviceDisplayName = device => `Named ${device.address}`;
+  try {
+    assert.match(connection.describe(target, context({ ...other, connected: true })).reason, /Disconnects Named 02:00:00:00:00:02/);
+  } finally { delete globalThis.deviceDisplayName; }
+});
+
+test('connection controls announce status and available link details politely', () => {
+  const previous = globalThis.document;
+  globalThis.document = { createElement: () => ({ children: [], attributes: {}, dataset: {}, append(...nodes) { this.children.push(...nodes); }, setAttribute(key, value) { this.attributes[key] = value; }, addEventListener() {} }) };
+  harness({ ble: { ...target, connected: true, mtu: 185 }, security: { address: target.address, encrypted: true }, devices: [target] });
+  try {
+    const root = connection.controls(target), info = root.children[0];
+    assert.equal(info.attributes.role, 'status'); assert.equal(info.attributes['aria-live'], 'polite');
+    assert.equal(info.children[0].textContent, 'Connected');
+    assert.equal(info.children.at(-1).textContent, 'MTU 185 · Encrypted');
+  } finally { if (previous === undefined) delete globalThis.document; else globalThis.document = previous; }
+});
+
+test('discovery shows identity feedback only after discovered values are present', () => {
+  const current = context({ ...target, connected: true, busy: true, operation: 'discovering', connectionAttempt: 2 });
+  const item = { valueHex: null, descriptors: [{ valueHex: null }] };
+  current.state.services = [{ characteristics: [item] }];
+  assert.equal(connection.describe(target, current).status, 'Discovering services · 1 found');
+  item.valueHex = '';
+  assert.equal(connection.describe(target, current).status, 'Identifying device · 1 found');
+  item.valueHex = null; item.descriptors[0].valueHex = '01';
+  assert.equal(connection.describe(target, current).status, 'Identifying device · 1 found');
+  current.state.ble.busy = false;
+  assert.equal(connection.describe(target, current).status, 'Connected');
+});

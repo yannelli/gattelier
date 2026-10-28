@@ -4,8 +4,59 @@ const $ = id => document.getElementById(id);
 const vendorTools = typeof module !== 'undefined' ? require('./vendors.js') : NanoVendors;
 const deviceKey = device => `${device.address.toLowerCase()}/${device.addressType}`;
 const visibleDevices = (devices, query, database = vendorDatabase) => devices.filter(device =>
-  `${device.name || ''} ${device.address} ${vendorTools.identify(device, database).search}`.toLowerCase().includes(query.trim().toLowerCase())
+  `${deviceDisplayName(device, database)} ${device.label || ''} ${device.name || ''} ${device.gattName || ''} ${device.address} ${vendorTools.identify(device, database).search}`.toLowerCase().includes(query.trim().toLowerCase())
 ).slice().sort((a, b) => b.rssi - a.rssi || a.address.localeCompare(b.address));
+function deviceDisplayName(device, database = vendorDatabase) {
+  if (!device) return 'Device';
+  for (const name of [device.label, device.name, device.gattName]) if (typeof name === 'string' && name.trim()) return name.trim();
+  const vendor = vendorTools.identify(device, database);
+  const recorder = typeof NanoRecorders !== 'undefined' ? NanoRecorders.identify(device) : null;
+  const profile = typeof NanoProfiles !== 'undefined' ? NanoProfiles.identify(device) : null;
+  return recorder?.product || vendor.manufacturer || vendor.addressVendor || (profile?.category !== 'other' && profile?.title) || device.address;
+}
+function rememberGattName(boardState, store = scanStore) {
+  const ble = boardState.ble;
+  if (!store || !ble?.connected || typeof NanoGattValues === 'undefined') return;
+  const key = deviceKey(ble), stored = store.devices().find(item => deviceKey(item) === key);
+  const device = stored || (selectedFallback && deviceKey(selectedFallback) === key ? selectedFallback : null);
+  if (!device) return;
+  for (const service of boardState.services || []) for (const item of service.characteristics || []) {
+    if (shortUuid(item.uuid) !== '2a00' || !item.valueHex) continue;
+    const name = NanoGattValues.decode(item.uuid, item.valueHex).find(field => !field.placeholder)?.value?.trim();
+    if (name && (!stored || name !== device.gattName)) {
+      if (stored) store.annotate(key, { gattName: name });
+      device.gattName = name;
+    }
+  }
+}
+function handleDeviceKeyboard(event) {
+  const target = event.target;
+  if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey || event.isComposing || target?.isContentEditable || target?.closest?.('input, textarea, select, [contenteditable]:not([contenteditable="false"]), [role="textbox"]')) return;
+  if (event.key === 'Escape') {
+    const device = NanoConnection.pendingDevice();
+    if (device && NanoConnection.describe(device).cancel && NanoConnection.describe(device).enabled) { event.preventDefault(); NanoConnection.perform(device); }
+    return;
+  }
+  const list = $('devices'), row = target?.closest?.('button.device');
+  if (list?.contains(target) && (target === list || row)) {
+    const rows = [...list.querySelectorAll('button.device')];
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault();
+      const index = row ? rows.indexOf(row) : rows.findIndex(item => item.dataset.focus === selected);
+      const next = rows[index < 0 ? event.key === 'ArrowDown' ? 0 : rows.length - 1 : Math.max(0, Math.min(rows.length - 1, index + (event.key === 'ArrowDown' ? 1 : -1)))];
+      const device = browseDevices().find(item => deviceKey(item) === next?.dataset.focus);
+      if (device) { selectDevice(device); [...list.querySelectorAll('button.device')].find(item => item.dataset.focus === deviceKey(device))?.focus(); }
+    } else if (event.key === 'Enter') {
+      event.preventDefault();
+      if (event.repeat) return;
+      const device = row ? browseDevices().find(item => deviceKey(item) === row.dataset.focus) : selectedDevice();
+      const status = NanoConnection.describe(device);
+      if (device && status.enabled && (status.cancel || !status.connected)) NanoConnection.perform(device);
+    }
+  } else if (event.key.toLowerCase() === 'r' && !event.repeat && target?.closest?.('#inspector, #device-services, #device-summary')) {
+    event.preventDefault(); readAllValues();
+  }
+}
 const canScan = (state, online, pending) => online && !pending && !state.ble.busy && !state.ble.connected && state.usb?.mode !== 'hci' && !state.collection?.enabled;
 const canConnect = (state, device, online, pending) => canScan(state, online, pending) && device.connectable;
 const canRead = (state, characteristic, online, pending) => online && !pending && !state.ble.busy && state.ble.connected && characteristic.properties.includes('read');
@@ -111,11 +162,12 @@ function renderList() {
   for (const device of devices) {
     const row = node('button', 'device');
     row.type = 'button'; row.dataset.focus = deviceKey(device);
+    row.title = 'Arrow keys: select device. Enter: connect. Escape: cancel connection.';
     row.setAttribute('aria-pressed', String(selected === deviceKey(device)));
     const icon = node('span', 'device-icon', '◇'); icon.setAttribute('aria-hidden', 'true');
     const info = node('span', 'device-info');
-    info.append(node('span', 'device-name', `${device.favorite ? '★ ' : ''}${device.label || device.name || device.address}`));
-    if (device.label || device.name) info.append(node('span', 'device-address', device.address));
+    info.append(node('span', 'device-name', `${device.favorite ? '★ ' : ''}${deviceDisplayName(device)}`));
+    if (deviceDisplayName(device) !== device.address) info.append(node('span', 'device-address', device.address));
     const recorder = NanoRecorders.identify(device);
     if (recorder) info.append(node('span', 'device-vendor', recorder.product));
     const vendor = vendorTools.identify(device, vendorDatabase);
@@ -134,6 +186,8 @@ function renderList() {
 function render() {
   lastRender = Date.now();
   NanoSensorApp.update(browseDevices());
+  rememberGattName(state);
+  if (typeof retainGattResults === 'function') retainGattResults();
   NanoLab.update(state, online);
   NanoLab.setBackgroundCapture(backgroundPolling());
   const scanning = state.ble.scanning;
@@ -309,15 +363,17 @@ async function boot() {
     getSelected: selectedDevice, selectDevice, resolveTarget: key => browseDevices().find(item => deviceKey(item) === key),
     getDeviceDisplay: device => {
       const recorder = NanoRecorders.identify(device), vendor = vendorTools.identify(device, vendorDatabase);
-      return { name: device.label || device.name || device.address, manufacturer: NanoSchlage.identify(device, state) ? 'Schlage' : recorder?.product.split(' ')[0] || vendor.manufacturer || vendor.addressVendor };
+      return { name: deviceDisplayName(device), manufacturer: NanoSchlage.identify(device, state) ? 'Schlage' : recorder?.product.split(' ')[0] || vendor.manufacturer || vendor.addressVendor };
     },
     selectModuleTarget: (id, device) => NanoModules.selectAppDevice(id, device),
     getModuleTarget: id => NanoModules.matches(selectedDevice()).includes(id) ? selectedDevice() : NanoModules.appDevice(id), onChange: render });
   $('scan').addEventListener('click', () => mutate(scanAction(state.ble)));
   $('search').addEventListener('input', renderList);
+  $('devices').tabIndex = 0;
+  document.addEventListener('keydown', handleDeviceKeyboard);
   $('retry').addEventListener('click', tick);
   document.addEventListener('visibilitychange', () => { clearTimeout(timer); if (!document.hidden || backgroundPolling()) tick(); });
   tick(); loadVendors();
 }
-if (typeof module !== 'undefined') module.exports = { deviceKey, visibleDevices, canScan, canConnect, canRead, shortUuid, uuidName, operationLabel, scanAction, scanStatus, lastSeenLabel, needsStatePoll };
+if (typeof module !== 'undefined') module.exports = { deviceDisplayName, rememberGattName, handleDeviceKeyboard, deviceKey, visibleDevices, canScan, canConnect, canRead, shortUuid, uuidName, operationLabel, scanAction, scanStatus, lastSeenLabel, needsStatePoll };
 if (typeof document !== 'undefined') boot();

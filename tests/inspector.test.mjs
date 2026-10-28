@@ -9,7 +9,7 @@ import vendors from '../web/vendors.js';
 import ui from '../web/app.js';
 
 class Element {
-  constructor(tag) { this.tag = tag; this.children = []; this.dataset = {}; this.listeners = {}; this.ownText = ''; this.open = false; }
+  constructor(tag) { this.tag = tag; this.children = []; this.dataset = {}; this.listeners = {}; this.ownText = ''; this.open = false; this.style = {}; }
   set textContent(value) { this.ownText = String(value); this.children = []; }
   get textContent() { return this.ownText + this.children.map(child => child.textContent).join(''); }
   append(...nodes) { this.children.push(...nodes); }
@@ -89,4 +89,91 @@ test('bulk reads stop when address type changes and do not initiate pairing', as
   h.context.NanoLab = { async action(action, body) { h.calls.push({ action, ...body }); h.context.state.ble.addressType = 1; } };
   await h.run('readAllValues()');
   assert.deepEqual(h.calls, [{ action: 'read', handle: 3 }]);
+});
+
+
+test('bulk read Stop finishes the current request and sends no later reads', async () => {
+  const h = harness(); let finish;
+  h.context.state.services[0].characteristics.push({ uuid: '2a00', handle: 7, properties: ['read'] });
+  h.context.NanoLab = { action(action, body) { h.calls.push({ action, ...body }); return new Promise(resolve => { finish = resolve; }); } };
+  const reading = h.run('readAllValues()');
+  const tree = h.run('appendDeviceServices(node("div"), true)');
+  const stop = all(tree).find(item => item.tag === 'button' && item.textContent === 'Stop');
+  assert.ok(stop); assert.match(tree.textContent, /Reading 1 of 2/);
+  await stop.click(); finish(); await reading;
+  assert.deepEqual(h.calls, [{ action: 'read', handle: 3 }]);
+  assert.equal(h.run('readResult.stopped'), true);
+  assert.equal(h.run('readSession'), null);
+});
+
+test('bulk reads stop on selection, connection attempt, or board changes', async () => {
+  for (const change of ['selection', 'attempt', 'board']) {
+    const h = harness();
+    h.context.apiGeneration = 1;
+    h.context.state.ble.connectionAttempt = 9;
+    h.context.state.services[0].characteristics.push({ uuid: '2a00', handle: 7, properties: ['read'] });
+    h.context.NanoLab = { async action(action, body) {
+      h.calls.push({ action, ...body });
+      if (change === 'selection') h.context.selectedDevice = () => ({ ...target, addressType: 1 });
+      if (change === 'attempt') h.context.state.ble.connectionAttempt++;
+      if (change === 'board') h.context.apiGeneration++;
+    } };
+    await h.run('readAllValues()');
+    assert.equal(h.calls.length, 1, change);
+    if (change === 'board') assert.equal(h.run('readResult'), null);
+  }
+});
+
+test('bulk result distinguishes authentication from other errors without pairing', async () => {
+  const h = harness();
+  h.context.state.services[0].characteristics.push({ uuid: '2a00', handle: 7, properties: ['read'] });
+  h.context.NanoLab = { async action(action, body) {
+    h.calls.push({ action, ...body });
+    throw new Error(body.handle === 3 ? 'Insufficient authentication.' : 'Device rejected read.');
+  } };
+  await h.run('readAllValues()');
+  assert.equal(h.run('readResult.failed'), 2);
+  assert.equal(h.run('readResult.pairing'), 1);
+  const tree = h.run('appendDeviceServices(node("div"), true)');
+  assert.match(tree.textContent, /Read 0 of 2 values · 2 failed/);
+  assert.match(tree.textContent, /1 need pairing/);
+  assert.ok(h.calls.every(call => call.action === 'read'));
+});
+
+test('retained discovery is read-only, scoped by address type, and cleared on board change', () => {
+  const h = harness(); h.context.apiGeneration = 1;
+  h.context.state.ble.operation = 'discovering';
+  h.run('retainGattResults()');
+  h.context.state.ble.connected = false; h.context.state.services = [];
+  const tree = h.run('appendDeviceServices(node("div"), false)');
+  assert.match(tree.textContent, /Interrupted discovery/);
+  assert.match(tree.textContent, /83%/);
+  const reads = all(tree).filter(item => item.tag === 'button' && item.textContent === 'Read');
+  assert.ok(reads.length); assert.ok(reads.every(item => item.disabled));
+  h.context.selectedDevice = () => ({ ...target, addressType: 1 });
+  assert.doesNotMatch(h.run('appendDeviceServices(node("div"), false)').textContent, /83%/);
+  h.context.selectedDevice = () => target; h.context.apiGeneration++;
+  h.run('retainGattResults()');
+  assert.doesNotMatch(h.run('appendDeviceServices(node("div"), false)').textContent, /83%/);
+});
+
+test('unchanged results retain their timestamp and ordinary reads do not mark discovery partial', () => {
+  const h = harness(); h.run('retainGattResults()');
+  h.run('retainedGatt.get(deviceKey(selectedDevice())).at = 123');
+  h.context.state.ble.operation = 'reading'; h.context.state.ble.busy = true;
+  h.run('retainGattResults()');
+  assert.equal(h.run('retainedGatt.get(deviceKey(selectedDevice())).at'), 123);
+  assert.equal(h.run('retainedGatt.get(deviceKey(selectedDevice())).partial'), false);
+});
+
+
+test('raw text appears only for undecoded printable bytes', () => {
+  const h = harness();
+  const render = (valueHex, valueText) => {
+    h.context.sample = { uuid: 'abcd1234-0000-4000-8000-00805f9b34fb', handle: 9, properties: [], valueHex, valueText };
+    return h.run('renderCharacteristic(sample)').textContent;
+  };
+  assert.match(render('48656c6c6f', 'Hello'), /TextHello/);
+  assert.doesNotMatch(render('486900', 'Hi.'), /TextHi/);
+  assert.doesNotMatch(h.run('renderCharacteristic(state.services[0].characteristics[0])').textContent, /TextS/);
 });

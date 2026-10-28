@@ -239,3 +239,57 @@ test('tabs sharing one database keep each other\'s history, and clearing replace
   assert.deepEqual(shared.value.records.map(record => record.key).sort(), [key, 'aa:bb:cc:dd:ee:02/0']);
   await first.clearHistory(); assert.equal(shared.value.records.length, 0);
 });
+
+test('GATT names survive advertisements, reload and import per address type', async () => {
+  const storage = memoryStorage(), store = create({ storage, now: () => 1000000 }); await store.init();
+  store.ingest(board([device({ name: '' }), device({ name: '', addressType: 1, id: 13 })]), 1000000);
+  store.annotate(key, { gattName: 'Public sensor' });
+  store.annotate(`${address.toLowerCase()}/1`, { gattName: 'Random sensor' });
+  store.ingest(board([device({ name: '', lastSeen: 91 })], 101), 1001000);
+  await store.flush();
+  const restored = create({ storage }); await restored.init();
+  assert.deepEqual(restored.devices().map(item => [item.addressType, item.gattName]), [[0, 'Public sensor'], [1, 'Random sensor']]);
+  const imported = create({ storage: null, now: () => 2000000 }); await imported.init();
+  imported.ingest(board([device({ name: 'Live advertisement' })]), 1000000);
+  imported.importData(store.exportData());
+  assert.equal(imported.devices().find(item => item.key === key).gattName, 'Public sensor');
+  assert.equal(imported.devices().find(item => item.key === key).name, 'Live advertisement');
+  imported.annotate(key, { gattName: 'Newly read name' });
+  imported.importData(store.exportData());
+  assert.equal(imported.devices().find(item => item.key === key).gattName, 'Newly read name');
+  const malformed = store.exportData(); malformed.records[0].gattName = 42;
+  assert.throws(() => imported.importData(malformed), /gattName/);
+});
+
+test('display names prefer labels, advertisements and remembered GATT names before vendor and address', () => {
+  const { deviceDisplayName, visibleDevices } = require('../web/app.js');
+  const database = { company: { 4660: 'Acme' } };
+  const item = device({ label: 'Local label', name: 'Advertised', gattName: 'Remembered', manufacturer: '3412' });
+  assert.equal(deviceDisplayName(item, database), 'Local label');
+  assert.equal(deviceDisplayName({ ...item, label: '' }, database), 'Advertised');
+  assert.equal(deviceDisplayName({ ...item, label: '', name: '' }, database), 'Remembered');
+  assert.equal(deviceDisplayName({ ...item, label: '', name: '', gattName: '' }, database), 'Acme');
+  assert.equal(deviceDisplayName({ ...item, label: '', name: '', gattName: '' }, null), address);
+  for (const query of ['local label', 'advertised', 'remembered']) assert.equal(visibleDevices([item], query, database).length, 1);
+});
+
+test('decoded Device Name annotates only the connected address and type', async () => {
+  const { rememberGattName } = require('../web/app.js');
+  const prior = globalThis.NanoGattValues;
+  globalThis.NanoGattValues = require('../web/gatt-values.js');
+  try {
+    const store = create({ storage: null }); await store.init();
+    store.ingest(board([device({ name: '' }), device({ addressType: 1, id: 13, name: '' })]));
+    const snapshot = { ble: { connected: true, address, addressType: 1 }, services: [{ characteristics: [
+      { uuid: '00002a00-0000-1000-8000-00805f9b34fb', valueHex: Buffer.from('Kitchen sensor').toString('hex') },
+    ] }] };
+    rememberGattName(snapshot, store);
+    assert.equal(store.devices().find(item => item.addressType === 1).gattName, 'Kitchen sensor');
+    assert.equal(store.devices().find(item => item.addressType === 0).gattName, '');
+    snapshot.ble.connected = false; snapshot.ble.addressType = 0;
+    rememberGattName(snapshot, store);
+    assert.equal(store.devices().find(item => item.addressType === 0).gattName, '');
+  } finally {
+    if (prior === undefined) delete globalThis.NanoGattValues; else globalThis.NanoGattValues = prior;
+  }
+});

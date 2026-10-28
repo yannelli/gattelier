@@ -55,3 +55,13 @@ test('streamed discoveries remain visible after their board cache IDs are evicte
   assert.deepEqual(select([streamed], { source: 'history' }), []);
   assert.deepEqual(select([{ ...streamed, streamLive: false }], { source: 'live' }), []);
 });
+
+test('remembered GATT names remain searchable behind labels and advertisements and participate in name sorting', () => {
+  const items = [
+    { key: 'a/0', label: 'Zulu', name: 'Alpha', gattName: 'Kitchen sensor' },
+    { key: 'b/0', name: 'Bravo', gattName: 'Zulu' },
+    { key: 'c/0', name: '', gattName: 'Alpha' },
+  ];
+  assert.deepEqual(keys(select(items, { query: 'KITCHEN' })), ['a/0']);
+  assert.deepEqual(keys(select(items, { sort: 'name' })), ['c/0', 'b/0', 'a/0']);
+});

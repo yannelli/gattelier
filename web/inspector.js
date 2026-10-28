@@ -18,30 +18,62 @@ function identityFields(services) {
 function readableHandles(services) {
   return services.flatMap(service => service.characteristics.flatMap(item => [...(item.properties.includes('read') ? [item.handle] : []), ...(item.descriptors || []).map(descriptor => descriptor.handle)]));
 }
+let readSession = null, readResult = null, retainedGeneration = null;
+const retainedGatt = new Map(), changedValues = new Map();
+function retainGattResults() {
+  const generation = typeof apiGeneration === 'undefined' ? 0 : apiGeneration;
+  if (retainedGeneration !== generation) {
+    retainedGatt.clear(); changedValues.clear(); readResult = null;
+    if (readSession) readSession.stopped = true;
+    retainedGeneration = generation;
+  }
+  if (!online || !state.ble.connected || !state.services.length) return;
+  const key = deviceKey(state.ble), previous = retainedGatt.get(key);
+  const signature = JSON.stringify(state.services), attempt = state.ble.connectionAttempt;
+  if (previous?.signature === signature && previous.attempt === attempt && previous.partial === (state.ble.operation === 'discovering')) return;
+  const oldValues = new Map((previous && previous.attempt === attempt ? previous.services : []).flatMap(service => service.characteristics).map(item => [item.handle, item.valueHex]));
+  for (const item of state.services.flatMap(service => service.characteristics)) {
+    if (oldValues.has(item.handle) && oldValues.get(item.handle) !== item.valueHex) changedValues.set(`${key}/${item.handle}`, Date.now());
+  }
+  retainedGatt.delete(key);
+  retainedGatt.set(key, { services: JSON.parse(signature), signature, attempt, at: Date.now(), partial: state.ble.operation === 'discovering', mtu: state.ble.mtu });
+  while (retainedGatt.size > 12) {
+    const oldest = retainedGatt.keys().next().value; retainedGatt.delete(oldest);
+    for (const valueKey of changedValues.keys()) if (valueKey.startsWith(`${oldest}/`)) changedValues.delete(valueKey);
+  }
+}
 async function readAllValues() {
+  if (readSession) { readSession.stopped = true; render(); return; }
   const device = selectedDevice(), handles = readableHandles(state.services);
   if (!NanoDeviceLibrary.connected(device, state) || pending || !online || state.ble.busy || !handles.length) return;
-  pending = true; notice = ''; render();
-  let failed = 0;
+  const session = readSession = { key: deviceKey(device), attempt: state.ble.connectionAttempt, generation: typeof apiGeneration === 'undefined' ? 0 : apiGeneration, total: handles.length, completed: 0, failed: 0, pairing: 0, stopped: false };
+  const current = () => !session.stopped && online && selectedDevice() && deviceKey(selectedDevice()) === session.key && NanoDeviceLibrary.connected(device, state) && state.ble.connectionAttempt === session.attempt && (typeof apiGeneration === 'undefined' ? 0 : apiGeneration) === session.generation;
+  notice = ''; readResult = null; render();
   try {
     for (const handle of handles) {
-      if (!online || !NanoDeviceLibrary.connected(device, state)) break;
-      try { await NanoLab.action('read', { handle }); } catch { failed++; }
+      if (!current()) { session.stopped = true; break; }
+      try { await NanoLab.action('read', { handle }); }
+      catch (error) { session.failed++; if (/insufficient (authentication|encryption)|BLE code (261|268|271)\b/i.test(error.message)) session.pairing++; }
+      session.completed++; render();
     }
-    if (failed) notice = `${failed} of ${handles.length} reads failed. See the returned errors for each value.`;
-  } finally { pending = false; render(); }
+    if (!current()) session.stopped = true;
+  } finally {
+    if ((typeof apiGeneration === 'undefined' ? 0 : apiGeneration) === session.generation) readResult = { ...session };
+    readSession = null; render();
+  }
 }
-function renderCharacteristic(characteristic, serviceUuid = '') {
+function renderCharacteristic(characteristic, serviceUuid = '', readOnly = false, target = { address: state.ble.address, addressType: state.ble.addressType }) {
   const section = node('div', 'characteristic');
+  const changedAt = changedValues.get(`${deviceKey(target)}/${characteristic.handle}`);
+  if (!readOnly && changedAt && Date.now() - changedAt < 600) { section.className += ' value-changed'; section.style.animationDelay = `-${Date.now() - changedAt}ms`; }
   const top = node('div', 'characteristic-top');
   const title = node('div');
   const definition = NanoDeviceLibrary.lookup(characteristic.uuid, serviceUuid);
-  title.append(node('p', 'characteristic-name', uuidName(characteristic.uuid, '', serviceUuid) || definition?.name || userDescription(characteristic) || `Characteristic · ${characteristic.handle}`), node('span', 'uuid', characteristic.uuid));
+  title.append(node('p', 'characteristic-name', uuidName(characteristic.uuid, '', serviceUuid) || definition?.name || userDescription(characteristic) || `Characteristic · ${shortUuid(characteristic.uuid).slice(0, 8)}`), node('span', 'uuid', characteristic.uuid));
   top.append(title);
-  const target = { address: state.ble.address, addressType: state.ble.addressType };
-  if (characteristic.properties.includes('read')) top.append(button('Read', 'secondary', () => { if (NanoDeviceLibrary.connected(target, state)) mutate('read', { handle: characteristic.handle }); }, !canRead(state, characteristic, online, pending), `read-${characteristic.handle}`));
+  if (characteristic.properties.includes('read')) top.append(button('Read', 'secondary', () => { if (!readOnly && !readSession && NanoDeviceLibrary.connected(target, state)) mutate('read', { handle: characteristic.handle }); }, readOnly || Boolean(readSession) || !canRead(state, characteristic, online, pending), `read-${characteristic.handle}`));
   const properties = node('div', 'properties');
-  for (const property of characteristic.properties) properties.append(node('span', 'badge', property));
+  for (const property of characteristic.properties.filter(property => !['read', 'notify', 'indicate', 'write', 'write-no-response'].includes(property))) properties.append(node('span', 'badge', property));
   section.append(top, properties);
   if (characteristic.valueHex !== null && characteristic.valueHex !== undefined) {
     const selected = selectedDevice(), device = NanoDeviceLibrary.connected(selected, state) ? selected : undefined;
@@ -53,12 +85,12 @@ function renderCharacteristic(characteristic, serviceUuid = '') {
     const value = node('details', 'raw-details value'); value.dataset.persist = `value-${target.address}/${target.addressType}-${characteristic.handle}`;
     value.append(node('summary', '', `Raw value · ${characteristic.valueHex.length / 2} bytes`));
     value.append(node('p', 'value-label', 'Hex'), node('p', 'mono', characteristic.valueHex || '(empty value)'));
-    if (characteristic.valueText) value.append(node('p', 'value-label', 'Text'), node('p', 'mono', characteristic.valueText));
+    if (!fields.children.length && characteristic.valueText && (characteristic.valueHex.match(/../g) || []).every(byte => parseInt(byte, 16) >= 32 && parseInt(byte, 16) <= 126)) value.append(node('p', 'value-label', 'Text'), node('p', 'mono', characteristic.valueText));
     for (const field of decoded.filter(rawField)) value.append(node('p', 'value-label', field.label), node('p', 'mono', String(field.value)));
     section.append(value);
   }
   if (characteristic.readError) section.append(node('p', 'error', characteristic.readError));
-  section.append(NanoConsole.characteristicActions(characteristic));
+  section.append(NanoConsole.characteristicActions(characteristic, readOnly || Boolean(readSession)));
   appendDefinition(section, definition, `characteristic-${characteristic.handle}`);
   return section;
 }
@@ -72,8 +104,8 @@ function appendDefinition(section, definition, key) {
   }
   section.append(details);
 }
-function appendIdentity(detail) {
-  const fields = identityFields(state.services);
+function appendIdentity(detail, services = state.services) {
+  const fields = identityFields(services);
   if (!fields.length) return;
   const summary = node('dl', 'metadata gatt-identity');
   for (const field of fields) summary.append(metadata(field.label, String(field.value)));
@@ -87,10 +119,10 @@ function suggestedActions(device) {
   more.dataset.persist = `commands-${deviceKey(device)}`; more.append(node('summary', '', `More commands · ${Math.max(0, actions.length - 6)}`));
   for (const [index, action] of actions.entries()) {
     const control = button(action.label, 'secondary', () => {
-      if (!NanoDeviceLibrary.connected(device, state)) return;
+      if (readSession || !NanoDeviceLibrary.connected(device, state)) return;
       const current = NanoDeviceLibrary.suggestions(device, state).find(item => item.handle === action.handle && item.uuid === action.uuid && item.action === action.action && item.mode === action.mode);
       if (current) mutate(action.action, { handle: action.handle, ...(action.mode ? { mode: action.mode } : {}) });
-    }, pending || !online || state.ble.busy, `suggest-${action.action}-${action.handle}`);
+    }, Boolean(readSession) || pending || !online || state.ble.busy, `suggest-${action.action}-${action.handle}`);
     (index < 6 ? primary : more).append(control);
   }
   section.append(primary); if (actions.length > 6) section.append(more);
@@ -99,12 +131,15 @@ function suggestedActions(device) {
 function renderInspector() {
   const device = selectedDevice();
   const connected = NanoDeviceLibrary.connected(device, state);
-  $('connection-badge').textContent = device ? NanoConnection.describe(device).status : '';
+  $('connection-badge').textContent = '';
   $('connection-badge').classList.toggle('connected', connected);
-  const signature = JSON.stringify([device, connected ? state.services : [], state.ble, state.security, online, NanoConnection.snapshot().pending]);
+  const signature = JSON.stringify([device, connected ? state.services : [], state.ble, state.security, online, NanoConnection.snapshot().pending, readSession, readResult]);
   if (signature === detailSignature) return;
   detailSignature = signature;
+  const previousName = $('inspector').querySelector('h3')?.textContent;
   replacePreservingFocus($('inspector'), buildDeviceDetail(device));
+  const title = $('inspector').querySelector('h3');
+  if (title && previousName && title.textContent !== previousName) title.classList.add('identity-reveal');
 }
 function buildDeviceDetail(device, fullPage = false) {
   if (!device) return empty('Choose a device from the list', '', 'inspector-empty');
@@ -114,7 +149,11 @@ function buildDeviceDetail(device, fullPage = false) {
   const top = node('div', 'detail-top');
   const title = node('div');
   const gattName = connected ? identityFields(state.services).find(field => field.label === 'Device name')?.value : '';
-  if (!fullPage) title.append(node('h3', '', device.label || device.name || gattName || 'Unnamed device'));
+  if (!fullPage) title.append(node('h3', '', typeof deviceDisplayName === 'function' ? deviceDisplayName({ ...device, gattName: gattName || device.gattName }) : device.label || device.name || gattName || device.address));
+  if (connected) {
+    const identity = identityFields(state.services).filter(field => ['Manufacturer', 'Model', 'Appearance'].includes(field.label));
+    if (identity.length) title.append(node('p', 'identity-line', identity.map(field => field.value).join(' · ')));
+  }
   title.append(node('p', '', device.address));
   top.append(title);
   const personal = node('div', 'device-personal');
@@ -136,9 +175,13 @@ function buildDeviceDetail(device, fullPage = false) {
   if (company) data.append(metadata('BLE manufacturer', company));
   data.append(metadata('Address vendor', vendor.addressNote || vendor.addressVendor || fallback));
   if (device.services?.length) data.append(metadata('Advertised services', device.services.join('\n'), true, true));
-  detail.append(top, NanoConnection.controls(device, fullPage ? 'page-connect' : 'inspector-connect'), personal);
+  detail.append(top, NanoConnection.controls(device, fullPage ? 'page-connect' : 'inspector-connect'));
+  if (!fullPage) appendDeviceServices(detail, connected);
   if (connected && fullPage) appendIdentity(detail);
-  if (connected) detail.append(suggestedActions(device));
+  if (connected) {
+    const commands = node('details', 'raw-details'); commands.dataset.persist = `suggested-${deviceKey(device)}`;
+    commands.append(node('summary', '', 'Available commands'), suggestedActions(device)); detail.append(commands);
+  }
   const advertisement = node('details', 'raw-details'); advertisement.dataset.persist = `advertisement-${deviceKey(device)}`;
   advertisement.append(node('summary', '', 'Advertisement & identification'), data);
   if (profile.category !== 'other') {
@@ -153,7 +196,7 @@ function buildDeviceDetail(device, fullPage = false) {
     advertisement.append(matches);
   }
   const actions = node('div', 'inspector-shortcuts');
-  if (!fullPage) actions.append(button('Open device page', 'primary', () => NanoDevicePage.open(device), false, 'device-page'));
+  if (!fullPage) actions.append(button('View device', 'quiet', () => NanoDevicePage.open(device), false, 'device-page'));
   if (connected) actions.append(button('Pair / security', 'secondary', () => NanoDevicePage.open(device, true), false, 'pair'));
   actions.append(button('Signal & metadata', 'secondary', () => NanoWorkspace.show('insights'), false, 'insights'));
   for (const id of NanoModules.matches(device)) {
@@ -163,28 +206,44 @@ function buildDeviceDetail(device, fullPage = false) {
   }
   if (connected) actions.append(button('Open workbench', 'secondary', () => NanoWorkspace.show('workbench'), false, 'workbench'));
   if (fullPage && connected) actions.append(button('Inspect services', 'secondary', () => NanoDevicePage.services(device), false, 'services'));
-  detail.append(actions);
-  if (!fullPage) appendDeviceServices(detail, connected);
+  detail.append(actions, personal);
   advertisement.append(NanoConsole.advertisement(device, state, online)); detail.append(advertisement);
   return detail;
 }
 function appendDeviceServices(detail, connected) {
-  const device = selectedDevice();
+  const device = selectedDevice(), key = device && deviceKey(device);
   connected = connected && NanoDeviceLibrary.connected(device, state);
+  const retained = retainedGatt.get(key), stale = !connected || !online;
+  const services = connected && online ? state.services : retained?.services || [];
   const header = node('div', 'gatt-header');
-  header.append(node('h3', 'section-label', connected ? `GATT services · ${state.services.length}` : 'GATT services'));
-  if (connected && state.services.length) header.append(button('Read all values', 'secondary', readAllValues, pending || !online || state.ble.busy || !readableHandles(state.services).length, 'read-all'));
+  header.append(node('h3', 'section-label', services.length ? `GATT services · ${services.length}` : 'GATT services'));
+  const reading = readSession?.key === key ? readSession : null;
+  if (reading) {
+    const progress = node('span', 'read-progress', `${reading.stopped ? 'Stopping' : 'Reading'} ${Math.min(reading.completed + 1, reading.total)} of ${reading.total}…`);
+    progress.setAttribute('role', 'status'); header.append(progress);
+    header.append(button('Stop', 'secondary', readAllValues, reading.stopped, 'read-all'));
+  } else if (connected && services.length) {
+    const read = button('Read all values', 'primary', readAllValues, Boolean(readSession) || pending || !online || state.ble.busy || !readableHandles(services).length, 'read-all');
+    read.title = 'Read all values (R)'; header.append(read);
+  }
   detail.append(header);
-  if (connected) detail.append(node('p', 'hint', `Discovery scope: ${state.ble.discoveryScope || 'all services'} · MTU ${state.ble.mtu || 23}.`));
-  if (connected) appendIdentity(detail);
-  if (connected && state.services.length) {
-    for (const [index, service] of state.services.entries()) {
-      const section = node('details', 'service'); section.open = true; section.dataset.collapse = `service-${deviceKey(device)}-${index}-${service.uuid}`;
+  if (stale && retained) detail.append(node('p', 'hint stale-results', `${retained.partial ? 'Interrupted discovery' : 'Saved results'} · ${new Date(retained.at).toLocaleTimeString()} · Read-only. Reconnect to refresh.`));
+  if (readResult?.key === key) {
+    const result = readResult, status = node('p', 'read-result'); status.setAttribute('role', 'status');
+    status.append(node('span', '', `${result.stopped ? 'Stopped' : 'Finished'} · Read ${result.completed - result.failed} of ${result.total} values${result.failed ? ` · ${result.failed} failed` : ''}.`));
+    if (result.pairing && connected && online) status.append(button(`${result.pairing} need pairing · Security`, 'quiet', () => NanoDevicePage.open(device, true), pending || state.ble.busy, 'read-pair'));
+    detail.append(status);
+  }
+  if (services.length) {
+    const info = node('details', 'raw-details'); info.dataset.persist = `identity-${key}`;
+    info.append(node('summary', '', 'Device information')); appendIdentity(info, services); detail.append(info);
+    for (const [index, service] of services.entries()) {
+      const section = node('details', 'service'); section.open = true; section.dataset.collapse = `service-${key}-${index}-${service.uuid}`;
       const heading = node('summary', 'service-title'), title = node('div'), count = service.characteristics.length;
       const definition = NanoDeviceLibrary.lookup(service.uuid);
       title.append(node('h4', '', definition?.name || uuidName(service.uuid, 'Custom service')), node('span', 'uuid', `${service.uuid} · ${count} ${count === 1 ? 'characteristic' : 'characteristics'}`));
       heading.append(title); section.append(heading);
-      for (const characteristic of service.characteristics) section.append(renderCharacteristic(characteristic, service.uuid));
+      for (const characteristic of service.characteristics) section.append(renderCharacteristic(characteristic, service.uuid, stale, device));
       appendDefinition(section, definition, `service-${index}-${service.uuid}`);
       if (!service.characteristics.length) section.append(node('p', 'hint', 'No characteristics found.'));
       detail.append(section);

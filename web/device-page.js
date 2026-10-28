@@ -31,9 +31,9 @@ const NanoDevicePage = (() => {
     NanoPairing.update(state, online, device); renderHeader();
     if (NanoWorkspace.view() !== 'device') return;
     if (lastDevice !== selected) { lastDevice = selected; showTab('overview'); }
-    const next = JSON.stringify([device, connected, state.services, state.ble, online, NanoConnection.snapshot().pending, NanoMetadata.status()]);
+    const next = JSON.stringify([device, connected, state.services, state.ble, online, NanoConnection.snapshot().pending, NanoMetadata.status(), deviceDisplayName(device), typeof readSession !== 'undefined' ? readSession : null]);
     if (next === signature) return; signature = next;
-    $('device-page-title').textContent = device?.label || device?.name || 'Device';
+    $('device-page-title').textContent = deviceDisplayName(device);
     replacePreservingFocus($('device-summary'), buildDeviceDetail(device, true));
     const services = node('div');
     if (device) {
@@ -45,10 +45,10 @@ const NanoDevicePage = (() => {
   }
   function renderHeader() {
     const device = NanoConnection.pendingDevice() || NanoConnection.connectedDevice() || selectedDevice(), status = NanoConnection.describe(device);
-    const next = JSON.stringify([device?.address, device?.addressType, device?.name, device?.label, status.status, status.reason, status.enabled, status.label, state.security?.status]);
+    const next = JSON.stringify([device?.address, device?.addressType, deviceDisplayName(device), status.status, status.details, status.reason, status.enabled, status.label, state.security?.status]);
     if (next === headerSignature) return; headerSignature = next;
     const menu = node('details', 'header-connection'); menu.open = Boolean($('header-device').querySelector('details')?.open);
-    const summary = node('summary'); summary.append(node('span', 'header-device-name', device?.label || device?.name || device?.address || 'No active device'));
+    const summary = node('summary'); summary.append(node('span', 'header-device-name', device ? deviceDisplayName(device) : 'No active device'));
     if (device) summary.append(node('span', 'header-device-state', status.status));
     const actions = node('div', 'header-device-menu');
     if (device) {
