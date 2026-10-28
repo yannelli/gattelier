@@ -1,12 +1,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
+import { createRequire } from 'node:module';
+const apiTools = createRequire(import.meta.url)('../web/api.js');
 import { readFileSync } from 'node:fs';
 
 const source = readFileSync(new URL('../web/api-ui.js', import.meta.url), 'utf8');
 
 function fixture() {
-  const controls = new Map(), handlers = new Map(), calls = [];
+  const controls = new Map(), handlers = new Map(), calls = [], requests = [];
+  let reply = async () => ({ ok: true, json: async () => ({ ble: {}, wifi: {} }) });
   function get(selector) {
     if (!controls.has(selector)) controls.set(selector, {
       value: '', checked: false, disabled: false, hidden: false, textContent: '', listeners: {},
@@ -22,6 +25,7 @@ function fixture() {
   let origin = 'https://board.example', transport = 'http', wifiError = '';
   const emit = type => handlers.get(type)?.();
   const api = {
+    validateOrigin: value => apiTools.validateOrigin(value, new URL('https://app.example')), addressSpace: apiTools.addressSpace,
     origin: () => origin, transport: () => transport, serialStatus: () => status,
     configured: () => transport === 'serial' ? status.connected : Boolean(origin),
     setOrigin(value) {
@@ -39,11 +43,11 @@ function fixture() {
     },
   };
   const context = vm.createContext({ document, NanoAPI: api, NanoAccessUI: { mount() {} },
-    AbortController, setTimeout, clearTimeout, addEventListener: (type, callback) => handlers.set(type, callback) });
+    URL, AbortController, setTimeout, clearTimeout, fetch: (url, options) => { calls.push(url); requests.push({ url, options }); return reply(url, options); }, addEventListener: (type, callback) => handlers.set(type, callback) });
   vm.runInContext(source, context);
   context.NanoAPIUI.mount(panel);
   const input = get('[data-api-origin]');
-  return { get, input, document, status, calls, api, emit,
+  return { get, input, document, status, calls, requests, api, emit, respond: callback => { reply = callback; },
     draft(value) { input.value = value; input.listeners.input(); },
     failWifi(message) { wifiError = message; },
   };
@@ -85,7 +89,7 @@ test('saving a focused draft displays the normalized origin and clears its dirty
   assert.equal(f.input.value, 'https://saved.example');
   assert.equal(f.api.origin(), 'https://saved.example');
   assert.equal(f.document.activeElement, f.input);
-  assert.deepEqual(f.calls, ['/api/state']);
+  assert.deepEqual(f.calls, ['https://saved.example/api/state']);
   f.document.activeElement = null;
   f.api.setOrigin('https://changed.example');
   assert.equal(f.input.value, 'https://changed.example');
@@ -129,4 +133,73 @@ test('an accepted USB Wi-Fi toggle shows the resulting board status', async () =
   assert.equal(toggle.disabled, false);
   assert.equal(toggle.checked, false);
   assert.equal(f.get('[data-api-message]').textContent, 'Wi-Fi is on.');
+});
+
+test('Test probes the draft address without saving it or changing the active endpoint', async () => {
+  const f = fixture(); f.draft(' https://draft.example/ ');
+  await f.get('[data-api-check]').listeners.click();
+  assert.deepEqual(f.calls, ['https://draft.example/api/state']);
+  assert.equal(f.api.origin(), 'https://board.example');
+  assert.equal(f.input.value, ' https://draft.example/ ');
+  assert.equal(f.get('[data-api-state]').textContent, 'Test passed');
+  assert.match(f.get('[data-api-message]').textContent, /draft.example/);
+  assert.match(f.get('[data-api-message]').textContent, /Save/);
+});
+
+test('an unsaved first address can be tested with a read-only local-network request', async () => {
+  const f = fixture(); f.api.clearOrigin(); f.draft('http://192.168.1.88');
+  await f.get('[data-api-check]').listeners.click();
+  assert.equal(f.api.origin(), '');
+  assert.equal(f.requests[0].url, 'http://192.168.1.88/api/state');
+  assert.equal(f.requests[0].options.method, 'GET');
+  assert.equal(f.requests[0].options.targetAddressSpace, 'local');
+  assert.equal(f.requests[0].options.credentials, 'omit');
+  assert.equal(f.requests[0].options.cache, 'no-store');
+});
+
+test('invalid draft addresses fail validation without contacting the saved endpoint', async () => {
+  const f = fixture(); f.draft('ftp://draft.example');
+  await f.get('[data-api-check]').listeners.click();
+  assert.deepEqual(f.calls, []); assert.equal(f.api.origin(), 'https://board.example');
+  assert.match(f.get('[data-api-message]').textContent, /HTTP or HTTPS/);
+});
+
+test('editing a draft aborts its pending test and suppresses a late result', async () => {
+  const f = fixture(); let resolve;
+  f.respond(() => new Promise(done => { resolve = done; }));
+  f.draft('https://first.example'); const pending = f.get('[data-api-check]').listeners.click();
+  f.draft('https://second.example');
+  assert.equal(f.requests[0].options.signal.aborted, true);
+  resolve({ ok: true, json: async () => ({ ble: {}, wifi: {} }) }); await pending;
+  assert.equal(f.input.value, 'https://second.example');
+  assert.equal(f.get('[data-api-state]').textContent, 'Not saved');
+  assert.equal(f.get('[data-api-message]').textContent, '');
+});
+
+test('a transport change aborts the draft probe and rejects its late error', async () => {
+  const f = fixture(); let reject;
+  f.respond(() => new Promise((_resolve, fail) => { reject = fail; }));
+  f.draft('https://draft.example'); const pending = f.get('[data-api-check]').listeners.click();
+  f.api.selectTransport('serial');
+  assert.equal(f.requests[0].options.signal.aborted, true);
+  reject(new Error('Old request failed')); await pending;
+  assert.doesNotMatch(f.get('[data-api-message]').textContent, /Old request/);
+  assert.equal(f.api.transport(), 'serial');
+});
+
+test('non-JSON and empty error replies report the endpoint failure clearly', async () => {
+  for (const [ok, status, empty] of [[true, 200, false], [false, 404, false], [false, 503, true]]) {
+    const f = fixture(); f.draft('https://wrong.example');
+    f.respond(async () => ({ ok, status, json: async () => { if (empty) return null; throw new SyntaxError('Unexpected token <'); } }));
+    await f.get('[data-api-check]').listeners.click();
+    assert.equal(f.get('[data-api-message]').textContent, ok ? 'The endpoint did not return Gattelier board status.' : `Connection failed (${status}).`);
+    assert.equal(f.api.origin(), 'https://board.example');
+  }
+});
+
+test('an aborted response body keeps the connection timeout explanation', async () => {
+  const f = fixture(); f.draft('https://draft.example');
+  f.respond(async () => ({ ok: true, json: async () => { throw Object.assign(new Error('Aborted'), { name: 'AbortError' }); } }));
+  await f.get('[data-api-check]').listeners.click();
+  assert.match(f.get('[data-api-message]').textContent, /timed out/);
 });

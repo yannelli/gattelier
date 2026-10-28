@@ -32,7 +32,8 @@ var NanoAPIUI = (() => {
     const wifiOff = panel.querySelector('[data-api-wifi-off]');
     const appOrigin = globalThis.location?.origin || 'https://your-app.example';
     panel.querySelector('[data-api-command]').textContent = `NANOSCOPE_ALLOWED_ORIGIN=${appOrigin} NANOSCOPE_BOARD_URL=http://nanoscope.local scripts/start-pwa.sh --serve`;
-    let wifiChanging = false, checkGeneration = 0, originDirty = false;
+    let wifiChanging = false, checkGeneration = 0, originDirty = false, checkController;
+    function invalidateCheck() { checkGeneration++; checkController?.abort(); checkController = null; }
 
     function render(text = '', resetOrigin = false) {
       const origin = NanoAPI.origin(), usb = NanoAPI.transport() === 'serial', status = NanoAPI.serialStatus();
@@ -44,30 +45,39 @@ var NanoAPIUI = (() => {
       disconnect.hidden = status.state !== 'connected'; connect.hidden = !disconnect.hidden;
       wifiOff.disabled = wifiChanging || ['connecting', 'closing'].includes(status.state);
       if (status.connected) wifiOff.checked = status.wifiSuspended;
-      state.textContent = usb ? ({ connected: 'Connected', connecting: 'Connecting', closing: 'Disconnecting', disconnected: '' }[status.state]) : origin ? 'Saved' : 'Not set up';
+      state.textContent = usb ? ({ connected: 'Connected', connecting: 'Connecting', closing: 'Disconnecting', disconnected: '' }[status.state]) : originDirty ? 'Not saved' : origin ? 'Saved' : 'Not set up';
       state.classList.toggle('online', usb && status.connected);
       const usbText = !status.secure ? 'USB requires HTTPS or localhost.' : !status.supported ? 'Web Serial is unavailable. Open this app in desktop Chrome.' : status.error || (status.connected ? `Wi-Fi is ${status.wifiSuspended ? 'paused' : 'on'}.` : '');
       message.textContent = text || (usb ? usbText : '');
     }
 
     async function check() {
-      if (NanoAPI.transport() !== 'http' || !NanoAPI.configured()) return;
-      const token = ++checkGeneration;
-      state.textContent = 'Testing'; message.textContent = 'Allow local-network access if your browser asks.';
-      const controller = new AbortController(), timer = setTimeout(() => controller.abort(), 10000);
+      if (NanoAPI.transport() !== 'http') return;
+      invalidateCheck(); const token = checkGeneration;
+      state.textContent = 'Testing'; state.classList.remove('online'); message.textContent = 'Allow local-network access if your browser asks.';
+      const controller = checkController = new AbortController(), timer = setTimeout(() => controller.abort(), 10000);
+      let target;
       try {
-        const response = await NanoAPI.fetch('/api/state', { signal: controller.signal });
-        const body = await response.json();
-        if (!response.ok) throw new Error(body.error || `Connection failed (${response.status}).`);
+        const origin = NanoAPI.validateOrigin(input.value);
+        target = new URL('/api/state', origin);
+        const space = target.protocol === 'http:' ? NanoAPI.addressSpace(target.hostname) : '';
+        const response = await fetch(target.href, { method: 'GET', credentials: 'omit', cache: 'no-store', signal: controller.signal, ...(space ? { targetAddressSpace: space } : {}) });
+        let body;
+        try { body = await response.json(); } catch (error) {
+          if (error.name === 'AbortError') throw error;
+          throw new Error(response.ok ? 'The endpoint did not return Gattelier board status.' : `Connection failed (${response.status}).`);
+        }
+        if (!response.ok) throw new Error(body?.error || `Connection failed (${response.status}).`);
         if (!body?.ble || !body?.wifi) throw new Error('The endpoint did not return Gattelier board status.');
         if (token !== checkGeneration) return;
-        state.textContent = 'Connected'; state.classList.add('online');
-        message.textContent = `Connected to ${NanoAPI.origin()}.`;
+        const saved = origin === NanoAPI.origin();
+        state.textContent = saved ? 'Connected' : 'Test passed'; state.classList.add('online');
+        message.textContent = saved ? `Connected to ${origin}.` : `Found Gattelier at ${origin}. Save to use this address.`;
       } catch (error) {
         if (token !== checkGeneration) return;
         state.textContent = 'Connection failed'; state.classList.remove('online');
-        message.textContent = error.name === 'AbortError' ? 'The connection check timed out or the endpoint changed.' : error instanceof TypeError && NanoAPI.origin().startsWith('http:') ? 'Could not reach the board. Check local-network permission, Wi-Fi and the board\'s allowed app. If this browser blocks local HTTP, use the HTTPS bridge.' : error.message;
-      } finally { clearTimeout(timer); }
+        message.textContent = error.name === 'AbortError' ? 'The connection check timed out or the endpoint changed.' : error instanceof TypeError && target?.protocol === 'http:' ? 'Could not reach the board. Check local-network permission, Wi-Fi and the board\'s allowed app. If this browser blocks local HTTP, use the HTTPS bridge.' : error.message;
+      } finally { clearTimeout(timer); if (checkController === controller) checkController = null; }
     }
 
     for (const radio of panel.querySelectorAll('[name="board-transport"]')) radio.addEventListener('change', () => NanoAPI.selectTransport(radio.value));
@@ -88,18 +98,18 @@ var NanoAPIUI = (() => {
       catch (error) { errorMessage = error.message; }
       finally { wifiChanging = false; render(errorMessage); }
     });
-    input.addEventListener('input', () => { originDirty = true; });
+    input.addEventListener('input', () => { invalidateCheck(); originDirty = true; render(); });
     panel.querySelector('[data-api-form]').addEventListener('submit', event => {
-      event.preventDefault();
+      event.preventDefault(); invalidateCheck();
       try { NanoAPI.setOrigin(input.value); render('Saved. Testing…', true); check(); }
       catch (error) { render(error.message); }
     });
     panel.querySelector('[data-api-check]').addEventListener('click', check);
     panel.querySelector('[data-api-clear]').addEventListener('click', () => {
-      NanoAPI.clearOrigin();
+      invalidateCheck(); NanoAPI.clearOrigin();
       render(NanoAPI.configured() ? 'Using this page\'s address.' : 'Address cleared.', true);
     });
-    globalThis.addEventListener('nanoscope:api-change', () => { checkGeneration++; render(); });
+    globalThis.addEventListener('nanoscope:api-change', () => { invalidateCheck(); render(); });
     globalThis.addEventListener('nanoscope:serial', () => render());
     NanoAccessUI.mount(panel);
     render();
