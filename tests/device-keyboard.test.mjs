@@ -166,3 +166,20 @@ test('restored app targets preserve app navigation without requiring a current m
   vm.runInContext('selectDevice(fixtures[1])', h.context);
   assert.equal(opened, 1);
 });
+
+test('hidden device panes defer list selection and rebuild from current state when opened', () => {
+  const { context, list } = harness(), pane = { hidden: true }, summary = {};
+  context.checks = { selected: 0, replaced: 0 };
+  context.document.getElementById = id => ({ 'workspace-pane': pane, devices: list, search: { value: '' }, 'list-summary': summary })[id];
+  context.document.createDocumentFragment = () => ({ append() {} });
+  vm.runInContext(`browserUI = { select() { checks.selected++; return []; }, isFiltered: () => false };
+    empty = () => ({}); replacePreservingFocus = () => checks.replaced++; renderList();`, context);
+  assert.equal(context.checks.selected, 0); assert.equal(context.checks.replaced, 0);
+  pane.hidden = false; vm.runInContext('renderList()', context);
+  assert.equal(context.checks.selected, 1); assert.equal(context.checks.replaced, 1);
+  pane.hidden = true; vm.runInContext('state.uptime = 200; renderList()', context);
+  assert.equal(context.checks.selected, 1); assert.equal(context.checks.replaced, 1);
+  pane.hidden = false; vm.runInContext('renderList()', context);
+  assert.equal(context.checks.selected, 2); assert.equal(context.checks.replaced, 2);
+  assert.equal(summary.textContent, '0 matching · 3 in browser');
+});

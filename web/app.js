@@ -149,6 +149,7 @@ function metadata(label, value, wide = false, mono = false) {
   return element;
 }
 function renderList() {
+  if ($('workspace-pane')?.hidden) return;
   const devices = browserUI ? browserUI.select(browseDevices(), vendorDatabase) : visibleDevices(state.devices, $('search').value);
   const signature = JSON.stringify([devices, selected, state.ble.address, state.ble.connected, state.ble.scanning, state.uptime]);
   if (signature === listSignature) return;
@@ -367,7 +368,7 @@ async function boot() {
       return { name: deviceDisplayName(device), manufacturer: NanoSchlage.identify(device, state) ? 'Schlage' : recorder?.product.split(' ')[0] || vendor.manufacturer || vendor.addressVendor };
     },
     selectModuleTarget: (id, device, restored) => NanoModules.selectAppDevice(id, device, restored),
-    getModuleTarget: id => NanoModules.matches(selectedDevice()).includes(id) ? selectedDevice() : NanoModules.appDevice(id), onChange: render });
+    getModuleTarget: id => NanoModules.matches(selectedDevice()).includes(id) ? selectedDevice() : NanoModules.appDevice(id), onChange: render, onPaneOpen: renderList });
   $('scan').addEventListener('click', () => mutate(scanAction(state.ble)));
   $('search').addEventListener('input', renderList);
   $('devices').tabIndex = 0;

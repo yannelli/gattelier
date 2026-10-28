@@ -27,7 +27,7 @@ const NanoWorkspace = (() => {
   }
   function saveLayout() { try { globalThis.localStorage?.setItem(layoutKey, JSON.stringify(layout)); } catch {} }
   function renderPane() {
-    const pane = get('workspace-pane'), narrow = mobile();
+    const pane = get('workspace-pane'), narrow = mobile(), wasOpen = paneOpen;
     paneOpen = narrow ? drawer : layout.pane === 'pinned' || layout.pane === 'open' || layout.pane === 'auto' && active === 'discover';
     if (pane) {
       pane.hidden = !paneOpen; pane.setAttribute('role', narrow ? 'dialog' : 'complementary');
@@ -44,6 +44,7 @@ const NanoWorkspace = (() => {
     if (get('pane-backdrop')) get('pane-backdrop').hidden = !(narrow && paneOpen);
     for (const id of ['workspace-stage', 'workspace-global', 'workspace-session-bar', 'workspace-status', 'workspace-header']) if (get(id)) get(id).inert = narrow && paneOpen;
     document.body?.classList.toggle('workspace-drawer-open', narrow && paneOpen);
+    if (paneOpen && !wasOpen) preferences.onPaneOpen?.();
   }
   function setPane(mode) {
     if (!['auto', 'open', 'pinned', 'closed'].includes(mode)) return false;

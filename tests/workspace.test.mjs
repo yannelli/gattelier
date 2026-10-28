@@ -128,6 +128,19 @@ test('mobile drawer makes content inert and Escape restores toggle focus', () =>
   assert.equal(element('workspace-stage').inert, false); assert.equal(element('pane-toggle').focused, true);
 });
 
+test('opening the device pane refreshes deferred rows on desktop and mobile', () => {
+  for (const mobile of [false, true]) {
+    let opened = 0;
+    const { workspace, element } = setup('workbench', { mobile, hooks: { onPaneOpen: () => opened++ } });
+    assert.equal(opened, 0);
+    element('pane-toggle').listeners.click(); assert.equal(opened, 1);
+    assert.equal(element('workspace-pane').hidden, false);
+    if (!mobile) { workspace.setPane('open'); assert.equal(opened, 1); }
+    element('pane-toggle').listeners.click(); assert.equal(opened, 1);
+    element('pane-toggle').listeners.click(); assert.equal(opened, 2);
+  }
+});
+
 test('global navigation keyboard selects the requested view', () => {
   const { element, workspace } = setup(); let prevented = false;
   element('tab-discover').listeners.keydown({ key: 'End', preventDefault() { prevented = true; } });
