@@ -20,8 +20,8 @@ test('connection states explain unavailable actions and offer explicit switching
   }
   const broadcast = connection.describe({ ...target, connectable: false }, context({}, []));
   assert.equal(broadcast.enabled, false); assert.equal(broadcast.status, 'Broadcast only');
-  assert.equal(connection.describe(target, context({ connected: true, address: target.address })).label, 'Disconnect');
-  assert.equal(connection.describe(target, context({ connected: true, address: other.address })).label, 'Switch and connect');
+  assert.equal(connection.describe(target, context({ connected: true, addressType: 0, address: target.address })).label, 'Disconnect');
+  assert.equal(connection.describe(target, context({ connected: true, addressType: 0, address: other.address })).label, 'Switch and connect');
 });
 function harness(initial, options = {}) {
   let state = initial, selected = target;
@@ -31,13 +31,13 @@ function harness(initial, options = {}) {
     action: async (action, body) => {
       calls.push({ action, body });
       if (options.fail) throw new Error('Radio timeout');
-      state = { ...state, ble: { connected: action === 'connect', address: action === 'connect' ? target.address : '' } };
+      state = { ...state, ble: { connected: action === 'connect', addressType: 0, address: action === 'connect' ? target.address : '' } };
       return state;
     }, ...options.hooks });
   return { calls };
 }
 test('global controller disconnects another device then connects its exact address', async () => {
-  const { calls } = harness({ ble: { connected: true, address: other.address }, devices: [{ ...target, id: 19 }] });
+  const { calls } = harness({ ble: { connected: true, addressType: 0, address: other.address }, devices: [{ ...target, id: 19 }] });
   assert.equal(connection.connectedDevice().name, 'Smart bed');
   const result = await connection.ensure(target);
   assert.deepEqual(calls, [{ action: 'disconnect', body: undefined }, { action: 'connect', body: { address: target.address, addressType: target.addressType } }]);
@@ -55,7 +55,7 @@ test('the Connect button asks for identity reads; app connections do not', async
   assert.deepEqual(calls, [{ action: 'connect', body: { address: target.address, addressType: 0, identify: true } }]);
 });
 test('already connected is reused without reconnecting and failures clear pending', async () => {
-  const { calls } = harness({ ble: { connected: true, address: target.address }, devices: [] });
+  const { calls } = harness({ ble: { connected: true, addressType: 0, address: target.address }, devices: [] });
   await connection.ensure(target); assert.equal(calls.length, 0);
   harness({ ble: {}, devices: [] }, { fail: true });
   await assert.rejects(connection.ensure(target), /Radio timeout/);
@@ -99,7 +99,7 @@ test('connecting and discovering cancellation is scoped to the target, type and 
 test('cancelling a switch during disconnect prevents the next connection', async () => {
   let release;
   const calls = [];
-  harness({ ble: { connected: true, address: other.address }, devices: [target] }, { hooks: { action: async action => { calls.push(action); await new Promise(resolve => { release = resolve; }); return { ble: { connected: false }, devices: [target] }; } } });
+  harness({ ble: { connected: true, addressType: 0, address: other.address }, devices: [target] }, { hooks: { action: async action => { calls.push(action); await new Promise(resolve => { release = resolve; }); return { ble: { connected: false }, devices: [target] }; } } });
   const operation = connection.ensure(target);
   await Promise.resolve();
   await connection.cancel(target); release();
@@ -125,4 +125,10 @@ test('streamed devices remain connectable after the transient board cache evicts
   const { calls } = harness({ ble: {}, devices: [] });
   await connection.ensure(streamed);
   assert.deepEqual(calls, [{ action: 'connect', body: { address: target.address, addressType: 0 } }]);
+});
+
+test('same address with another address type is a different connection', () => {
+  const status = connection.describe(target, context({ connected: true, address: target.address, addressType: 1 }));
+  assert.equal(status.connected, false);
+  assert.equal(status.label, 'Switch and connect');
 });

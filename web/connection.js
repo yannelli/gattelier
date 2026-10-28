@@ -11,8 +11,8 @@ const NanoConnection = (() => {
   function connectedDevice(context = snapshot()) {
     if (!context.state.ble.connected) return null;
     const target = context.state.ble.address?.toLowerCase();
-    return (hooks?.devices() || context.state.devices || []).find(item => address(item) === target)
-      || (address(context.selected) === target ? context.selected : null) || { address: target, name: target };
+    return (hooks?.devices() || context.state.devices || []).find(item => same(item, context.state.ble))
+      || (same(context.selected, context.state.ble) ? context.selected : null) || { address: target, addressType: context.state.ble.addressType, name: target };
   }
   function pendingDevice(context = snapshot()) {
     const ble = context.state.ble || {};
@@ -23,7 +23,7 @@ const NanoConnection = (() => {
     return inFlight && attempt ? attempt.device : null;
   }
   function describe(device, context = snapshot()) {
-    const ble = context.state.ble || {}, connected = Boolean(device && ble.connected && address(device) === String(ble.address).toLowerCase());
+    const ble = context.state.ble || {}, connected = Boolean(device && ble.connected && same(device, ble));
     const live = (context.state.devices || []).find(item => same(item, device)) || (device?.streamLive ? device : null);
     const result = { connected, live, enabled: false, label: connected ? 'Disconnect' : 'Connect', status: connected ? 'Connected' : 'Disconnected', reason: '' };
     if (!device) return { ...result, status: 'Choose a device in Discover', reason: '' };
@@ -62,7 +62,7 @@ const NanoConnection = (() => {
       if (identify) body.identify = true;
       currentAttempt.posted = true;
       const result = await hooks.action('connect', body);
-      if (!result.ble.connected || String(result.ble.address).toLowerCase() !== address(device)) throw new Error(result.ble.error || 'The device did not establish a connection. Try again.');
+      if (!result.ble.connected || !same(device, result.ble)) throw new Error(result.ble.error || 'The device did not establish a connection. Try again.');
       return result;
     } finally { inFlight = false; attempt = null; hooks.changed(); }
   }

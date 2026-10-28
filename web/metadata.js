@@ -11,7 +11,7 @@ const NanoMetadata = (() => {
     const seen = new Set();
     const entries = value.entries.map(entry => {
       const id = uuid(entry.uuid);
-      if (!uuidPattern.test(id) || seen.has(id) || !text(entry.name) || !text(entry.source)) throw new Error('Invalid metadata entry.');
+      if (!uuidPattern.test(id) || seen.has(id) || !text(entry.name) || typeof entry.source !== 'string' || !entry.source.length || entry.source.length > 2048 || /[\u0000-\u001f]/.test(entry.source)) throw new Error('Invalid metadata entry.');
       const source = new URL(entry.source);
       if (source.protocol !== 'https:' || source.username || source.password) throw new Error('Metadata sources must use HTTPS.');
       seen.add(id);

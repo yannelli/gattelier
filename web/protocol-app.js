@@ -31,7 +31,8 @@ const NanoProtocolApp = (() => {
     importBody.append(el('p', 'vendor-note', 'Imported values stay separate from live observations.'), formatLabel, uuidLabel, valueLabel, decode, imported);
     function selectFormat() { uuidLabel.hidden = !['gatt', 'service'].includes(format.value); uuidLabel.textContent = format.value === 'service' ? 'Service UUID' : 'Characteristic UUID'; uuidLabel.append(uuid); value.placeholder = format.value === 'status' ? protocol.captureExample || '' : ''; uuid.placeholder = format.value === 'service' ? protocol.service : protocol.characteristics?.status || '00002a19-0000-1000-8000-00805f9b34fb'; imported.replaceChildren(); }
     format.addEventListener('change', selectFormat); selectFormat();
-    const composer = el('details', 'protocol-details'), composerLabel = el('summary', '', 'Prepare a command'), form = el('form', 'protocol-composer'); composer.append(composerLabel, form);
+    const suggested = el('div', 'protocol-actions'); suggested.setAttribute('aria-label', 'Command previews');
+    const composer = el('details', 'protocol-details'), composerLabel = el('summary', '', 'Command preview'), form = el('form', 'protocol-composer'); composer.append(composerLabel, form);
     const commandLabel = el('label', '', 'Operation'), command = el('select'); commandLabel.append(command);
     const inputs = el('div', 'protocol-inputs'), description = el('p', 'vendor-note'), preview = el('pre', 'protocol-preview protocol-command-preview'), message = el('p', 'protocol-message'); message.setAttribute('role', 'status');
     const prepare = el('button', 'button secondary', 'Build preview'), save = el('button', 'button secondary', 'Export command plan'); prepare.type = 'submit'; save.type = 'button'; save.disabled = true;
@@ -52,6 +53,10 @@ const NanoProtocolApp = (() => {
       }
     }
     command.addEventListener('change', buildInputs); buildInputs();
+    for (const spec of protocol.commands || []) {
+      const choice = el('button', 'button secondary', `Preview ${spec.label}`); choice.type = 'button';
+      choice.addEventListener('click', () => { command.value = spec.id; buildInputs(); composer.open = true; command.focus(); }); suggested.append(choice);
+    }
     form.addEventListener('submit', event => {
       event.preventDefault(); resetPreview();
       try {
@@ -85,17 +90,19 @@ const NanoProtocolApp = (() => {
     });
     const sourceDetails = el('details', 'protocol-details'), sourceLabel = el('summary', '', 'Protocol support & sources'), sources = el('div', 'protocol-sources'); sourceDetails.append(sourceLabel, sources);
     for (const source of protocol.sources) { const link = el('a', '', source.title); link.href = source.url; link.target = '_blank'; link.rel = 'noopener noreferrer'; sources.append(link); }
-    body.append(context, readings, actions, raw, packetDetails, history, importer, composer, evidence, sourceDetails); container.append(heading, body);
+    sourceDetails.append(evidence);
+    body.append(context, readings, suggested, actions, raw, packetDetails, history, importer, composer, sourceDetails); container.append(heading, body);
     function clearTransient() { resetPreview(); for (const input of controls.values()) if (input.type === 'password') input.value = ''; value.value = ''; imported.replaceChildren(); }
     document.addEventListener('nanoscope:workspace', () => { if (NanoWorkspace.view() !== 'apps' || NanoWorkspace.module() !== id) clearTransient(); });
     function render(device, state) {
       const key = device ? `${device.address}/${device.addressType}` : '';
       if (key !== currentKey) { currentKey = key; before = null; samples = []; lastSignature = ''; clearTransient(); buildInputs(); raw.hidden = true; inspect.textContent = 'Show advertisement'; }
       composer.hidden = !protocol.commands?.length || Boolean(protocol.canPrepare && !protocol.canPrepare(device));
+      suggested.hidden = composer.hidden || !device;
       currentSnapshot = device && NanoDeviceApps.snapshot(id, device, state);
       exportSnapshot.disabled = !currentSnapshot; inspect.disabled = !currentSnapshot; prepare.disabled = !currentSnapshot;
       raw.textContent = currentSnapshot ? JSON.stringify({ address: device.address, addressType: device.addressType, manufacturer: device.manufacturer, services: device.services, serviceData: device.serviceData, payloadHex: device.payloadHex }, null, 2) : '';
-      if (!currentSnapshot) { lastSignature = ''; context.textContent = 'Choose a matching device in Discover.'; mode.textContent = ''; readings.replaceChildren(); packetFields.replaceChildren(); packetDetails.hidden = true; evidence.replaceChildren(); historyList.replaceChildren(); return; }
+      if (!currentSnapshot) { lastSignature = ''; context.textContent = 'Select an app device above.'; mode.textContent = ''; readings.replaceChildren(); packetFields.replaceChildren(); packetDetails.hidden = true; evidence.replaceChildren(); historyList.replaceChildren(); return; }
       context.textContent = `${currentSnapshot.title} · ${Number.isFinite(device.rssi) ? `${device.rssi} dBm · ` : ''}${device.lastSeenMs ? NanoInsights.age(device.lastSeenMs) : 'Saved observation'}`;
       mode.textContent = device.streamLive || device.liveId != null ? 'Broadcast updates' : 'Saved observation';
       const signature = JSON.stringify([currentSnapshot.fields, currentSnapshot.limitations]);

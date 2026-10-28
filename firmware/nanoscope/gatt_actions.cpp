@@ -88,13 +88,23 @@ static void notificationReceived(NimBLERemoteCharacteristic* characteristic, uin
   updateValue(handle, data, length);
 }
 
+static String readError(int result) {
+  if (!result) return "";
+  const String prefix = "GATT read failed (BLE code " + String(result) + "). ";
+  if (result == BLE_HS_ATT_ERR(0x05)) return prefix + "Insufficient authentication. Pair explicitly in Security before retrying.";
+  if (result == BLE_HS_ATT_ERR(0x08)) return prefix + "Insufficient authorization. The device requires permission for this value.";
+  if (result == BLE_HS_ATT_ERR(0x0c)) return prefix + "Insufficient encryption key size. Review the pairing in Security.";
+  if (result == BLE_HS_ATT_ERR(0x0f)) return prefix + "Insufficient encryption. Pair explicitly in Security before retrying.";
+  return prefix + "Inspect the connection and characteristic permissions.";
+}
+
 static void readCharacteristic(NimBLERemoteCharacteristic* characteristic, const String& address, const String& uuid) {
-  time_t timestamp = -1;
-  auto value = characteristic->readValue(&timestamp);
-  String error;
-  if (timestamp == -1) error = "GATT read failed (BLE code " + String(characteristic->getClient()->getLastError()) + "). Inspect the connection and security state.";
-  updateValue(characteristic->getHandle(), value.data(), value.size(), error);
-  recordTrace("read", address, uuid, characteristic->getHandle(), value.data(), value.size(), error, timestamp != -1);
+  std::string value;
+  const int result = readAttribute(characteristic->getClient(), characteristic->getHandle(), value);
+  const String error = readError(result);
+  const auto data = reinterpret_cast<const uint8_t*>(value.data());
+  updateValue(characteristic->getHandle(), data, value.size(), error);
+  recordTrace("read", address, uuid, characteristic->getHandle(), result ? nullptr : data, result ? 0 : value.size(), error, result == 0);
   if (error.length()) {
     StateLock lock;
     state.error = error;
@@ -155,7 +165,14 @@ static int onAttributeRead(uint16_t, const ble_gatt_error* error, ble_gatt_attr*
   auto& task = *static_cast<NimBLETaskData*>(arg);
   auto& value = *static_cast<std::string*>(task.m_pBuf);
   if (!error->status && attr) {
-    for (const os_mbuf* om = attr->om; om; om = SLIST_NEXT(om, om_next)) value.append(reinterpret_cast<const char*>(om->om_data), om->om_len);
+    for (const os_mbuf* om = attr->om; om; om = SLIST_NEXT(om, om_next)) {
+      if (om->om_len > BLE_ATT_ATTR_MAX_LEN - value.size()) {
+        const int result = BLE_HS_ATT_ERR(BLE_ATT_ERR_INVALID_ATTR_VALUE_LEN);
+        NimBLEUtils::taskRelease(task, result);
+        return result;
+      }
+      value.append(reinterpret_cast<const char*>(om->om_data), om->om_len);
+    }
     return 0;
   }
   // A value exactly one MTU long ends with a blob read some servers reject; the first chunk is the whole value.
@@ -165,8 +182,8 @@ static int onAttributeRead(uint16_t, const ble_gatt_error* error, ble_gatt_attr*
   return 0;
 }
 
-// Unlike NimBLE's readValue, a plain ATT read never starts pairing, so reads the user did not ask for cannot bond.
 int readAttribute(NimBLEClient* client, uint16_t handle, std::string& value) {
+  value.clear();
   NimBLETaskData task(nullptr, 0, &value);
   const int rc = ble_gattc_read_long(client->getConnHandle(), handle, 0, onAttributeRead, &task);
   if (rc) return rc;
@@ -180,7 +197,7 @@ static void readDescriptor(NimBLEClient* client, const String& address, uint16_t
   std::string value;
   const int rc = readAttribute(client, handle, value);
   const auto data = reinterpret_cast<const uint8_t*>(value.data());
-  if (rc) { failOperation(address, uuid, handle, "Descriptor read failed (BLE code " + String(rc) + "). Pair first if the device requires encryption."); return; }
+  if (rc) { failOperation(address, uuid, handle, readError(rc)); return; }
   updateValue(handle, data, value.size());
   recordTrace("read", address, uuid, handle, data, value.size());
 }

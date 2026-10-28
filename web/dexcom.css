@@ -26,6 +26,17 @@
 .dexcom-options .dexcom-actions { margin-top: 14px; }
 .dexcom-history-window select { min-width: 110px; }
 .dexcom-actions { align-items: center; }
+.dexcom-acquisition { display: grid; gap: 8px; padding: 14px 18px; border: 1px solid var(--line); border-radius: var(--radius-small); }
+.dexcom-acquisition[hidden] { display: none; }
+.dexcom-acquisition strong { font-variant-numeric: tabular-nums; }
+.dexcom-acquisition p { margin: 0; overflow-wrap: anywhere; }
+.dexcom-plot { margin: 0; min-width: 0; }
+.dexcom-plot svg { display: block; width: 100%; height: auto; overflow: visible; }
+.dexcom-plot text { fill: var(--muted); font: 12px system-ui, sans-serif; }
+.dexcom-plot-grid { stroke: var(--line); stroke-width: 1; }
+.dexcom-plot-line { fill: none; stroke: var(--accent, currentColor); stroke-width: 2; }
+.dexcom-plot-point { fill: var(--accent, currentColor); }
+.dexcom-plot figcaption { margin-top: 8px; }
 @media (max-width: 600px) {
   .dexcom-body { padding: 16px; }
   .dexcom-connect { padding: 14px; }

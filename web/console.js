@@ -25,7 +25,7 @@ const NanoConsole = (() => {
     latest = state; online = available;
     if (!get('handle')) return;
     const items = characteristics().filter(writable);
-    const next = JSON.stringify([latest.ble.address, items.map(item => [item.handle, item.uuid, item.properties])]);
+    const next = JSON.stringify([latest.ble.address, latest.ble.addressType, items.map(item => [item.handle, item.uuid, item.properties])]);
     if (signature !== next) {
       signature = next; const selected = get('handle').value;
       get('handle').replaceChildren(...items.map(item => { const option = el('option', '', `${item.handle} · ${item.uuid}`); option.value = item.handle; return option; }));
@@ -33,7 +33,7 @@ const NanoConsole = (() => {
     }
     get('handle').disabled = unavailable() || !items.length;
     get('response').disabled = unavailable() || !items.length;
-    get('replay').disabled = unavailable() || !history.some(item => item.hex && item.address === latest.ble.address);
+    get('replay').disabled = unavailable() || !history.some(item => item.hex && NanoDeviceLibrary.connected(item, latest));
     modes();
   }
   function renderHistory() {
@@ -49,10 +49,10 @@ const NanoConsole = (() => {
       const characteristic = characteristics().find(item => item.handle === handle);
       const response = command?.response ?? get('response').value === 'true';
       if (!characteristic?.properties.includes(response ? 'write' : 'write-no-response')) throw new Error('This characteristic does not support the selected write mode.');
-      if (command && command.address !== latest.ble.address) throw new Error('Replay belongs to a different device.');
+      if (command && (!NanoDeviceLibrary.connected(command, latest) || command.uuid !== characteristic.uuid)) throw new Error('Replay belongs to a different device or characteristic.');
       const data = NanoPackets.payload(command?.hex ?? get('payload').value, command ? 'hex' : get('format').value, response, latest.ble.mtu || 23);
       const redacted = NanoPackets.sensitive(data.hex, characteristic?.uuid);
-      history.unshift({ handle, response, address: latest.ble.address, hex: redacted ? '' : data.hex, redacted });
+      history.unshift({ handle, uuid: characteristic.uuid, response, address: latest.ble.address, addressType: latest.ble.addressType, hex: redacted ? '' : data.hex, redacted });
       history = history.slice(0, 12); renderHistory();
       notify(`Sending ${data.length} bytes to handle ${handle}…`);
       await api.action('write', { handle, hex: data.hex, response });
@@ -73,24 +73,28 @@ const NanoConsole = (() => {
   function characteristicActions(characteristic) {
     const section = el('div', 'characteristic-tools');
     const controls = el('div', 'lab-actions');
-    if (writable(characteristic)) controls.append(button('Write…', () => select(characteristic.handle), unavailable()));
-    for (const [property, mode, label] of [['notify', 'notify', 'Notify'], ['indicate', 'indicate', 'Indicate']]) {
+    const target = { address: latest.ble.address, addressType: latest.ble.addressType };
+    const act = (path, body) => { if (NanoDeviceLibrary.connected(target, latest)) return perform(path, body); };
+    if (writable(characteristic)) controls.append(button('Write…', () => { if (NanoDeviceLibrary.connected(target, latest)) select(characteristic.handle); }, unavailable()));
+    for (const [property, mode, label] of [['notify', 'notify', 'Subscribe (notify)'], ['indicate', 'indicate', 'Subscribe (indicate)']]) {
       if (characteristic.properties.includes(property)) controls.append(button(characteristic.subscription === mode ? `${label} active` : label,
-        () => perform('subscribe', { handle: characteristic.handle, mode }), unavailable() || characteristic.subscription === mode));
+        () => act('subscribe', { handle: characteristic.handle, mode }), unavailable() || characteristic.subscription === mode));
     }
-    if (characteristic.subscription && characteristic.subscription !== 'off') controls.append(button('Unsubscribe', () => perform('subscribe', { handle: characteristic.handle, mode: 'off' }), unavailable()));
+    if (characteristic.subscription && characteristic.subscription !== 'off') controls.append(button('Unsubscribe', () => act('subscribe', { handle: characteristic.handle, mode: 'off' }), unavailable()));
     for (const control of controls.children) control.dataset.focus = `${characteristic.handle}-${control.textContent}`;
     if (controls.childElementCount) section.append(controls);
     if (characteristic.descriptors?.length) {
-      const details = el('details', 'descriptor-list'); details.dataset.persist = `descriptors-${characteristic.handle}`; details.append(el('summary', '', `Descriptors · ${characteristic.descriptors.length}`));
+      const details = el('details', 'descriptor-list'); details.dataset.persist = `descriptors-${target.address}/${target.addressType}-${characteristic.handle}`; details.append(el('summary', '', `Descriptors · ${characteristic.descriptors.length}`));
       for (const descriptor of characteristic.descriptors) {
         const name = typeof NanoMetadata !== 'undefined' ? NanoMetadata.lookup(descriptor.uuid)?.name : '';
-        const row = el('div', 'descriptor'), label = el('div'), read = button('Read', () => perform('read', { handle: descriptor.handle }), unavailable());
+        const row = el('div', 'descriptor'), label = el('div'), read = button('Read', () => act('read', { handle: descriptor.handle }), unavailable());
         read.dataset.focus = `descriptor-${descriptor.handle}`;
         label.append(el('p', '', name || 'Unknown descriptor'), el('p', 'mono', `${descriptor.handle} · ${descriptor.uuid}`)); row.append(label, read); details.append(row);
         if (typeof descriptor.valueHex !== 'string') continue;
         const decoded = typeof NanoGattValues !== 'undefined' ? NanoGattValues.decode(descriptor.uuid, descriptor.valueHex) : [];
-        details.append(el('p', 'mono descriptor-value', decoded.length ? decoded.map(field => `${field.label}: ${field.value}`).join('\n') : descriptor.valueHex || '(empty value)'));
+        if (decoded.length) details.append(el('p', 'descriptor-value', decoded.map(field => `${field.label}: ${field.value}`).join('\n')));
+        const raw = el('details', 'raw-details'); raw.dataset.persist = `descriptor-value-${target.address}/${target.addressType}-${descriptor.handle}`;
+        raw.append(el('summary', '', `Raw value · ${descriptor.valueHex.length / 2} bytes`), el('p', 'mono', descriptor.valueHex || '(empty value)')); details.append(raw);
       }
       section.append(details);
     }

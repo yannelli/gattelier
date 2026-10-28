@@ -5,16 +5,19 @@ const NanoDexcomTransport = (() => {
     const p = typeof NanoDexcomProtocol !== 'undefined' ? NanoDexcomProtocol : require('./dexcom-protocol.js');
     const commands = typeof NanoDexcomCommands !== 'undefined' ? NanoDexcomCommands : require('./dexcom-commands.js');
     const timeout = options.timeoutMs ?? 15000, waiters = new Set(), queue = [];
-    let state = lab.getState(), online = false, target = null, mapping, attempt, boot = '', cursor = 0, gaps = 0, priming = null, failed = '', bootWallTime = null;
+    let state = lab.getState(), online = false, target = null, mapping, attempt, boot = '', cursor = 0, gaps = 0, priming = null, failed = '', bootWallTime = null, startedMs = null;
+    const setFastCapture = enabled => (options.setFastCapture || (value => lab.setFastCapture?.(value)))(enabled);
     function fail(message) {
       if (!target || failed) return;
       failed = message; queue.length = 0;
-      lab.setFastCapture?.(false);
+      setFastCapture(false);
+      if (priming) { const settle = priming; priming = null; settle(new Error(message)); }
       for (const item of [...waiters]) item.reject(new Error(message));
       options.onFailure?.(new Error(message));
     }
     function guard() {
       if (failed) throw new Error(failed);
+      if (target && online && !state.ble?.connected) throw new Error('Dexcom disconnected.');
       if (!target || !online || !state.ble?.connected || state.ble.address?.toLowerCase() !== target.address || state.ble.addressType !== undefined && state.ble.addressType !== target.addressType || state.ble.connectionAttempt !== attempt) throw new Error('Dexcom connection changed. Reconnect the selected sensor.');
       return mapping;
     }
@@ -49,6 +52,8 @@ const NanoDexcomTransport = (() => {
         const floor = cursor;
         cursor = Math.max(cursor, event.seq || 0);
         if (!target || failed || priming || !Number.isInteger(event.seq) || event.seq <= floor || event.address?.toLowerCase() !== target.address) continue;
+        if (event.request || event.addressType !== undefined && event.addressType !== target.addressType || event.connectionAttempt !== undefined && event.connectionAttempt !== attempt) continue;
+        if (startedMs !== null && Number.isFinite(event.ms) && event.ms < startedMs) continue;
         if (event.bootId && boot && event.bootId !== boot) continue;
         if (event.kind === 'disconnect') { fail('Dexcom disconnected.'); continue; }
         if (!['notification', 'indication'].includes(event.kind)) continue;
@@ -81,12 +86,12 @@ const NanoDexcomTransport = (() => {
     async function begin(device) {
       if (target) stop();
       mapping = commands.handles(state); target = { address: device.address.toLowerCase(), addressType: device.addressType };
-      attempt = state.ble.connectionAttempt; failed = ''; queue.length = 0; guard();
+      attempt = state.ble.connectionAttempt; startedMs = Number.isFinite(state.uptime) ? state.uptime * 1000 : null; failed = ''; queue.length = 0; guard();
       const sync = new Promise((resolve, reject) => {
         const timer = setTimeout(() => { priming = null; reject(new Error('Dexcom packet capture did not synchronize.')); }, timeout);
-        priming = () => { clearTimeout(timer); resolve(); };
+        priming = error => { clearTimeout(timer); if (error) reject(error); else resolve(); };
       });
-      lab.setFastCapture?.(true); await sync; guard();
+      setFastCapture(true); await sync; guard();
       return mapping;
     }
     async function write(channel, data, response = true) {
@@ -100,10 +105,11 @@ const NanoDexcomTransport = (() => {
     }
     async function subscribe(channel, mode) { await lab.action('subscribe', { handle: guard()[channel].handle, mode }); guard(); }
     function stop() {
+      const captured = Boolean(target);
       for (const item of [...waiters]) item.reject(new Error('Dexcom session cancelled.'));
       target = null; failed = ''; queue.length = 0;
       if (priming) { const resolve = priming; priming = null; resolve(); }
-      lab.setFastCapture?.(false);
+      if (captured) setFastCapture(false);
     }
     return { begin, guard, wait, collect, write, sendExtra, subscribe, state: () => state, clear(channel) { for (let i = queue.length - 1; i >= 0; i--) if (!channel || queue[i].channel === channel) queue.splice(i, 1); }, stop, destroy() { stop(); offEvents?.(); offState?.(); } };
   }

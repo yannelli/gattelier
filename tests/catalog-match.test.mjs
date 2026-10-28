@@ -60,3 +60,12 @@ test('company-only prefixes and service-data presence receive limited confidence
   const service = { ...base, rules: [[{ kind: 'service-data', uuid: '180d' }]] };
   assert.equal(matcher.match([service], { serviceData: [{ uuid: '180d', hex: '' }] })[0].confidence, 'Service match');
 });
+
+test('company-only evidence is manufacturer metadata even when a catalog title names a product', () => {
+  const entry = { ...base, title: 'Specific lock model', category: 'lock', rules: [[{ kind: 'company', id: 0x1234 }]] };
+  const result = matcher.match([entry], { manufacturer: '3412' })[0];
+  assert.equal(result.category, 'vendor');
+  assert.equal(result.title, 'Manufacturer metadata');
+  assert.equal(result.modelConfirmed, false);
+  assert.deepEqual(result.fields, []);
+});

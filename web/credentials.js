@@ -77,8 +77,17 @@ const NanoCredentials = (() => {
       for (const record of incoming) next.set(`${record.kind}/${record.id}`, { ...record, updatedAt: Math.min(clock(), record.updatedAt) });
       const result = persist(next); return { ...result, imported: incoming.length, count: next.size };
     }
+    async function importFile(file) {
+      if (!file || !Number.isSafeInteger(file.size) || file.size > maxBytes) throw new Error('Credential imports must be under 512 KiB.');
+      let value;
+      try { value = JSON.parse(await file.text()); }
+      catch (error) { if (error instanceof SyntaxError) throw new Error('The selected file is not valid JSON.'); throw error; }
+      if (value?.format === 'nanoscope-credentials') return importData(value);
+      const credentials = plaud(value);
+      return { ...save('plaud', credentials.serial, credentials), imported: 1 };
+    }
     return {
-      init, exportData, importData,
+      init, exportData, importData, importFile,
       status() { init(); return { count: records.size, persistent, error }; },
       list() { init(); return [...records.values()].map(({ kind, id, updatedAt }) => ({ kind, id, updatedAt })); },
       getPlaud(serial) { init(); return clone(records.get(`plaud/${String(serial).toLowerCase()}`)?.credentials || null); },

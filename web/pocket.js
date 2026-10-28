@@ -15,8 +15,18 @@ const NanoPocket = (() => {
     const unlock = el('button', 'button primary', 'Authenticate');
     const keyInputs = el('div', 'pocket-controls'); keyInputs.append(key, keyFile);
     const credentialTools = el('details', 'credential-controls'); credentialTools.append(el('summary', '', 'Manage Pocket key'), keyInputs);
-    auth.append(unlock, credentialTools);
-        const toolbar = el('div', 'pocket-controls');
+    const jsonLabel = el('label', 'button secondary credentials-import', 'Import credentials JSON'), jsonFile = el('input');
+    jsonFile.type = 'file'; jsonFile.accept = '.json,application/json'; jsonFile.setAttribute('aria-label', 'Import Pocket credentials JSON backup'); jsonLabel.append(jsonFile);
+    auth.append(unlock, jsonLabel, credentialTools);
+    jsonFile.addEventListener('change', async () => {
+      const file = jsonFile.files[0]; if (!file || running) return;
+      try {
+        const result = await NanoCredentials.importFile(file); loadSaved(true);
+        status.textContent = result.error || `Imported ${result.imported} credential record${result.imported === 1 ? '' : 's'}.`;
+      } catch (error) { status.textContent = error.message; }
+      finally { jsonFile.value = ''; sync(); }
+    });
+    const toolbar = el('div', 'pocket-controls');
     const directories = el('button', 'button secondary', 'List recording dates');
     const info = el('button', 'button secondary', 'Read device info');
     const dates = el('select'); dates.setAttribute('aria-label', 'Recording date');
@@ -51,7 +61,7 @@ const NanoPocket = (() => {
       const secret = key.value.trim() || (device && NanoCredentials.getPocket(device.address));
       unlock.textContent = connected ? authenticated ? 'Authenticated' : 'Authenticate' : current.ble?.connected ? 'Switch and authenticate' : 'Connect and authenticate';
       unlock.disabled = !online || !device || !/^[A-Za-z0-9]{16}$/.test(secret || '') || running || current.ble?.busy || authenticated && connected;
-      key.disabled = running; keyFile.disabled = running;
+      key.disabled = running; keyFile.disabled = running; jsonFile.disabled = running;
       for (const button of [directories, info, list]) button.disabled = disabled || !authenticated;
       dates.disabled = running || !authenticated;
       if (transfer) {

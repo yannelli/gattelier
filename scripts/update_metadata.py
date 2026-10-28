@@ -10,6 +10,13 @@ BASE = "https://bitbucket.org/bluetooth-SIG/public/raw/main/assigned_numbers/uui
 TABLES = {"service_uuids": 60, "characteristic_uuids": 400, "descriptors": 15, "units": 100, "declarations": 4}
 
 
+def vendor_names(entries):
+    vendor = json.loads((ROOT / "catalogs/vendor-uuids.json").read_text())
+    for entry in vendor["entries"]:
+        entries[entry["uuid"]] = {key: entry[key] for key in ("uuid", "name", "source")}
+    return entries
+
+
 def assigned_names(source):
     entries = {}
     identifier = None
@@ -58,7 +65,8 @@ def main():
         for uuid, name in names.items():
             entry = entries.setdefault(uuid, {"uuid": uuid})
             entry.update(name=name, source=url)
-    catalog["revision"] = datetime.now(timezone.utc).strftime("%Y-%m-%d.sig")
+    vendor_names(entries)
+    catalog["revision"] = datetime.now(timezone.utc).strftime("%Y-%m-%d.sig-vendor")
     catalog["entries"] = [entries[key] for key in sorted(entries)]
     target.write_text('{\n  "schema": 1,\n  "revision": ' + json.dumps(catalog["revision"]) + ',\n  "entries": [\n'
                       + ',\n'.join('    ' + json.dumps(entry, ensure_ascii=True) for entry in catalog["entries"]) + '\n  ]\n}\n')

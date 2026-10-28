@@ -66,3 +66,11 @@ test('a supplemental decoder fills a bundled name-only entry', async () => {
   assert.equal(api.decode('abcd', '01')[0].value, 'Running');
   api.enable(false); assert.deepEqual(api.decode('abcd', '01'), []);
 });
+
+test('vendor names ship offline including Nordic UART and Polar PMD', async () => {
+  const api = metadata.create({ storage: make(), fetcher: async () => new Response(JSON.stringify(catalog)) });
+  await api.init();
+  assert.match(api.lookup('6e400001-b5a3-f393-e0a9-e50e24dcca9e').name, /UART/);
+  assert.match(api.lookup('fb005c80-02e7-f387-1cad-8acd2d8df0c8').name, /Polar/);
+  assert.ok(api.status().count >= 993);
+});

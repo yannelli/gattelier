@@ -62,7 +62,31 @@ const NanoGattValues = (() => {
     }
     return offset === bytes.length ? fields : [];
   }
-  function decode(uuid, hex) {
+  function vendorDecode(uuid, hex, context) {
+    if (!context.serviceUuid) return [];
+    const load = (name, browser) => typeof module !== 'undefined' ? require(`./${name}.js`) : browser;
+    const providers = [
+      load('schlage-protocol', typeof NanoSchlage === 'undefined' ? null : NanoSchlage),
+      load('nespresso-protocol', typeof NanoNespressoProtocol === 'undefined' ? null : NanoNespressoProtocol),
+      load('beacon-protocol', typeof NanoBeaconProtocol === 'undefined' ? null : NanoBeaconProtocol),
+      load('resmed-fig', typeof NanoResMedFIG === 'undefined' ? null : NanoResMedFIG),
+      load('bose-protocol', typeof NanoBoseProtocol === 'undefined' ? null : NanoBoseProtocol)
+    ];
+    const normalized = value => shortUuid(value) || String(value || '').toLowerCase();
+    for (const provider of providers) {
+      if (!provider?.decode) continue;
+      const services = provider.configurationService ? [provider.configurationService] : provider.services ? Object.values(provider.services) : provider.service ? [provider.service] : [];
+      if (services.length && !services.some(value => normalized(value) === normalized(context.serviceUuid))) continue;
+      try {
+        const profile = context.device ? provider.identify?.(context.device) : null;
+        if (provider.services && !context.device) continue;
+        const decoded = provider.decode(uuid, hex, { ...context, family: profile?.family });
+        if (decoded.length) return decoded.map(field => ({ ...field, source: field.source || provider.source || provider.sources?.[0]?.url }));
+      } catch {}
+    }
+    return [];
+  }
+  function decode(uuid, hex, { serviceUuid = '', device } = {}) {
     if (typeof hex !== 'string' || hex.length > 1024 || hex.length % 2 || !/^[\da-f]*$/i.test(hex)) return [];
     const key = shortUuid(uuid), bytes = Uint8Array.from(hex.match(/../g) || [], pair => parseInt(pair, 16));
     const data = new DataView(bytes.buffer);
@@ -106,12 +130,21 @@ const NanoGattValues = (() => {
         if (!end) return [];
         const text = new TextDecoder('utf-8', { fatal: true }).decode(bytes.subarray(0, end));
         if (/[\u0000-\u001f\u007f-\u009f]/.test(text)) return [];
-        return [field(strings[key], text)];
+        const placeholder = !text.trim() || /^(?:unknown|n\/?a|not (?:available|set|specified)|undefined|null)$/i.test(text.trim()) || key !== '2901' && text.trim().toLowerCase() === strings[key].toLowerCase() || key === '2a25' && /^0+$/.test(text.trim());
+        return [{ ...field(strings[key], placeholder ? 'Not supplied' : text), ...(placeholder ? { placeholder: true } : {}) }];
       }
-      if (key === '2a50' && bytes.length === 7) return [
+      if (key === '2a23' && bytes.length === 8) {
+        if (bytes.every(byte => byte === 0) || bytes.every(byte => byte === 255)) return [{ ...field('System ID', `Not supplied (all ${bytes[0] ? '0xFF' : 'zero'} bytes)`), placeholder: true }];
+        return [field('System ID', hexBytes(bytes.slice().reverse()).toUpperCase()), field('Manufacturer identifier', `0x${hexBytes(bytes.slice(0, 5).reverse()).toUpperCase()}`), field('Organizationally unique identifier', `0x${hexBytes(bytes.slice(5).reverse()).toUpperCase()}`)];
+      }
+      if (key === '2a50' && bytes.length === 7) {
+        if (bytes.every(byte => byte === 0)) return [{ ...field('PnP ID', 'Not supplied (all zero bytes)'), placeholder: true }];
+        if (![1, 2].includes(bytes[0])) return [{ ...field('PnP ID', `Reserved vendor source (${bytes[0]})`), placeholder: true }];
+        return [
         field('Vendor ID', `${hex16(data.getUint16(1, true))} (${['Reserved source', 'Bluetooth SIG', 'USB-IF'][bytes[0]] || 'Reserved source'})`),
         field('Product ID', hex16(data.getUint16(3, true))), field('Product version', hex16(data.getUint16(5, true)))
-      ];
+        ];
+      }
       if (key === '2a19' && bytes.length === 1) {
         if (bytes[0] === 255) return [field('Battery level', 'Unknown / reserved (0xFF)')];
         return bytes[0] <= 100 ? [field('Battery level', `${bytes[0]}%`)] : [];
@@ -163,6 +196,8 @@ const NanoGattValues = (() => {
         field('Description code', hex16(data.getUint16(5, true)))
       ];
     } catch { return []; }
+    const vendor = vendorDecode(uuid, hex, { serviceUuid, device });
+    if (vendor.length) return vendor;
     return typeof NanoMetadata !== 'undefined' ? NanoMetadata.decode(uuid, hex) : [];
   }
   return { decode, sources: () => sourceList.map(source => ({ ...source })) };

@@ -114,7 +114,7 @@ const NanoLab = (() => {
       const result = capture.ingest(body);
       eventFailures = 0;
       emit(eventListeners, result.events, result.meta);
-      NanoTraffic.connection(fast ? 'Live transfer capture' : document.hidden ? 'Background capture · checked every 30 seconds' : 'Event journal connected');
+      NanoTraffic.connection(fast ? 'Live transfer capture' : document.hidden ? latest.ble?.connected ? 'Connected session capture' : 'Background capture · checked every 30 seconds' : 'Event journal connected');
       NanoTraffic.refresh();
     } catch (error) {
       if (token !== generation) return;
@@ -124,7 +124,7 @@ const NanoLab = (() => {
       if (token === generation) {
         eventsInFlight = false;
         const active = latest.ble?.connected || latest.ble?.captureAddress;
-        const delay = fast ? 100 : eventFailures ? Math.min(30000, 1500 * 2 ** eventFailures) : document.hidden ? 30000 : active ? 350 : 5000;
+        const delay = fast ? 100 : eventFailures ? Math.min(30000, 1500 * 2 ** eventFailures) : active ? document.hidden ? 1000 : 350 : document.hidden ? 30000 : 5000;
         eventsTimer = setTimeout(pollEvents, delay);
       }
     }

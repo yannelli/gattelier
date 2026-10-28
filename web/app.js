@@ -2,7 +2,7 @@
 
 const $ = id => document.getElementById(id);
 const vendorTools = typeof module !== 'undefined' ? require('./vendors.js') : NanoVendors;
-const deviceKey = device => `${device.address}/${device.addressType}`;
+const deviceKey = device => `${device.address.toLowerCase()}/${device.addressType}`;
 const visibleDevices = (devices, query, database = vendorDatabase) => devices.filter(device =>
   `${device.name || ''} ${device.address} ${vendorTools.identify(device, database).search}`.toLowerCase().includes(query.trim().toLowerCase())
 ).slice().sort((a, b) => b.rssi - a.rssi || a.address.localeCompare(b.address));
@@ -37,17 +37,23 @@ function shortUuid(uuid) {
 function uuidName(uuid, fallback, serviceUuid = '') {
   const short = shortUuid(uuid);
   if (/^(?:0x)?1910$|^00001910-0000-1000-8000-00805f9b34fb$/i.test(serviceUuid) && ['2bb0', '2bb1'].includes(short)) return short === '2bb1' ? 'PLAUD commands' : 'PLAUD responses';
-  return names[short] || (typeof NanoMetadata !== 'undefined' ? NanoMetadata.lookup(short)?.name : '') || fallback;
+  return (typeof NanoSchlage !== 'undefined' ? NanoSchlage.lookup(short, serviceUuid)?.name : '') || names[short] || (typeof NanoDeviceLibrary !== 'undefined' ? NanoDeviceLibrary.lookup(short, serviceUuid)?.name : '') || (typeof NanoMetadata !== 'undefined' ? NanoMetadata.lookup(short)?.name : '') || fallback;
 }
 let state = { wifi: {}, ble: {}, devices: [], services: [] };
+let selectedFallback = null;
 let online = false, pending = false, selected = '', notice = '', transportError = '', pollPromise, timer, ticking = false;
 let listSignature = '', detailSignature = '', lastRender = 0;
 let vendorDatabase = null, vendorStatus = 'loading';
 let scanStore, scanStream, browserUI, stateController, apiGeneration = 0, lastStatePoll = 0;
 const browseDevices = () => scanStore ? scanStore.devices() : state.devices;
-const selectedDevice = () => browseDevices().find(item => deviceKey(item) === selected);
+const selectedDevice = () => browseDevices().find(item => deviceKey(item) === selected) || (selectedFallback && deviceKey(selectedFallback) === selected ? selectedFallback : null);
+const activeSession = () => Boolean(state.ble.connected || NanoDexcom.isAcquiring());
+const backgroundPolling = () => activeSession() || scanStore?.getPreference('backgroundScan', false);
 function selectDevice(device) {
-  selected = deviceKey(device); scanStore?.setPreference('selectedDevice', selected); render();
+  selectedFallback = device; selected = deviceKey(device); scanStore?.setPreference('selectedDevice', selected);
+  if (NanoWorkspace.view() !== 'apps' || !NanoWorkspace.module() || NanoModules.rememberTarget(NanoWorkspace.module(), device)) NanoWorkspace.selectTarget?.(device);
+  else NanoWorkspace.openDevice?.(device);
+  render();
   document.dispatchEvent(new CustomEvent('nanoscope:selection', { detail: device }));
   if (NanoWorkspace.view() === 'discover' && matchMedia('(max-width: 700px)').matches) $('inspector').closest('.panel').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
@@ -108,13 +114,14 @@ function renderList() {
     row.setAttribute('aria-pressed', String(selected === deviceKey(device)));
     const icon = node('span', 'device-icon', '◇'); icon.setAttribute('aria-hidden', 'true');
     const info = node('span', 'device-info');
-    info.append(node('span', 'device-name', `${device.favorite ? '★ ' : ''}${device.label || device.name || 'Unnamed device'}`), node('span', 'device-address', device.address));
+    info.append(node('span', 'device-name', `${device.favorite ? '★ ' : ''}${device.label || device.name || device.address}`));
+    if (device.label || device.name) info.append(node('span', 'device-address', device.address));
     const recorder = NanoRecorders.identify(device);
     if (recorder) info.append(node('span', 'device-vendor', recorder.product));
     const vendor = vendorTools.identify(device, vendorDatabase);
-    if (vendor.hint) info.append(node('span', 'device-vendor', vendor.hint));
+    if (vendor.hint && !recorder) info.append(node('span', 'device-vendor', vendor.hint));
     const signal = node('span', 'signal', `${device.rssi} dBm`);
-    signal.append(node('small', '', state.ble.connected && state.ble.address === device.address ? 'Connected' : device.connectable ? 'Connectable' : 'Broadcast'));
+    signal.append(node('small', '', state.ble.connected && NanoDeviceLibrary.connected(device, state) ? 'Connected' : device.connectable ? 'Connectable' : 'Broadcast'));
     const seen = device.lastSeenMs ? NanoInsights.age(device.lastSeenMs) : lastSeenLabel(device, state.uptime);
     if (seen) signal.append(node('small', '', seen));
     row.append(icon, info, signal);
@@ -128,7 +135,7 @@ function render() {
   lastRender = Date.now();
   NanoSensorApp.update(browseDevices());
   NanoLab.update(state, online);
-  NanoLab.setBackgroundCapture(scanStore?.getPreference('backgroundScan', false));
+  NanoLab.setBackgroundCapture(backgroundPolling());
   const scanning = state.ble.scanning;
   const usbConnected = NanoAPI.transport() === 'serial' && online;
   $('network').textContent = usbConnected ? `USB connected${state.wifi.suspendedForUsb ? ' · Wi-Fi paused' : ''}` : online ? (state.wifi.connected ? `${state.wifi.ssid} · ${state.wifi.ip}` : 'Wi-Fi disconnected') : 'Board unavailable';
@@ -146,7 +153,8 @@ function render() {
   $('board-status').textContent = online ? `Board online · ${Math.floor((state.freeHeap || 0) / 1024)} KB free` : NanoAPI.transport() === 'serial' ? 'Connect USB in Settings' : 'Reconnect to the board’s Wi-Fi network';
   renderList(); renderInspector();
   const device = selectedDevice();
-  NanoWorkspace.update({ device, connected: Boolean(device && state.ble.connected && state.ble.address === device.address) });
+  const workspaceDevice = NanoWorkspace.view() === 'apps' && NanoWorkspace.module() ? NanoModules.appDevice(NanoWorkspace.module()) : device;
+  NanoWorkspace.update({ device: workspaceDevice, state: { ...state, devices: browseDevices() }, online, pending, error, connected: NanoDeviceLibrary.connected(workspaceDevice, state) });
   NanoDevicePage.render();
   if (NanoWorkspace.view() === 'apps') NanoModules.render(device, browseDevices());
   browserUI?.update();
@@ -170,6 +178,7 @@ function poll({ streamOnly = false } = {}) {
   const generation = apiGeneration;
   const pollingController = stateController = new AbortController();
   pollPromise = (async () => {
+    const sessionWasActive = activeSession();
     try {
       if (!streamOnly || needsStatePoll(state, online, pending, Date.now() - lastStatePoll)) {
         const next = await request('state?devices=0', { signal: pollingController.signal });
@@ -188,7 +197,7 @@ function poll({ streamOnly = false } = {}) {
       }
       transportError = '';
       if (!selected && state.ble.connected) {
-        const device = browseDevices().find(item => item.address === state.ble.address);
+        const device = browseDevices().find(item => NanoDeviceLibrary.connected(item, state));
         if (device) selected = deviceKey(device);
       }
     } catch (error) {
@@ -203,7 +212,7 @@ function poll({ streamOnly = false } = {}) {
     } finally {
       if (generation === apiGeneration) {
         NanoPWA.reportConnection(online);
-        if (!streamOnly || !document.hidden && Date.now() - lastRender >= 500) render();
+        if (!streamOnly || (!document.hidden || sessionWasActive || activeSession()) && Date.now() - lastRender >= 500) render();
       }
     }
   })().finally(() => { pollPromise = null; });
@@ -222,13 +231,13 @@ async function mutate(action, data = {}) {
 }
 async function tick() {
   clearTimeout(timer);
-  if ((document.hidden && !scanStore?.getPreference('backgroundScan', false)) || ticking) return;
+  if ((document.hidden && !backgroundPolling()) || ticking) return;
   ticking = true;
   const generation = apiGeneration;
   try { await poll({ streamOnly: true }); } finally { ticking = false; }
   if (generation !== apiGeneration) return;
-  const collecting = !document.hidden || scanStore?.getPreference('backgroundScan', false);
-  const delay = collecting && online && state.ble.scanning && state.ble.advertisementStream ? Math.max(document.hidden ? 1000 : 0, scanStream.status().delay) : NanoPWA.pollDelay({ background: scanStore?.getPreference('backgroundScan', false) });
+  const collecting = !document.hidden || backgroundPolling();
+  const delay = online && activeSession() ? 1000 : collecting && online && state.ble.scanning && state.ble.advertisementStream ? Math.max(document.hidden ? 1000 : 0, scanStream.status().delay) : NanoPWA.pollDelay({ background: backgroundPolling() });
   if (delay !== null) timer = setTimeout(tick, delay);
 }
 async function loadVendors() {
@@ -260,7 +269,6 @@ async function boot() {
   scanStream = NanoScanStream.create(scanStore);
   selected = scanStore.getPreference('selectedDevice', '');
   browserUI = NanoBrowserUI.mount(scanStore, { change: () => { listSignature = ''; detailSignature = ''; render(); tick(); }, getSelected: selectedDevice, getState: () => state });
-  NanoWorkspace.init({ getPreference: (key, fallback) => scanStore.getPreference(key, fallback), setPreference: (key, value) => scanStore.setPreference(key, value), onChange: render });
   document.addEventListener('nanoscope:state', event => { state = event.detail; scanStore.ingest(state); online = true; transportError = ''; render(); });
   document.addEventListener('nanoscope:busy', event => { pending = event.detail; render(); });
   globalThis.addEventListener('nanoscope:api-change', () => {
@@ -297,10 +305,18 @@ async function boot() {
   NanoGuide.mount($('guide-panel'));
   NanoModules.mount({ select: selectDevice, selected: selectedDevice, devices: browseDevices });
   NanoDevicePage.mount();
+  NanoWorkspace.init({ getPreference: (key, fallback) => scanStore.getPreference(key, fallback), setPreference: (key, value) => scanStore.setPreference(key, value),
+    getSelected: selectedDevice, selectDevice, resolveTarget: key => browseDevices().find(item => deviceKey(item) === key),
+    getDeviceDisplay: device => {
+      const recorder = NanoRecorders.identify(device), vendor = vendorTools.identify(device, vendorDatabase);
+      return { name: device.label || device.name || device.address, manufacturer: NanoSchlage.identify(device, state) ? 'Schlage' : recorder?.product.split(' ')[0] || vendor.manufacturer || vendor.addressVendor };
+    },
+    selectModuleTarget: (id, device) => NanoModules.selectAppDevice(id, device),
+    getModuleTarget: id => NanoModules.matches(selectedDevice()).includes(id) ? selectedDevice() : NanoModules.appDevice(id), onChange: render });
   $('scan').addEventListener('click', () => mutate(scanAction(state.ble)));
   $('search').addEventListener('input', renderList);
   $('retry').addEventListener('click', tick);
-  document.addEventListener('visibilitychange', () => { clearTimeout(timer); if (!document.hidden || scanStore?.getPreference('backgroundScan', false)) tick(); });
+  document.addEventListener('visibilitychange', () => { clearTimeout(timer); if (!document.hidden || backgroundPolling()) tick(); });
   tick(); loadVendors();
 }
 if (typeof module !== 'undefined') module.exports = { deviceKey, visibleDevices, canScan, canConnect, canRead, shortUuid, uuidName, operationLabel, scanAction, scanStatus, lastSeenLabel, needsStatePoll };

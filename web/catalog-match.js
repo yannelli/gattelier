@@ -27,8 +27,9 @@ const NanoCatalogMatch = (() => {
       matched.sort((a, b) => strength(b.rule) - strength(a.rule) || b.rule.length - a.rule.length);
       const best = matched[0], ceiling = { 'Name candidate': 1, 'Manufacturer match': 2, 'Service match': 3, 'Advertisement match': 4 }[entry.confidence];
       const score = Math.min(strength(best.rule), ceiling), confidence = { 1: 'Name candidate', 2: 'Manufacturer match', 3: 'Service match', 4: 'Advertisement match' }[score];
-      found.push({ id: entry.id, title: entry.title, category: entry.category, confidence, evidence: best.evidence,
-        fields: [{ label: 'Protocol family', value: entry.title }, { label: 'Description', value: entry.description }],
+      const companyOnly = best.rule.every(rule => rule.kind === 'company' || rule.kind === 'manufacturer-prefix' && rule.hex.length === 4);
+      found.push({ id: entry.id, title: companyOnly ? 'Manufacturer metadata' : entry.title, category: companyOnly ? 'vendor' : entry.category, confidence, evidence: best.evidence, modelConfirmed: false,
+        fields: companyOnly ? [] : [{ label: score < 3 ? 'Protocol candidate' : 'Protocol family', value: entry.title }, { label: 'Description', value: entry.description }],
         limitations: [...entry.limitations, ...(score < 3 ? ['This match does not confirm a product model or supported operations.'] : []), ...(device.payloadTruncated ? ['Advertisement bytes were truncated; this match uses the retained fields.'] : [])],
         sources: entry.sources, library: entry.library, revision: entry.revision, external: true, score });
     }

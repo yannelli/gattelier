@@ -87,3 +87,37 @@ test('library objects are isolated from consumers', () => {
   assert.ok(Object.isFrozen(library.entries[0].capabilities[0]));
   assert.equal(library.get('missing'), null);
 });
+
+test('connected GATT matching and commands require the selected address type', () => {
+  const target = { address, addressType: 0 };
+  const state = { ble: { connected: true, address: address.toUpperCase(), addressType: 1 }, services: [{ uuid: '181a', characteristics: [{ uuid: '2a6e', handle: 4, properties: ['read'] }] }] };
+  assert.deepEqual(library.match(target, state), []);
+  assert.deepEqual(library.suggestions(target, state), []);
+  assert.equal(library.connected(target, state), false);
+  state.ble.addressType = 0;
+  assert.equal(library.match(target, state)[0].id, 'environmental-sensor');
+  assert.equal(library.suggestions(target, state)[0].recipeId, 'environment-temperature');
+});
+
+test('suggested commands resolve real handles and properties without vendor writes', () => {
+  const target = { address, addressType: 0 }, state = { ble: { ...target, connected: true }, services: [
+    { uuid: '180f', characteristics: [{ uuid: '2a19', handle: 3, properties: ['read', 'notify'] }] },
+    { uuid: 'f0000000-0000-4000-8000-000000000000', characteristics: [{ uuid: 'f0000001-0000-4000-8000-000000000000', handle: 5, properties: ['write'] }, { uuid: 'f0000002-0000-4000-8000-000000000000', handle: 8, properties: ['indicate'], subscription: 'off' }] }
+  ] };
+  const actions = library.suggestions(target, state);
+  assert.deepEqual(actions.map(({ handle, action, mode }) => [handle, action, mode]), [[3, 'read', undefined], [3, 'subscribe', 'notify'], [8, 'subscribe', 'indicate']]);
+  assert.equal(actions[0].label, 'Read battery level');
+  assert.equal(actions[0].recipeId, 'battery-read');
+  state.services[0].characteristics[0].subscription = 'notify';
+  assert.equal(library.suggestions(target, state).filter(item => item.handle === 3).length, 1);
+  state.services[0].characteristics[0].properties = [];
+  assert.equal(library.suggestions(target, state).some(item => item.handle === 3), false);
+});
+
+test('vendor transport names retain source links and service scope', () => {
+  const service = library.get('sleep-mcr').services[0], characteristic = library.get('sleep-mcr').characteristics[1];
+  assert.equal(library.lookup(characteristic, service).name, 'Sleep Number MCR commands');
+  assert.match(library.lookup(characteristic, service).source, /sleep_number_mcr/);
+  assert.equal(library.lookup(characteristic, '180a'), null);
+  assert.equal(library.lookup('arbitrary-vendor-uuid'), null);
+});

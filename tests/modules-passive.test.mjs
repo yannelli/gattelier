@@ -6,6 +6,8 @@ import recorders from '../web/recorders.js';
 import profiles from '../web/profiles.js';
 import library from '../web/device-library.js';
 import apps from '../web/device-apps.js';
+import schlage from '../web/schlage-protocol.js';
+import standard from '../web/standard-app.js';
 const source = readFileSync(new URL('../web/modules.js', import.meta.url), 'utf8');
 test('opening or selecting a passive app preserves an active G7 operation and global selection', () => {
   const globalDevice = { name: 'DXCMab', address: '02:00:00:00:00:01', addressType: 1 };
@@ -13,6 +15,7 @@ test('opening or selecting a passive app preserves an active G7 operation and gl
   let selectionCalls = 0, active = '', renderedTarget;
   class Element {
     constructor(tag) { this.tag = tag; this.children = []; this.listeners = {}; this.dataset = {}; this.classList = { add() {} }; this.textContent = ''; }
+    before() {}
     append(...nodes) { this.children.push(...nodes); }
     replaceChildren(...nodes) { this.children = nodes; }
     setAttribute() {}
@@ -20,14 +23,15 @@ test('opening or selecting a passive app preserves an active G7 operation and gl
   }
   const ids = new Map(), get = id => { if (!ids.has(id)) ids.set(id, new Element('div')); return ids.get(id); };
   const context = { NanoRecorders: recorders, NanoProfiles: profiles, NanoDeviceLibrary: library, NanoDeviceApps: apps,
-    NanoLab: { getState: () => ({ ble: { busy: true, connected: true, operation: 'authenticating', address: globalDevice.address, addressType: 1 } }) },
+    NanoSchlage: schlage, NanoSchlageApp: { mount: () => ({ render() {} }) }, NanoStandardApp: { ...standard, mount: () => ({ render() {} }) },
+    NanoLab: { isActing: () => true, getState: () => ({ ble: { busy: true, connected: true, operation: 'authenticating', address: globalDevice.address, addressType: 1 } }) },
     NanoWorkspace: { module: () => active, openModule: id => { active = id; } },
     NanoConnection: { describe: () => ({}), controls: () => new Element('div') }, NanoDexcom: { mount() {} }, NanoDeviceSupport: { families: {} },
     NanoProtocolApp: { mount: (_panel, _id, hooks) => ({ render(device) { renderedTarget = device; assert.equal(hooks.selected(), device); } }) },
     NanoBeaconApp: { mount: () => ({ render() {} }) },
     NanoSensorApp: { mount: () => ({ render() {} }) },
     replacePreservingFocus: (element, content) => element.replaceChildren(content),
-    document: { createElement: tag => new Element(tag), createDocumentFragment: () => new Element('fragment'), getElementById: get }
+    document: { createTextNode: text => Object.assign(new Element('text'), { textContent: text }), createElement: tag => new Element(tag), createDocumentFragment: () => new Element('fragment'), getElementById: get }
   };
   vm.runInNewContext(source + '\nthis.apps = NanoModules;', context);
   context.apps.mount({ selected: () => globalDevice, devices: () => [globalDevice, coffee], select: () => { selectionCalls++; } });
@@ -40,4 +44,8 @@ test('opening or selecting a passive app preserves an active G7 operation and gl
   const again = []; const collect = element => { again.push(element); element.children.forEach(collect); }; collect(get('apps-catalog'));
   const picker = again.find(node => node.tag === 'select' && node.dataset.focus === 'app-device-nespresso'); picker.value = `${coffee.address}/0`; picker.listeners.change();
   assert.equal(selectionCalls, 0); assert.equal(renderedTarget, coffee);
+  const saved = { ...coffee, address: 'AA:BB:CC:DD:EE:FF' };
+  assert.equal(context.apps.selectAppDevice('nespresso', saved), true);
+  assert.equal(context.apps.appDevice('nespresso'), saved);
+  assert.equal(selectionCalls, 0);
 });

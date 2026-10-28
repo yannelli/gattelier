@@ -11,7 +11,7 @@ const NanoPlaud = (() => {
     const el = (tag, cls, text) => { const item = document.createElement(tag); if (cls) item.className = cls; if (text !== undefined) item.textContent = text; return item; };
     const u16 = (data, offset) => data[offset] | data[offset + 1] << 8;
     const u32 = (data, offset) => new DataView(data.buffer, data.byteOffset, data.byteLength).getUint32(offset, true);
-    container.innerHTML = '<div class="panel-heading"><div><h2>PLAUD recordings</h2></div><div class="heading-tools"><span class="badge">Note Pro</span><details class="help"><summary aria-label="About PLAUD"><span aria-hidden="true">?</span></summary><div class="help-body"><p>Authenticate with the device credentials file, then list and download recordings as Ogg audio.</p><p>Downloads keep the original recording, up to 64 MiB. Saving requires the full byte count, a clean end marker and valid Ogg checksums.</p><p>Credentials must match the recorder’s serial. Back them up in Settings › Credentials.</p></div></details></div></div><div class="plaud-body"><p id="plaud-target" class="hint"></p><p id="plaud-credentials" class="plaud-credentials" role="status"></p><details id="plaud-credential-tools" class="credential-controls"><summary>Manage credentials</summary><label class="plaud-file-label">Device credentials JSON<input id="plaud-credentials-file" type="file" accept=".json,application/json"></label><button id="plaud-credential-settings" class="button quiet" type="button">Credential settings</button></details><div class="plaud-controls"><button id="plaud-authenticate" class="button primary">Authenticate</button><button id="plaud-list" class="button secondary">List recordings</button><button id="plaud-stop" class="button secondary" hidden>Stop download</button></div><p id="plaud-status" class="plaud-status" role="status"></p><div id="plaud-files" class="plaud-files"></div><progress id="plaud-meter" max="1" value="0" hidden aria-label="Recording download progress"></progress><p id="plaud-progress" class="plaud-progress" role="status"></p><button id="plaud-save" class="button primary" hidden>Save Ogg</button></div>';
+    container.innerHTML = '<div class="panel-heading"><div><h2>PLAUD recordings</h2></div><div class="heading-tools"><span class="badge">Note Pro</span><details class="help"><summary aria-label="About PLAUD"><span aria-hidden="true">?</span></summary><div class="help-body"><p>Authenticate with the device credentials file, then list and download recordings as Ogg audio.</p><p>Downloads keep the original recording, up to 64 MiB. Saving requires the full byte count, a clean end marker and valid Ogg checksums.</p><p>Credentials must match the recorder’s serial. Back them up in Settings › Credentials.</p></div></details></div></div><div class="plaud-body"><p id="plaud-target" class="hint"></p><p id="plaud-credentials" class="plaud-credentials" role="status"></p><div id="plaud-credential-tools" class="credential-controls"><label class="button secondary credentials-import">Import credentials JSON<input id="plaud-credentials-file" type="file" accept=".json,application/json" aria-label="Import PLAUD credentials JSON or recorder backup"></label><button id="plaud-credential-settings" class="button quiet" type="button">Credential settings</button></div><div class="plaud-controls"><button id="plaud-authenticate" class="button primary">Authenticate</button><button id="plaud-list" class="button secondary">List recordings</button><button id="plaud-stop" class="button secondary" hidden>Stop download</button></div><p id="plaud-status" class="plaud-status" role="status"></p><div id="plaud-files" class="plaud-files"></div><progress id="plaud-meter" max="1" value="0" hidden aria-label="Recording download progress"></progress><p id="plaud-progress" class="plaud-progress" role="status"></p><button id="plaud-save" class="button primary" hidden>Save Ogg</button></div>';
     function selection() {
       const device = NanoConnection.snapshot().selected;
       return NanoRecorders.identify(device)?.product === 'PLAUD Note Pro' ? device : null;
@@ -38,7 +38,6 @@ const NanoPlaud = (() => {
       if (!force && stamp === credentialStamp) return;
       credentialStamp = stamp; credentials = saved ? p.credentials(saved) : null;
       reset(credentials || !selection() ? '' : 'Import this recorder’s credentials to continue.');
-      get('credential-tools').open = !credentials;
     }
     function guard(token = generation) {
       if (token !== generation) throw new Error('The PLAUD session changed. Authenticate again.');
@@ -152,10 +151,8 @@ const NanoPlaud = (() => {
     get('credentials-file').addEventListener('change', async () => {
       const file = get('credentials-file').files[0]; if (!file) return;
       try {
-        if (file.size > 32768) throw new Error('Choose a credentials JSON file smaller than 32 KiB.');
-        let value; try { value = JSON.parse(await file.text()); } catch { throw new Error('The credential file is not valid JSON.'); }
-        const loaded = p.credentials(value), result = NanoCredentials.savePlaud(value);
-        loadSaved(true); get('status').textContent = result.error || `Saved credentials for ${loaded.serial.toUpperCase()}. Select that recorder to authenticate.`;
+        const result = await NanoCredentials.importFile(file);
+        loadSaved(true); get('status').textContent = result.error || `Imported ${result.imported} credential record${result.imported === 1 ? '' : 's'}.`;
       } catch (error) { get('status').textContent = error.message; }
       finally { get('credentials-file').value = ''; sync(); }
     });

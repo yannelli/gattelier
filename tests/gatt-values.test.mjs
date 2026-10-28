@@ -140,3 +140,38 @@ test('PnP ID decodes the vendor source and little-endian identifiers', () => {
   assert.equal(value('2a50', '02ac05221301ff'), '0x05AC (USB-IF)');
   assert.deepEqual(values.decode('2a50', '016b000d0001'), []);
 });
+
+test('System ID preserves little-endian manufacturer and OUI fields without inferring an address', () => {
+  assert.deepEqual(values.decode('2a23', '0123456789abcdef'), [
+    { label: 'System ID', value: 'EFCDAB8967452301' },
+    { label: 'Manufacturer identifier', value: '0x8967452301' },
+    { label: 'Organizationally unique identifier', value: '0xEFCDAB' }
+  ]);
+  assert.deepEqual(values.decode('2a23', '0123456789abcd'), []);
+  for (const hex of ['00'.repeat(8), 'ff'.repeat(8)]) assert.equal(values.decode('2a23', hex)[0].placeholder, true);
+});
+
+test('placeholder identity fields are flagged without hiding valid numeric zeros', () => {
+  for (const [uuid, text] of [['2a26', 'Firmware Revision'], ['2a27', 'Hardware revision'], ['2a28', 'Software Revision'], ['2a25', '00000000'], ['2a24', 'Unknown'], ['2a29', 'N/A']]) {
+    assert.equal(values.decode(uuid, Buffer.from(text).toString('hex'))[0].placeholder, true);
+  }
+  assert.equal(values.decode('2a50', '00000000000000')[0].placeholder, true);
+  assert.equal(values.decode('2a50', '03000000000000')[0].placeholder, true);
+  assert.equal(values.decode('2a19', '00')[0].value, '0%');
+  assert.equal(values.decode('2a6e', '0000')[0].value, '0.00 °C');
+  assert.equal(values.decode('2a26', Buffer.from('0.0.0').toString('hex'))[0].value, '0.0.0');
+});
+
+test('vendor inspection decoders require matching service and supported device context', () => {
+  const nespresso = require('../web/nespresso-protocol.js'), schlage = require('../web/schlage-protocol.js'), beacon = require('../web/beacon-protocol.js');
+  const context = { serviceUuid: nespresso.services.basic, device: { name: 'Vertuo_CV1_test' } };
+  assert.equal(values.decode(nespresso.characteristics.status, '000200', context)[0].value, 'Ready');
+  for (const invalid of [{}, { ...context, serviceUuid: '180a' }, { ...context, device: { name: 'Prodigio' } }]) assert.deepEqual(values.decode(nespresso.characteristics.status, '000200', invalid), []);
+  const instance = 'e604e95d-a759-4817-87d3-aa005083a0d1';
+  assert.equal(values.decode(instance, '0a00', { serviceUuid: schlage.transport })[0].value, '10');
+  assert.deepEqual(values.decode(instance, '0a00', { serviceUuid: '180a' }), []);
+  const interval = 'a3c87503-8ed3-4bdf-8a39-a01bebede295';
+  assert.equal(values.decode(interval, '03e8', { serviceUuid: beacon.configurationService })[0].value, '1000 ms');
+  assert.deepEqual(values.decode(interval, '03e8', { serviceUuid: 'feaa' }), []);
+  assert.deepEqual(values.decode(interval, '00', { serviceUuid: beacon.configurationService }), []);
+});

@@ -37,7 +37,9 @@ const NanoProfiles = (() => {
     }
     return { fields, errors };
   }
-  function identify(device = {}) {
+  function identify(device = {}, state = {}) {
+    const schlage = typeof NanoSchlage !== 'undefined' ? NanoSchlage.identify?.(device, state) : null;
+    if (schlage) return { ...schlage, category: 'lock', confidence: schlage.modelConfirmed ? 'Device Information' : schlage.service ? 'Service match' : 'Name candidate', evidence: [schlage.evidence], fields: [], limitations: [], sources: NanoSchlage.source ? [{ title: 'Schlage uWeave protocol', url: NanoSchlage.source }] : [] };
     const result = { category: 'other', title: 'BLE metadata', confidence: 'Unclassified', evidence: [], fields: [], limitations: [], sources: [references.ad] };
     const manufacturer = bytes(device.manufacturer), services = (device.services || []).map(uuid);
     const set = (category, title, confidence, evidence, source) => Object.assign(result, { category, title, confidence, evidence: [evidence], fields: [], limitations: [], sources: [references[source]] });
@@ -110,7 +112,9 @@ const NanoProfiles = (() => {
       const protocol = catalogs.match(device)[0]; if (protocol) return protocol;
       const assigned = services.map(id => catalogs.lookupUUID(id)).find(entry => ['member-service', 'sdo-service'].includes(entry?.kind));
       if (assigned) return { category: 'vendor', title: assigned.name, confidence: 'Service assignment', evidence: [`Advertised service 0x${assigned.uuid} is registered to ${assigned.name}.`], fields: [], limitations: ['A service registration does not confirm a product model or supported operations.'], sources: [{ title: 'Bluetooth SIG service assignment', url: assigned.source }], external: true };
-      result.evidence.push('No supported device profile matched.'); field('Advertised services', services.join(', ') || 'None');
+      const library = typeof NanoDeviceLibrary !== 'undefined' ? NanoDeviceLibrary : typeof module !== 'undefined' ? require('./device-library.js') : null;
+      const connected = library?.match(device, state).find(entry => entry.confirmed && entry.category !== 'vendor');
+      if (connected) return { category: connected.category, title: connected.title, confidence: connected.confidence, evidence: [connected.evidence], fields: [], limitations: [connected.limitations], sources: connected.sources, modelConfirmed: false };
     }
     return result;
   }

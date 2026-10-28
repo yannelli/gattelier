@@ -1,6 +1,7 @@
 'use strict';
 
 const NanoDexcom = (() => {
+  const readers = new Set();
   const protocol = () => typeof NanoDexcomProtocol !== 'undefined' ? NanoDexcomProtocol : require('./dexcom-protocol.js');
   function createClient(lab, options = {}) {
     const p = protocol(), now = options.now || Date.now;
@@ -72,11 +73,13 @@ const NanoDexcom = (() => {
     const rememberLabel = el('label', 'dexcom-check'), remember = el('input'); remember.type = 'checkbox'; remember.checked = true;
     rememberLabel.append(remember, el('span', '', 'Remember session on this browser'));
     const reconnectLabel = el('label', 'dexcom-check'), reconnect = el('input'); reconnect.type = 'checkbox'; reconnect.checked = true;
-    reconnectLabel.append(reconnect, el('span', '', 'Reconnect when the sensor wakes'));
+    reconnectLabel.append(reconnect, el('span', '', 'Reconnect within this 10-minute window'));
     const keepLabel = el('label', 'dexcom-check'), keep = el('input'); keep.type = 'checkbox'; keepLabel.append(keep, el('span', '', 'Save readings in this browser'));
     const actions = el('div', 'dexcom-actions');
     const button = (text, style = 'secondary') => { const node = el('button', `button ${style}`, text); node.type = 'button'; return node; };
     const connect = button('Connect to G7', 'primary'), cancel = button('Cancel', 'quiet'), disconnect = button('Disconnect', 'quiet'), forget = button('Forget session', 'quiet'); connect.type = 'submit';
+    const acquisition = el('div', 'dexcom-acquisition'), countdown = el('strong'), observed = el('p', 'hint'), attempt = el('p', 'hint'), packetCount = el('p', 'hint');
+    acquisition.append(countdown, observed, attempt, packetCount);
     actions.append(connect, cancel, disconnect);
     const connectionOptions = el('details', 'dexcom-options');
     form.append(pinLabel, actions, connectionOptions);
@@ -88,17 +91,17 @@ const NanoDexcom = (() => {
     const exportButton = button('Export readings', 'quiet'), clear = button('Clear saved readings', 'quiet'), savedActions = el('div', 'dexcom-actions'); savedActions.append(exportButton, clear, forget);
     connectionOptions.append(el('summary', '', 'Session & storage'), rememberLabel, reconnectLabel, keepLabel, savedActions);
     const details = el('details', 'dexcom-import'); details.append(el('summary', '', 'Captured packets'));
-    const passiveActions = el('div', 'dexcom-actions'), listen = button('Capture received packets'), stop = button('Stop capture', 'quiet'); passiveActions.append(listen, stop);
+    const passiveActions = el('div', 'dexcom-actions'), listen = button('Capture received packets'), stop = button('Stop capture', 'quiet'), exportCapture = button('Export acquisition capture', 'quiet'); passiveActions.append(listen, stop, exportCapture);
     const uuidLabel = el('label', '', 'Characteristic'), uuid = el('select');
     for (const [value, label] of [[p.CONTROL, 'G7 control (3534)'], [p.BACKFILL, 'G7 backfill (3536)']]) { const choice = el('option', '', label); choice.value = value; uuid.append(choice); } uuidLabel.append(uuid);
     const hexLabel = el('label', '', 'Packet HEX'), input = el('textarea'); input.rows = 3; input.spellcheck = false; input.placeholder = 'Paste one received characteristic value'; hexLabel.append(input);
     const timeLabel = el('label', '', 'Original capture time (optional)'), time = el('input'); time.type = 'datetime-local'; time.step = '1'; timeLabel.append(time);
     const decode = button('Decode packet'); details.append(passiveActions, uuidLabel, hexLabel, timeLabel, decode);
-    body.append(selected, form, status, toolbar, results, details); container.replaceChildren(heading, body);
+    body.append(selected, form, status, acquisition, toolbar, results, details); container.replaceChildren(heading, body);
     let session, client, selectedScope = '', displayed = {}, destroying = false, rendering = false, uiError = '', saveStamp = '', uiOperation = 0;
     const schedule = () => { if (!destroying) queueMicrotask(render); };
     client = createClient(lab, { ...options, onChange: schedule });
-    const makeSession = () => NanoDexcomSession.create(lab, { connection, ...storage, onChange: schedule });
+    const makeSession = () => { const reader = NanoDexcomSession.create(lab, { ...options, connection, ...storage, onChange: schedule }); readers.add(reader); return reader; };
     session = makeSession();
     const scope = device => device?.address ? `${NanoAPI.transport?.() === 'serial' ? 'usb' : NanoAPI.origin()}/${device.address}/${device.addressType}` : '';
     function render() {
@@ -108,7 +111,7 @@ const NanoDexcom = (() => {
         const device = getDevice(), nextScope = scope(device);
         if (selectedScope !== nextScope) { selectedScope = nextScope; pin.value = ''; uiError = ''; keep.checked = Boolean(storage.loadReadings(device)); saveStamp = ''; client.select(device); }
         const direct = session.snapshot(), captured = client.snapshot(), same = scope(direct.device || direct.scope) === nextScope;
-        const active = same && (direct.busy || direct.authenticated || ['waiting', 'reconnecting'].includes(direct.status));
+        const active = same && (direct.busy || direct.authenticated || direct.acquisition?.active);
         const fresh = same && direct.packets ? direct : captured.packets ? captured : null;
         if (fresh && keep.checked && fresh.packets && saveStamp !== `${nextScope}:${fresh.packets}`) {
           try { storage.saveReadings(device, fresh); saveStamp = `${nextScope}:${fresh.packets}`; } catch (error) { uiError = error.message; }
@@ -118,14 +121,21 @@ const NanoDexcom = (() => {
         selected.textContent = device ? `${device.label || device.name || 'Dexcom'} · ${device.address}` : 'Choose a Dexcom sensor in Discover.';
         const savedSession = storage.hasSession(device);
         pin.placeholder = savedSession ? 'Saved session available' : '0000'; pin.required = !savedSession; pin.disabled = active;
-        connect.disabled = !device || active; connect.textContent = savedSession ? 'Reconnect to G7' : 'Connect to G7';
-        cancel.hidden = !same || !direct.busy && !['waiting', 'reconnecting'].includes(direct.status); disconnect.hidden = !same || !direct.authenticated || direct.busy;
+        connect.disabled = !device || active; connect.textContent = savedSession ? 'Reconnect for 10 minutes' : 'Acquire for 10 minutes';
+        cancel.hidden = !same || !direct.busy && !direct.acquisition?.active; disconnect.hidden = !same || !direct.authenticated || direct.busy;
         forget.disabled = !savedSession || active; remember.disabled = reconnect.disabled = active;
         for (const control of [latest, history, identity, hours]) control.disabled = !same || !direct.authenticated || direct.busy;
         listen.disabled = !device || active || captured.listening; stop.hidden = !captured.listening; decode.disabled = !device || active || captured.listening;
         exportButton.disabled = !displayed.records?.length; clear.disabled = !saved;
         status.textContent = uiError || (same && (direct.error || direct.stage)) || captured.error || (captured.listening ? 'Capturing received packets.' : saved ? 'Showing saved readings.' : '');
         status.classList.toggle('error', Boolean(uiError || same && direct.error || captured.error));
+        const window = same ? direct.acquisition : null, seconds = Math.ceil((window?.remainingMs || 0) / 1000);
+        acquisition.hidden = !window?.startedAt;
+        countdown.textContent = window?.active ? `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')} remaining` : 'Acquisition stopped';
+        observed.textContent = window?.lastSeenAt !== null && window?.lastSeenAt !== undefined ? `Last advertisement: ${new Date(window.lastSeenAt).toLocaleTimeString()}` : 'Waiting for the selected address and address type';
+        attempt.textContent = `${window?.attempts || 0} connection attempts${window?.lastAttemptAt ? ` · Last attempt ${new Date(window.lastAttemptAt).toLocaleTimeString()}` : ''}${window?.lastAttemptStatus || window?.attemptStatus ? ` · ${window.lastAttemptStatus || window.attemptStatus}` : ''}`;
+        packetCount.textContent = `${window?.packetCount || 0} captured packets`;
+        exportCapture.disabled = !window?.packetCount;
         NanoDexcomView.render(results, displayed, !fresh && Boolean(saved));
       } finally { rendering = false; }
     }
@@ -139,11 +149,12 @@ const NanoDexcom = (() => {
     listen.addEventListener('click', () => run(() => client.listen(getDevice()))); stop.addEventListener('click', () => client.stop());
     decode.addEventListener('click', () => run(() => { const receivedAt = time.value ? new Date(time.value).getTime() : null; if (time.value && !Number.isFinite(receivedAt)) throw new Error('Enter a valid capture time.'); client.importPacket(getDevice(), uuid.value, input.value, receivedAt); }));
     exportButton.addEventListener('click', () => { const url = URL.createObjectURL(new Blob([NanoDexcomView.csv(displayed)], { type: 'text/csv' })), link = el('a'); link.href = url; link.download = 'gattelier-g7-readings.csv'; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); });
+    exportCapture.addEventListener('click', () => { const url = URL.createObjectURL(new Blob([JSON.stringify(session.captureSnapshot(), null, 2)], { type: 'application/json' })), link = el('a'); link.href = url; link.download = 'gattelier-g7-acquisition.json'; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); });
     const selectionChanged = () => { if (selectedScope !== scope(getDevice())) { uiOperation++; session.cancel(); } render(); };
-    const boardChanged = () => { uiOperation++; session.destroy(); session = makeSession(); client.clear(getDevice()); selectedScope = ''; render(); };
+    const boardChanged = () => { uiOperation++; readers.delete(session); session.destroy(); session = makeSession(); client.clear(getDevice()); selectedScope = ''; render(); };
     document.addEventListener('nanoscope:selection', selectionChanged); globalThis.addEventListener('nanoscope:api-change', boardChanged); render();
-    return { render, client, session, destroy() { destroying = true; client.destroy(); session.destroy(); document.removeEventListener('nanoscope:selection', selectionChanged); globalThis.removeEventListener('nanoscope:api-change', boardChanged); } };
+    return { render, client, session, destroy() { destroying = true; readers.delete(session); client.destroy(); session.destroy(); document.removeEventListener('nanoscope:selection', selectionChanged); globalThis.removeEventListener('nanoscope:api-change', boardChanged); } };
   }
-  return { createClient, mount };
+  return { createClient, mount, isAcquiring: () => [...readers].some(reader => reader.snapshot().acquisition?.active), pollAcquisition: () => Promise.all([...readers].map(reader => reader.pollAcquisition())) };
 })();
 if (typeof module !== 'undefined') module.exports = NanoDexcom;

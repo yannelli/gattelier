@@ -31,7 +31,7 @@ const NanoDeviceSupport = (() => {
       const context = metadata(), matches = context.device ? NanoDeviceLibrary.match(context.device, context.state).filter(item => families[kind].includes(item.id)) : [];
       const next = JSON.stringify([context.device?.address, context.device?.addressType, context.connected, context.characteristics, context.online, context.pending, context.state.ble?.busy, running]);
       if (next === signature) return; signature = next;
-      summary.replaceChildren(el('h3', '', kind === 'locks' ? 'Lock metadata' : kind === 'samsung' ? 'Samsung device metadata' : entries.map(item => item.title).join(' / ')), el('p', 'vendor-note', matches.length ? matches.map(item => `${item.confidence}: ${item.evidence}`).join(' ') : context.device ? 'No known service signature matched.' : ''));
+      summary.replaceChildren(el('h3', '', kind === 'locks' ? 'Lock metadata' : kind === 'samsung' ? 'Samsung device metadata' : matches.length ? matches.map(item => item.title).join(' / ') : entries.map(item => item.title).join(' / ')));
       read.disabled = !context.online || !context.device || context.device.connectable === false || context.pending || running;
       inspect.disabled = !context.device || context.pending || context.state.ble?.busy;
       results.replaceChildren();
@@ -48,7 +48,7 @@ const NanoDeviceSupport = (() => {
         const readable = (state.services || []).flatMap(service => service.characteristics || []).filter(item => identity.has(NanoDeviceLibrary.uuid(item.uuid)) && item.properties.includes('read'));
         let completed = 0;
         for (const item of readable) {
-          if (metadata().device?.address !== device.address || !metadata().connected) throw new Error('The selected connection changed.');
+          if ((metadata().device?.address !== device.address || metadata().device?.addressType !== device.addressType) || !metadata().connected) throw new Error('The selected connection changed.');
           await lab.action('read', { handle: item.handle }); completed++;
         }
         status.textContent = completed ? `Read ${completed} metadata values.` : 'This device exposes no standard readable identity or battery fields. Inspect its custom services.';

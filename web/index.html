@@ -16,7 +16,7 @@
 </head>
 <body>
   <a class="skip-link" href="#main-content">Skip to workspace</a>
-  <header class="topbar">
+  <header id="workspace-header" class="topbar">
     <div class="brand"><span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M7 7l10 10-5 4V3l5 4L7 17"/></svg></span><span>Gattelier</span></div>
     <div id="header-device" aria-label="Bluetooth connection"></div>
     <button id="scan" class="button primary" type="button" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M5.6 5.6a9 9 0 000 12.8m12.8-12.8a9 9 0 010 12.8M8.4 8.4a5.1 5.1 0 000 7.2m7.2-7.2a5.1 5.1 0 010 7.2"/></svg><span id="scan-label">Start scanning</span></button>
@@ -24,7 +24,7 @@
   </header>
   <main id="main-content" tabindex="-1">
     <h1 id="page-title" class="sr-only">Gattelier</h1>
-    <nav class="workspace-navigation" aria-label="Workspace">
+    <nav id="workspace-global" class="workspace-navigation" aria-label="Workspace">
       <div class="workspace-tabs" role="tablist" aria-label="Workspace views">
         <button id="tab-discover" type="button" role="tab" aria-selected="true" aria-controls="view-discover" data-view="discover"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4"/><path d="M12 12l6-6"/><circle cx="12" cy="12" r=".7"/></svg><span>Discover</span></button>
         <button id="tab-apps" type="button" role="tab" aria-selected="false" aria-controls="view-apps" data-view="apps" tabindex="-1"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/></svg><span>Apps</span></button>
@@ -34,9 +34,21 @@
       </div>
       <div class="network"><span id="network-dot" class="dot"></span><span id="network">Connecting to board</span></div>
     </nav>
+    <div id="workspace-session-bar" class="workspace-session-bar">
+      <button id="pane-toggle" class="pane-toggle" type="button" aria-controls="workspace-pane" aria-expanded="true" aria-keyshortcuts="Alt+[" title="Toggle devices (Alt+[)"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M9 4v16"/></svg><span id="pane-toggle-label">Hide devices</span></button>
+      <div id="workspace-tabs" class="session-tabs" role="tablist" aria-label="Open devices and apps"><span class="session-tabs-empty">Open a device or app to keep it here</span></div>
+    </div>
+    <div id="workspace-status" class="workspace-status" data-state="idle">
+      <div class="session-state"><span class="session-state-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path class="status-link" d="m8 12 3 3 5-6"/><path class="status-idle" d="M9 12h6"/><path class="status-error" d="M12 7v6m0 3v1"/></svg></span><span><strong id="session-status-label" role="status">Waiting for board</strong><small id="session-status-detail">Select a device to inspect</small></span></div>
+      <div id="session-signal" class="session-signal" data-level="0" role="img" aria-label="Signal unavailable"><span class="signal-bars" aria-hidden="true"><i></i><i></i><i></i><i></i></span><span id="session-signal-label" aria-hidden="true">No signal reading</span></div>
+      <span id="session-count" class="session-count"></span>
+    </div>
     <div id="notice" class="notice" role="alert" hidden><span id="notice-text"></span><button id="retry" class="button quiet" type="button">Retry</button></div>
-    <section id="view-discover" class="workspace-view" role="tabpanel" aria-labelledby="tab-discover" tabindex="0">
-      <div class="workspace">
+    <div id="workspace-layout" class="workspace-layout" data-pane-open="true" data-density="comfortable">
+      <button id="pane-backdrop" class="pane-backdrop" type="button" tabindex="-1" aria-label="Close devices" hidden></button>
+      <aside id="workspace-pane" class="workspace-pane" aria-label="Devices">
+        <div class="pane-heading"><div><span class="pane-eyebrow">Device browser</span><p id="pane-context">Nearby and saved devices</p></div><button id="pane-close" class="pane-close" type="button" aria-label="Close device pane">&times;</button></div>
+        <label class="pane-mode">Pane<select id="pane-mode" aria-label="Device pane mode"><option value="auto">Auto</option><option value="open">Open in this view</option><option value="pinned">Pinned across views</option><option value="closed">Closed</option></select></label>
         <section class="panel discovery" aria-labelledby="nearby-title">
           <div class="panel-heading"><div><h2 id="nearby-title">Devices <span id="count" class="count">0</span></h2><p id="scan-status" role="status">Waiting for board</p></div><span id="scan-indicator" class="activity" hidden aria-hidden="true"></span></div>
           <div class="search-wrap"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M16 16l5 5"/></svg><input id="search" type="search" placeholder="Name, address or vendor" aria-label="Search devices by name, address or vendor" autocomplete="off" spellcheck="false"></div>
@@ -59,6 +71,10 @@
           <div id="devices" class="devices" tabindex="-1"><div class="empty compact"><span class="empty-symbol" aria-hidden="true">◎</span><h3>No devices yet</h3><p>Devices appear here when the board receives their advertisements.</p></div></div>
           <div class="panel-foot"><span id="list-summary">No devices yet</span><span id="vendor-status" role="status">Loading vendor database…</span></div>
         </section>
+      </aside>
+      <div id="workspace-stage" class="workspace-stage">
+    <section id="view-discover" class="workspace-view" role="tabpanel" aria-labelledby="tab-discover" tabindex="0">
+      <div class="workspace">
         <section class="panel inspector" aria-labelledby="inspector-title">
           <div class="panel-heading"><div><h2 id="inspector-title">Device inspector</h2><p>Advertisement &amp; GATT services</p></div><span id="connection-badge" class="badge"></span></div>
           <div id="inspector"><div class="empty inspector-empty"><span class="inspect-symbol" aria-hidden="true"><svg viewBox="0 0 48 48"><rect x="13" y="5" width="22" height="38" rx="6"/><path d="M20 10h8M22 37h4M20 19l8 10-4 4V15l4 4-8 10"/></svg></span><h3>Choose a device from the list</h3></div></div>
@@ -106,6 +122,7 @@
       <div class="settings-nav" role="tablist" aria-label="Settings sections" aria-orientation="vertical">
         <button id="settings-tab-connection" type="button" role="tab" aria-controls="settings-connection" data-section="connection"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 7V3m6 4V3M7 7h10v4a5 5 0 01-10 0V7zm5 9v5"/></svg><span>Connection</span></button>
         <button id="settings-tab-wifi" type="button" role="tab" aria-controls="settings-wifi" data-section="wifi"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 9a14 14 0 0119 0M5.8 12.5a9.5 9.5 0 0112.4 0M9.2 16a5 5 0 015.6 0"/><circle cx="12" cy="19.5" r=".8"/></svg><span>Wi-Fi</span></button>
+        <button id="settings-tab-workspace" type="button" role="tab" aria-controls="settings-workspace" data-section="workspace"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M3 9h18M9 9v11"/></svg><span>Workspace &amp; alerts</span></button>
         <button id="settings-tab-history" type="button" role="tab" aria-controls="settings-history" data-section="history"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg><span>Device history</span></button>
         <button id="settings-tab-collection" type="button" role="tab" aria-controls="settings-collection" data-section="collection"><svg viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="6" rx="7" ry="2.8"/><path d="M5 6v12c0 1.5 3.1 2.8 7 2.8s7-1.3 7-2.8V6M5 12c0 1.5 3.1 2.8 7 2.8s7-1.3 7-2.8"/></svg><span>Collection</span></button>
         <button id="settings-tab-libraries" type="button" role="tab" aria-controls="settings-libraries" data-section="libraries"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4.5h4v15H5zM10 4.5h4v15h-4zM15.2 5.2l3.8-1 3 14.5-3.8 1z"/></svg><span>Libraries</span></button>
@@ -119,6 +136,19 @@
         </div>
         <div id="settings-wifi" class="settings-section" role="tabpanel" aria-labelledby="settings-tab-wifi" tabindex="-1" hidden>
           <section id="network-panel" class="panel" aria-label="Wi-Fi and hotspot"></section>
+        </div>
+        <div id="settings-workspace" class="settings-section" role="tabpanel" aria-labelledby="settings-tab-workspace" tabindex="-1" hidden>
+          <section class="panel settings-card" aria-labelledby="workspace-settings-title">
+            <div class="panel-heading"><div><h2 id="workspace-settings-title">Workspace</h2><p>Tabs and preferences are saved in this browser.</p></div></div>
+            <label class="setting-row" for="workspace-density"><span><strong>Information density</strong><small>Compact spacing fits more devices on desktop and tablet.</small></span><select id="workspace-density"><option value="comfortable">Comfortable</option><option value="compact">Compact</option></select></label>
+          </section>
+          <section id="session-alert-settings" class="panel settings-card" aria-labelledby="session-alert-title">
+            <div class="panel-heading"><div><h2 id="session-alert-title">Session alerts</h2><p>Connection changes and errors from the board.</p></div></div>
+            <label class="setting-row" for="session-notifications"><span><strong>Browser notifications</strong><small id="notification-permission">Off. Enable to request browser permission.</small></span><input id="session-notifications" class="setting-switch" type="checkbox" role="switch"></label>
+            <label class="setting-row" for="session-sound-connect"><span><strong>Connection sound</strong><small>Play when a device connects.</small></span><input id="session-sound-connect" class="setting-switch" type="checkbox" role="switch" data-session-sound="connect"></label>
+            <label class="setting-row" for="session-sound-disconnect"><span><strong>Disconnection sound</strong><small>Play when a device disconnects or the board becomes unavailable.</small></span><input id="session-sound-disconnect" class="setting-switch" type="checkbox" role="switch" data-session-sound="disconnect"></label>
+            <label class="setting-row" for="session-sound-error"><span><strong>Error sound</strong><small>Play once for each new error.</small></span><input id="session-sound-error" class="setting-switch" type="checkbox" role="switch" data-session-sound="error"></label>
+          </section>
         </div>
         <div id="settings-history" class="settings-section" role="tabpanel" aria-labelledby="settings-tab-history" tabindex="-1" hidden>
           <section id="history-panel" class="panel settings-card" aria-labelledby="history-settings-title">
@@ -149,6 +179,8 @@
       </div>
       </div>
     </section>
+      </div>
+    </div>
     <footer><span>NanoC6 <span aria-hidden="true">·</span> Local Bluetooth workspace</span><span id="board-status">Waiting for board</span></footer>
   </main>
 </body>

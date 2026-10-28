@@ -4,16 +4,16 @@ import { transform } from 'esbuild';
 
 const web = fileURLToPath(new URL('../web/', import.meta.url));
 const scripts = [
-  'catalog-schema', 'catalog-match', 'catalogs', 'vendors', 'packets', 'pklg', 'btsnoop', 'recorders', 'bthome-crypto', 'sensor-profiles', 'apple-continuity', 'nespresso-protocol', 'vesync-protocol', 'samsung-protocol', 'lg-webos-protocol', 'resmed-fig', 'beacon-protocol', 'bose-protocol', 'device-apps', 'profiles', 'device-library', 'scan-store', 'scan-query',
+  'schlage-protocol', 'catalog-schema', 'catalog-match', 'catalogs', 'vendors', 'packets', 'pklg', 'btsnoop', 'recorders', 'bthome-crypto', 'sensor-profiles', 'apple-continuity', 'nespresso-protocol', 'vesync-protocol', 'samsung-protocol', 'lg-webos-protocol', 'resmed-fig', 'beacon-protocol', 'bose-protocol', 'device-apps', 'profiles', 'device-library', 'scan-store', 'scan-query',
   'metadata', 'gatt-values', 'analysis', 'console', 'traffic', 'serial-codec', 'serial-wire', 'serial', 'api', 'advertisement', 'scan-stream', 'lab', 'connection', 'pocket-protocol', 'plaud-crypto',
   'plaud-protocol', 'credentials', 'credentials-ui', 'pocket', 'plaud', 'sleep-number-protocol', 'sleep-number', 'browser-cache',
-  'notify-client', 'sleep-mcr-protocol', 'sleep-mcr', 'sleep-router', 'radiacode-protocol', 'radiacode', 'dexcom-crypto', 'dexcom-protocol', 'dexcom-commands', 'dexcom-transport', 'dexcom-session',
+  'notify-client', 'sleep-mcr-protocol', 'sleep-mcr', 'sleep-router', 'radiacode-protocol', 'radiacode', 'dexcom-crypto', 'dexcom-protocol', 'dexcom-commands', 'dexcom-transport', 'dexcom-acquisition', 'dexcom-session',
   'dexcom-storage', 'dexcom-view', 'dexcom',
-  'browser-ui', 'insights', 'workspace', 'settings', 'inspector', 'network-ui', 'usb-mode', 'collection', 'theme', 'device-support', 'protocol-app', 'beacon-app', 'sensor-history', 'sensor-session', 'sensor-app', 'modules',
+  'browser-ui', 'insights', 'workspace-tabs', 'session-alerts', 'workspace', 'settings', 'inspector', 'network-ui', 'usb-mode', 'collection', 'theme', 'device-support', 'schlage', 'standard-app', 'protocol-app', 'beacon-app', 'sensor-history', 'sensor-session', 'sensor-app', 'modules',
   'pairing-catalog', 'pairing-model', 'pairing', 'device-page',
   'recipe-model', 'recipe-library', 'recipe-browser', 'recipes', 'snapshot-model', 'snapshots', 'guide', 'pwa', 'access-ui', 'api-ui', 'metadata-ui', 'catalog-ui', 'activity-led-ui', 'app',
 ];
-const styles = ['style', 'lab', 'pocket', 'plaud', 'workspace', 'insights', 'network', 'snapshots', 'analysis', 'shell', 'device-page', 'radiacode', 'dexcom', 'credentials', 'usb-mode', 'pwa', 'collection', 'api-ui', 'module-layout', 'protocol-app', 'sensor-app', 'catalogs', 'settings'];
+const styles = ['style', 'lab', 'pocket', 'plaud', 'workspace', 'workspace-tabs', 'insights', 'network', 'snapshots', 'analysis', 'shell', 'device-page', 'radiacode', 'dexcom', 'credentials', 'usb-mode', 'pwa', 'collection', 'api-ui', 'module-layout', 'protocol-app', 'sensor-app', 'catalogs', 'settings'];
 const concatenate = async (names, extension, separator) => (await Promise.all(
   names.map(name => readFile(`${web}${name}.${extension}`, 'utf8'))
 )).join(separator);

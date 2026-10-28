@@ -100,7 +100,7 @@ test('beacon imports isolate pasted manufacturer data from selected service data
   const plan = JSON.parse(h.all().find(node => node.className?.includes('protocol-command-preview')).textContent);
   assert.equal(plan.writes[1].hex, '03e8'); assert.equal(plan.steps, undefined); assert.equal(h.calls(), 0);
   h.select({ address: '02:00:00:00:00:09', addressType: 0, services: ['feed'] });
-  assert.equal(h.all().find(node => node.tag === 'details' && node.children[0].textContent === 'Prepare a command').hidden, true);
+  assert.equal(h.all().find(node => node.tag === 'details' && node.children[0].textContent === 'Command preview').hidden, true);
 });
 test('Bose capture JSON decodes locally and reference preview requires product evidence', () => {
   const h = harness('bose', { name: 'QC Ultra', address: '02:00:00:00:00:10', addressType: 0, services: ['febe'] });

@@ -85,3 +85,30 @@ select option { color: var(--text); background-color: var(--surface); }
   .workspace-tabs svg { display: none; }
   .topbar > .button svg { display: none; }
 }
+
+:root { --toolbar-height: 60px; }
+.topbar { padding-inline: 24px; }
+main { max-width: 1600px; padding-inline: 24px; }
+.workspace-navigation { margin: -4px 0 14px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.workspace-tabs { padding: 0; gap: 5px; border: 0; background: transparent; }
+.workspace-tabs button { min-height: 44px; padding-inline: 14px; }
+.workspace-tabs button[aria-selected="true"] { color: var(--accent); background: var(--accent-soft); box-shadow: none; }
+@media (min-width: 700px) and (max-width: 1000px) {
+  :root { --toolbar-height: 60px; }
+  .topbar { display: flex; min-height: 60px; padding: 6px 18px; }
+  .topbar .brand { font-size: 15px; }
+  #header-device { display: flex; justify-content: flex-end; }
+  .header-connection { width: min(100%, 280px); }
+  main { padding-inline: 18px; }
+  .workspace-tabs button { flex-direction: row; padding-inline: 12px; }
+}
+@media (max-width: 699px) {
+  :root { --toolbar-height: 106px; }
+  .topbar { padding: 7px 12px; gap: 5px 8px; }
+  main { padding: 10px 12px 18px; }
+  .workspace-navigation { margin: 0 0 10px; padding-block: 4px 8px; }
+  .workspace-tabs { width: 100%; gap: 0; }
+  .workspace-tabs button { gap: 5px; padding-inline: 5px; min-height: 44px; font-size: 10px; }
+  .workspace-tabs svg { width: 14px; height: 14px; }
+}
+@media (max-width: 380px) { .workspace-tabs svg { display: none; } .topbar .brand { font-size: 14px; } .brand-mark { width: 26px; height: 26px; } }

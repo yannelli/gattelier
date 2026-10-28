@@ -13,10 +13,22 @@ const plaud = {
 };
 const backup = records => ({ format: 'nanoscope-credentials', schemaVersion: 1, records });
 const record = (id = mac, credentials = key) => ({ kind: 'pocket', id, credentials, updatedAt: 123 });
+const file = value => { const content = JSON.stringify(value); return { size: Buffer.byteLength(content), text: async () => content }; };
 function memoryStorage() {
   const values = new Map();
   return { values, getItem: name => values.get(name) ?? null, setItem: (name, value) => values.set(name, value) };
 }
+
+test('app JSON imports accept original PLAUD files and combined recorder backups', async () => {
+  const saved = create({ storage: memoryStorage(), now: () => 456 });
+  assert.equal((await saved.importFile(file(plaud))).imported, 1);
+  assert.equal((await saved.importFile(file(backup([record()])))).imported, 1);
+  assert.equal(saved.getPlaud(plaud.serial).signature, plaud.signature);
+  assert.equal(saved.getPocket(mac), key);
+  await assert.rejects(saved.importFile({ size: 1, text: async () => '{' }), /not valid JSON/);
+  await assert.rejects(saved.importFile({ size: 512 * 1024 + 1, text: async () => '{}' }), /under 512 KiB/);
+  assert.equal(saved.status().count, 2);
+});
 
 test('recorder credentials persist with their explicit identities and reload', () => {
   const storage = memoryStorage(), saved = create({ storage, now: () => 456 });

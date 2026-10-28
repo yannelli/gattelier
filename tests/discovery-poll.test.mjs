@@ -19,6 +19,7 @@ test('fast scan transfers keep status polling and rendering bounded, including b
   const timers = [], board = { uptime: 10, ble: { scanning: true, advertisementStream: true }, devices: [], services: [] };
   const context = vm.createContext({ module: { exports: {} }, require: createRequire(new URL('../web/app.js', import.meta.url)), AbortController,
     Date: { now: () => time }, clearTimeout() {}, setTimeout: (callback, delay) => { timers.push({ callback, delay }); return timers.length; },
+    NanoDexcom: { isAcquiring: () => false },
     NanoPWA: { reportConnection() {}, pollDelay: () => 30000 },
     fakeStore: { ingest() {}, getPreference: () => true },
     fakeStream: { async poll() { transfers++; }, status: () => ({ delay: 50, supported: true }) },
@@ -42,6 +43,7 @@ function pollingFixture() {
   const reports = [], handlers = {};
   let offline = 0, transfers = 0, connected = true;
   const context = vm.createContext({ module: { exports: {} }, require: createRequire(new URL('../web/app.js', import.meta.url)), AbortController, setTimeout, clearTimeout,
+    NanoDexcom: { isAcquiring: () => false },
     NanoPWA: { reportConnection: value => reports.push(value) },
     NanoAPI: { transport: () => 'serial', serialStatus: () => ({ connected, error: '' }) },
     board, handlers, fakeStore: { ingest() {}, setOffline() { offline++; } },
@@ -91,4 +93,24 @@ test('advertisement polling pauses during BLE operations and resumes with scanni
   Object.assign(f.board.ble, { scanning: true, busy: false, connected: false });
   await vm.runInContext('poll()', f.context);
   assert.equal(f.transfers(), 1);
+});
+
+test('hidden connected sessions keep polling and render their final disconnect', async () => {
+  let time = 10000, renders = 0, acquiring = false;
+  const timers = [], board = { ble: { connected: true }, devices: [], services: [] };
+  const context = vm.createContext({ module: { exports: {} }, require: createRequire(new URL('../web/app.js', import.meta.url)), AbortController,
+    Date: { now: () => time }, clearTimeout() {}, setTimeout(callback, delay) { timers.push({ callback, delay }); return timers.length; },
+    NanoDexcom: { isAcquiring: () => acquiring }, NanoPWA: { reportConnection() {}, pollDelay: ({ background }) => background ? 30000 : null },
+    fakeStore: { ingest() {}, devices: () => [], setOffline() {}, getPreference: () => false }, fakeStream: { status: () => ({}) }, board,
+    fakeRequest: async () => ({ ...board, ble: { ...board.ble } }), renderCount: () => { renders++; } });
+  vm.runInContext(readFileSync(new URL('../web/app.js', import.meta.url), 'utf8'), context);
+  vm.runInContext('document = {hidden: true}; scanStore = fakeStore; scanStream = fakeStream; request = fakeRequest; state = {...board, ble:{connected:true}}; online = true; render = () => {lastRender = Date.now(); renderCount();};', context);
+  await vm.runInContext('tick()', context);
+  assert.equal(timers.at(-1).delay, 1000); assert.equal(renders, 1);
+  time += 1000; board.ble.connected = false;
+  await vm.runInContext('tick()', context);
+  assert.equal(renders, 2);
+  assert.equal(vm.runInContext('backgroundPolling()', context), false);
+  acquiring = true;
+  assert.equal(vm.runInContext('backgroundPolling()', context), true);
 });

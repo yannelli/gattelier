@@ -112,9 +112,50 @@ const NanoDeviceLibrary = (() => {
   function freeze(value) { Object.freeze(value); for (const child of Object.values(value)) if (child && typeof child === 'object' && !Object.isFrozen(child)) freeze(child); return value; }
   const entries = freeze(definitions);
   const uuid = value => String(value || '').toLowerCase().replace(/^0x/, '').replace(/^0000([\da-f]{4})-0000-1000-8000-00805f9b34fb$/, '$1');
+  const connected = (device, state = {}) => Boolean(state.ble?.connected && device?.address && state.ble.address && device.address.toLowerCase() === state.ble.address.toLowerCase() && device.addressType === state.ble.addressType);
+  const attributes = [
+    ['sleep-fuzion', '8d4675a5-b5fa-42b2-b587-0ee71c46b709', 'Sleep Number session authentication'],
+    ['sleep-fuzion', '421e00f3-ae76-4c49-ab6e-39e4df4a5333', 'Sleep Number BAM key transport'],
+    ['sleep-mcr', 'ffffd1fd-388d-938b-344a-939d1f6efee1', 'Sleep Number MCR responses'],
+    ['sleep-mcr', 'ffffd1fd-388d-938b-344a-939d1f6efee2', 'Sleep Number MCR commands'],
+    ['radiacode', 'e63215e6-7003-49d8-96b0-b024798fb901', 'RadiaCode commands'],
+    ['radiacode', 'e63215e7-7003-49d8-96b0-b024798fb901', 'RadiaCode responses']
+  ];
+  function lookup(value, serviceUuid = '') {
+    const key = uuid(value), service = uuid(serviceUuid);
+    const schlage = typeof NanoSchlage !== 'undefined' ? NanoSchlage.lookup?.(value, serviceUuid) : null;
+    if (schlage) return schlage;
+    const attribute = attributes.find(([, id]) => id === key);
+    if (attribute) {
+      const entry = entries.find(item => item.id === attribute[0]);
+      if (!service || entry.services.includes(service)) return { name: attribute[2], source: entry.sources.at(-1).url };
+    }
+    const catalog = typeof NanoMetadata !== 'undefined' ? NanoMetadata.lookup(value) : typeof module !== 'undefined' ? require('./catalogs.js').lookupUUID(value) : null;
+    if (catalog) return catalog;
+    const entry = entries.find(item => item.services.includes(key) && item.category !== 'vendor');
+    return entry ? { name: entry.title, description: entry.description, source: entry.sources[0].url } : null;
+  }
+  function suggestions(device, state = {}) {
+    if (!connected(device, state)) return [];
+    const recipes = typeof NanoRecipeLibrary !== 'undefined' ? NanoRecipeLibrary : typeof module !== 'undefined' ? require('./recipe-library.js') : null;
+    const available = recipes?.available(state) || [];
+    return (state.services || []).flatMap(service => (service.characteristics || []).flatMap(item => {
+      const properties = item.properties || [], actions = [];
+      if (properties.includes('read')) actions.push({ action: 'read' });
+      const mode = properties.includes('notify') ? 'notify' : properties.includes('indicate') ? 'indicate' : '';
+      if (mode && (!item.subscription || item.subscription === 'off')) actions.push({ action: 'subscribe', mode });
+      return actions.map(action => {
+        const recipe = available.find(entry => {
+          const step = entry.recipe.steps[0];
+          return uuid(step.service) === uuid(service.uuid) && uuid(step.uuid) === uuid(item.uuid) && step.action === action.action && step.mode === action.mode;
+        });
+        const name = lookup(item.uuid, service.uuid)?.name || `handle ${item.handle}`;
+        return { ...action, handle: item.handle, uuid: item.uuid, serviceUuid: service.uuid, label: action.action === 'read' && recipe ? recipe.name : `${action.action === 'read' ? 'Read' : 'Subscribe to'} ${name}`, ...(recipe ? { recipeId: recipe.id } : {}) };
+      });
+    }));
+  }
   function match(device = {}, state = {}) {
-    const sameDevice = state.ble?.connected && device.address && state.ble.address && device.address.toLowerCase() === state.ble.address.toLowerCase();
-    const gatt = sameDevice ? state.services || [] : [];
+    const gatt = connected(device, state) ? state.services || [] : [];
     const services = new Set([...(device.services || []).map(item => uuid(typeof item === 'string' ? item : item.uuid)), ...gatt.map(item => uuid(item.uuid))]);
     const characteristics = new Set(gatt.flatMap(service => (service.characteristics || []).map(item => uuid(item.uuid))));
     const manufacturer = typeof device.manufacturer === 'string' && /^(?:[\da-f]{2}){2,}$/i.test(device.manufacturer) ? device.manufacturer : '';
@@ -128,6 +169,6 @@ const NanoDeviceLibrary = (() => {
       return [{ ...clone(entry), confidence: signature ? 'GATT signature' : service ? 'Service match' : manufacturerMatch ? 'Manufacturer match' : 'Name candidate', confirmed: Boolean(signature || service), evidence: signature ? 'Documented characteristic UUIDs discovered on this device.' : service ? `Service ${service} is present.` : manufacturerMatch ? `Manufacturer company 0x${company.toString(16).padStart(4, '0')} is assigned to Samsung Electronics Co. Ltd.` : `Broadcast name: ${device.name}`, modelConfirmed: false }];
     });
   }
-  return { entries, sources: freeze(sources), get: id => { const entry = entries.find(item => item.id === id); return entry ? clone(entry) : null; }, match, uuid };
+  return { entries, sources: freeze(sources), get: id => { const entry = entries.find(item => item.id === id); return entry ? clone(entry) : null; }, match, uuid, connected, lookup, suggestions };
 })();
 if (typeof module !== 'undefined') module.exports = NanoDeviceLibrary;

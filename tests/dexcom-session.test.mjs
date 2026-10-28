@@ -9,7 +9,8 @@ function fixture(options = {}) {
   let state = { ble: { connected: true, address: device.address, addressType: 1, connectionAttempt: 7 }, security: { bonded: true, encrypted: true }, services: [{ uuid: p.SERVICE, characteristics: [
     { uuid: p.CONTROL, handle: 4, properties: ['write', 'notify'] }, { uuid: p.AUTH, handle: 5, properties: ['write', 'indicate'] },
     { uuid: p.BACKFILL, handle: 6, properties: ['notify'] }, { uuid: p.EXTRA, handle: 8, properties: ['write-no-response', 'notify'] }
-  ] }] }, sequence = 0, round = 0, cancelled = false;
+  ] }] }, sequence = 0, round = 0, cancelled = false, connectionAttempts = 0;
+  const fast = [], advertisements = [];
   const handles = { auth: 5, extra: 8, control: 4, backfill: 6 }, uuids = { auth: p.AUTH, extra: p.EXTRA, control: p.CONTROL, backfill: p.BACKFILL };
   const emit = (channel, value, extra = {}, meta = {}) => {
     const events = channel ? [{ seq: ++sequence, address: device.address, kind: channel === 'auth' ? 'indication' : 'notification', uuid: uuids[channel], handle: handles[channel], hex: typeof value === 'string' ? value : p.hex(value), ...extra }] : [];
@@ -22,6 +23,16 @@ function fixture(options = {}) {
   };
   async function action(kind, body = {}) {
     writes.push({ kind, ...body });
+    if (kind === 'scan' || kind === 'stop-scan') { state.ble.scanning = state.ble.scanEnabled = kind === 'scan'; return state; }
+    if (kind === 'connect') {
+      connectionAttempts++;
+      if (options.connectFailure && connectionAttempts === 1) throw new Error('Connection timed out.');
+      if (options.connectPending) return options.connectPending();
+      state.ble = { ...state.ble, ...device, connected: true, scanning: false, connectionAttempt: (state.ble.connectionAttempt || 0) + 1 };
+      for (const fn of states) fn(state, true); return state;
+    }
+    if (kind === 'disconnect') { state.ble.connected = false; state.ble.scanning = Boolean(state.ble.scanEnabled); for (const fn of states) fn(state, true); return state; }
+    if (kind === 'cancel-connect') { cancelled = true; return state; }
     if (kind === 'pair') { state.security = { bonded: true, encrypted: true }; for (const fn of states) fn(state, true); }
     if (kind !== 'write') return state;
     const bytes = p.bytes(body.hex);
@@ -41,10 +52,10 @@ function fixture(options = {}) {
     return state;
   }
   const lab = { getState: () => state, action, onEvents(fn) { listeners.add(fn); return () => listeners.delete(fn); },
-    onState(fn) { states.add(fn); fn(state, true); return () => states.delete(fn); }, setFastCapture(enabled) { if (enabled) queueMicrotask(() => emit()); } };
+    onState(fn) { states.add(fn); fn(state, true); return () => states.delete(fn); }, setFastCapture(enabled) { fast.push(enabled); if (enabled) queueMicrotask(() => emit()); } };
   const connection = { ensure: async () => state, disconnect: async () => { state.ble.connected = false; }, cancel: async () => { cancelled = true; } };
   const client = create(lab, { crypto, connection, chunkDelayMs: 0, timeoutMs: 50, bondTimeoutMs: 50, historyTimeoutMs: 50, loadSession: async () => options.saved === false ? null : { key: '07'.repeat(16) }, saveSession: async (...args) => saved.push(args), ...options.client });
-  return { client, emit, writes, stages, saved, listeners, states, state, get cancelled() { return cancelled; }, update(next, online = true) { state = next; for (const fn of states) fn(state, online); } };
+  return { client, emit, writes, stages, saved, listeners, states, state, fast, advertisements, get connectionAttempts() { return connectionAttempts; }, get cancelled() { return cancelled; }, update(next, online = true) { state = next; for (const fn of states) fn(state, online); } };
 }
 
 test('saved session authenticates before control subscriptions and current reads', async () => {
@@ -87,8 +98,8 @@ test('reading timestamps retain board event time across delayed polling', async 
 
 test('negative challenge/proof and timeouts stop before current glucose writes', async () => {
   for (const flags of [{ badChallenge: true }, { timeout: true }, { saved: false, proofFailure: true }]) {
-    const f = fixture(flags);
-    await assert.rejects(f.client.connect(device, { pin: flags.saved === false ? '0042' : undefined, reconnect: false }), /verification|timed out|proof failed/i);
+    const f = fixture({ ...flags, client: flags.timeout ? { windowMs: 100 } : {} });
+    await assert.rejects(f.client.connect(device, { pin: flags.saved === false ? '0042' : undefined, reconnect: false }), /verification|window ended|proof failed/i);
     assert.equal(f.client.snapshot().authenticated, false); assert.equal(f.writes.some(item => item.hex === '4e'), false); f.client.destroy();
   }
 });
@@ -110,4 +121,69 @@ test('other-device packets and replay cannot satisfy pending authentication; can
   const operation = f.client.connect(device, { reconnect: false }); await tick();
   f.emit('auth', '0300000000000000000000000000000000', { address: '02:00:00:00:00:08' });
   f.client.cancel(); await assert.rejects(operation, /cancelled/); assert.equal(f.client.snapshot().authenticated, false); assert.equal(f.client.snapshot().error, ''); f.client.destroy();
+});
+
+function wakeFixture(options = {}) {
+  let f, sequence = 0;
+  const batches = [];
+  const fetch = async path => ({ ok: true, json: async () => path.startsWith('state') ? f.state : { bootId: 'scan-one', uptime: 100, cursor: sequence, devices: batches.splice(0) } });
+  f = fixture({ ...options, client: { fetch, scanPollMs: 2, windowMs: 1000, ...options.client } });
+  f.state.ble.connected = false; f.state.ble.scanning = true; f.state.ble.scanEnabled = true; f.state.uptime = 100;
+  return { ...f, advertise(extra = {}) { batches.push({ ...device, seq: ++sequence, ms: 100000 + sequence, connectable: true, ...extra }); }, get attempts() { return f.connectionAttempts; } };
+}
+
+test('an initial transient miss retries on a new advertisement within the same window', async () => {
+  const f = wakeFixture({ connectFailure: true }); f.advertise();
+  const operation = f.client.connect(device, { remember: true }); await tick();
+  const deadline = f.client.snapshot().acquisition.deadline;
+  assert.equal(f.attempts, 1); assert.equal(f.client.snapshot().authenticated, false);
+  f.advertise(); await f.client.pollAcquisition(); await operation;
+  assert.equal(f.attempts, 2); assert.equal(f.client.snapshot().acquisition.deadline, deadline);
+  assert.equal(f.client.snapshot().authenticated, true); assert.equal(f.saved.length, 1); f.client.destroy();
+});
+
+test('hidden navigation does not suppress reconnect and readings survive until the original deadline', async () => {
+  const f = wakeFixture({ client: { isActive: () => false } }); f.advertise(); await f.client.connect(device, { reconnect: true });
+  const initial = f.client.snapshot(); f.state.ble.connected = false;
+  f.emit('control', '', { kind: 'disconnect' }); await tick();
+  assert.equal(f.client.snapshot().busy, true); assert.equal(f.client.snapshot().records.length, 1);
+  f.advertise(); await f.client.pollAcquisition(); await tick();
+  assert.equal(f.client.snapshot().authenticated, true); assert.equal(f.client.snapshot().records.length, 1);
+  assert.equal(f.client.snapshot().acquisition.deadline, initial.acquisition.deadline);
+  await f.client.cancel(); assert.equal(f.client.snapshot().records.length, 1); assert.equal(f.fast.at(-1), false); f.client.destroy();
+});
+
+test('authentication failures terminate acquisition and remain visible without retrying', async () => {
+  const f = wakeFixture({ badChallenge: true }); f.advertise();
+  await assert.rejects(f.client.connect(device, { reconnect: true }), /verification failed/);
+  assert.equal(f.client.snapshot().status, 'error'); assert.match(f.client.snapshot().error, /verification failed/);
+  assert.equal(f.client.snapshot().acquisition.active, false); assert.equal(f.attempts, 1); assert.equal(f.fast.at(-1), false);
+  f.advertise(); await f.client.pollAcquisition(); assert.equal(f.attempts, 1); f.client.destroy();
+});
+
+test('cancellation while waiting clears acquisition and retains the saved session', async () => {
+  const f = wakeFixture(); const operation = f.client.connect(device, { remember: true }); await tick();
+  const rejected = assert.rejects(operation, /cancelled/); await f.client.cancel(); await rejected;
+  assert.equal(f.client.snapshot().busy, false); assert.equal(f.client.snapshot().error, ''); assert.equal(f.attempts, 0);
+  f.advertise(); await f.client.connect(device, { reconnect: false }); assert.equal(f.client.snapshot().authenticated, true); f.client.destroy();
+});
+
+test('a suspended pending connection is bounded and its late result cannot authenticate', async () => {
+  let resolve;
+  const f = wakeFixture({ connectPending: () => new Promise(yes => { resolve = yes; }), client: { windowMs: 50 } }); f.advertise();
+  const operation = f.client.connect(device); await tick();
+  await assert.rejects(operation, /window ended/); assert.equal(f.client.snapshot().busy, false);
+  assert.equal(f.client.snapshot().acquisition.active, false); assert.equal(f.fast.at(-1), false);
+  f.state.ble.connected = true; resolve(f.state); await tick();
+  assert.equal(f.client.snapshot().authenticated, false); assert.equal(f.state.ble.connected, false);
+  assert.equal(f.writes.some(item => item.kind === 'subscribe'), false); f.client.destroy();
+});
+
+test('stale address types, connection attempts and board timestamps cannot satisfy authentication', async () => {
+  const f = fixture({ timeout: true, client: { timeoutMs: 1000 } }); f.state.uptime = 200;
+  const operation = f.client.connect(device); await tick();
+  const reply = '03' + 'a9'.repeat(8) + '04'.repeat(8);
+  f.emit('auth', reply, { addressType: 0 }); f.emit('auth', reply, { connectionAttempt: 6 }); f.emit('auth', reply, { ms: 199000 });
+  assert.equal(f.writes.some(item => item.hex?.startsWith('04')), false);
+  const rejected = assert.rejects(operation, /cancelled/); await f.client.cancel(); await rejected; f.client.destroy();
 });
