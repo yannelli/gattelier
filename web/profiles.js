@@ -3,6 +3,7 @@
 const NanoProfiles = (() => {
   const catalogs = typeof module !== 'undefined' ? require('./catalogs.js') : NanoCatalogs;
   const references = {
+    standard: { title: 'Bluetooth SIG GATT Specification Supplement', url: 'https://btprodspecificationrefs.blob.core.windows.net/gatt-specification-supplement/GATT_Specification_Supplement.pdf' },
     ad: { title: 'Bluetooth advertising data', url: 'https://www.bluetooth.com/wp-content/uploads/Files/Specification/HTML/CSS_v11/out/en/supplement-to-the-bluetooth-core-specification/data-types-specification.html' },
     findmy: { title: 'Find My envelope reference', url: 'https://github.com/seemoo-lab/openhaystack/blob/main/Firmware/ESP32/main/openhaystack_main.c' },
     ibeacon: { title: 'iBeacon format', url: 'https://github.com/espressif/arduino-esp32/blob/master/libraries/BLE/src/BLEBeacon.cpp' },
@@ -115,6 +116,12 @@ const NanoProfiles = (() => {
       const library = typeof NanoDeviceLibrary !== 'undefined' ? NanoDeviceLibrary : typeof module !== 'undefined' ? require('./device-library.js') : null;
       const connected = library?.match(device, state).find(entry => entry.confirmed && entry.category !== 'vendor');
       if (connected) return { category: connected.category, title: connected.title, confidence: connected.confidence, evidence: [connected.evidence], fields: [], limitations: [connected.limitations], sources: connected.sources, modelConfirmed: false };
+      const standard = typeof NanoStandardApp !== 'undefined' ? NanoStandardApp : typeof module !== 'undefined' ? require('./standard-app.js') : null;
+      const matches = standard?.matches(device, state).filter(item => item.uuid !== '180f') || [];
+      if (matches.length) return { category: 'sensor', title: matches.map(item => item.title).join(' · '), confidence: 'Service match',
+        evidence: matches.map(item => `${item.title} service 0x${item.uuid} is advertised or discovered on this device.`),
+        fields: matches.map(item => ({ label: item.title, value: `0x${item.uuid}` })),
+        limitations: ['Service matches do not confirm a device model or available measurements.'], sources: [references.standard], modelConfirmed: false };
     }
     return result;
   }
@@ -124,7 +131,7 @@ const NanoProfiles = (() => {
       { category: 'beacon', title: 'Beacons', description: 'iBeacon identity and Eddystone telemetry.' },
       { category: 'medical', title: 'Dexcom metadata', description: 'Broadcast names, services, and match evidence.' },
       { category: 'sleep', title: 'Sleep Number', description: 'Fuzion and MCR identification; paired Fuzion queries.' },
-      { category: 'sensor', title: 'Environmental sensors', description: 'BTHome v2 and Ruuvi measurements from broadcasts.' },
+      { category: 'sensor', title: 'Sensors', description: 'Standard BLE sensor services, BTHome, and Ruuvi broadcasts.' },
       { category: 'recorder', title: 'Recorders', description: 'PLAUD and Pocket protocol identification.' },
       { category: 'vendor', title: 'Vendor broadcasts', description: 'Apple, Samsung, and LG manufacturer evidence and decoded broadcast fields.' },
       { category: 'appliance', title: 'Home appliances', description: 'Nespresso, Levoit, and LG device identification, saved responses, and command previews.' },

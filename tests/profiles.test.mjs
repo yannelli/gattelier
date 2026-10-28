@@ -1,5 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import vm from 'node:vm';
+import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 const profiles = require('../web/profiles.js');
@@ -69,4 +71,65 @@ test('Eddystone EID exposes rotating bytes and power without resolving identity'
   assert.equal(fields(result)['Ephemeral identifier'], '0011223344556677');
   assert.match(result.limitations[0], /authorized resolver/);
   assert.equal(frame('30c50011').title, 'Eddystone service');
+});
+
+
+test('standard advertised services reuse matcher titles and exclude battery from sensor fields', () => {
+  const standard = require('../web/standard-app.js');
+  for (const uuid of ['180d', '0000180d-0000-1000-8000-00805f9b34fb']) {
+    const device = { name: 'Polar', services: [uuid, '180f'] };
+    const result = profiles.identify(device);
+    assert.equal(result.category, 'sensor');
+    assert.equal(result.title, standard.matches(device)[0].title);
+    assert.equal(result.confidence, 'Service match');
+    assert.equal(result.modelConfirmed, false);
+    assert.deepEqual(fields(result), { 'Heart rate': '0x180d' });
+    assert.match(result.sources[0].url, /GATT_Specification_Supplement/);
+    assert.doesNotMatch(result.title, /Polar|Battery/);
+  }
+  const result = profiles.identify({ services: ['180d', '1816'] });
+  assert.equal(result.title, 'Heart rate · Cycling speed and cadence');
+  assert.equal(profiles.identify({ serviceData: [{ uuid: '180d', hex: '' }] }).category, 'sensor');
+  assert.equal(profiles.catalog().find(item => item.category === 'sensor').title, 'Sensors');
+});
+
+test('standard discovered services require the connected address and address type', () => {
+  const device = { address: 'aa:bb:cc:dd:ee:01', addressType: 0 };
+  const state = { ble: { connected: true, address: device.address.toUpperCase(), addressType: 0 }, services: [{ uuid: '180d', characteristics: [] }] };
+  assert.equal(profiles.identify(device, state).title, 'Heart rate');
+  for (const ble of [{ addressType: 1 }, { address: 'aa:bb:cc:dd:ee:02' }, { connected: false }]) {
+    assert.equal(profiles.identify(device, { ...state, ble: { ...state.ble, ...ble } }).category, 'other');
+  }
+  assert.equal(profiles.identify(device).category, 'other');
+});
+
+test('battery alone and sensor names do not classify a standard sensor', () => {
+  for (const device of [{ services: ['180f'] }, { name: 'Polar Heart rate' }, { services: ['180d-vendor'] }]) {
+    assert.equal(profiles.identify(device).category, 'other');
+  }
+  const device = { address: 'aa:bb:cc:dd:ee:01', addressType: 0 };
+  assert.equal(profiles.identify(device, { ble: { ...device, connected: true }, services: [{ uuid: '180f' }] }).category, 'other');
+});
+
+test('standard fallback preserves existing vendor, medical, and recorder classifications', () => {
+  for (const device of [
+    { manufacturer: '750042040000' },
+    { services: ['febc'] },
+    { name: 'PKT01_fixture', services: ['5536'] }
+  ]) {
+    const original = profiles.identify(device);
+    assert.notEqual(original.category, 'other');
+    const result = profiles.identify({ ...device, services: [...(device.services || []), '180d'] });
+    assert.equal(result.category, original.category);
+    assert.equal(result.title, original.title);
+  }
+});
+
+test('browser fallback tolerates an absent standard app and uses its matcher when present', () => {
+  const context = vm.createContext({ NanoCatalogs: require('../web/catalogs.js') });
+  vm.runInContext(readFileSync(new URL('../web/profiles.js', import.meta.url), 'utf8'), context);
+  const identify = vm.runInContext('NanoProfiles.identify', context);
+  assert.equal(identify({ services: ['180d'] }).category, 'other');
+  context.NanoStandardApp = require('../web/standard-app.js');
+  assert.equal(identify({ services: ['180d'] }).title, 'Heart rate');
 });

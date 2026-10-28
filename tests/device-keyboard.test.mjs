@@ -143,3 +143,26 @@ test('cleared history stays empty when connected state updates learn a fallback 
   assert.equal(fallback.gattName, 'Updated sensor');
   assert.deepEqual(store.devices(), []);
 });
+
+
+test('selecting away and back stops a bulk read even before its pending request settles', () => {
+  const h = harness();
+  h.context.readSession = { key: key(devices[0]), stopped: false };
+  vm.runInContext('selectDevice(fixtures[0]);', h.context);
+  assert.equal(h.context.readSession.stopped, false);
+  vm.runInContext('selectDevice(fixtures[1]); selectDevice(fixtures[0]);', h.context);
+  assert.equal(h.context.readSession.stopped, true);
+});
+
+test('restored app targets preserve app navigation without requiring a current match', () => {
+  const h = harness(); let opened = 0;
+  h.context.NanoWorkspace.view = () => 'apps';
+  h.context.NanoWorkspace.module = () => 'standard';
+  h.context.NanoWorkspace.openDevice = () => opened++;
+  h.context.NanoModules = { rememberTarget: () => false };
+  vm.runInContext('selectDevice(fixtures[0], true)', h.context);
+  assert.equal(opened, 0);
+  assert.equal(h.selections.at(-1), devices[0]);
+  vm.runInContext('selectDevice(fixtures[1])', h.context);
+  assert.equal(opened, 1);
+});

@@ -10,15 +10,15 @@ const NanoWorkspaceTabs = (() => {
   }
   function target(device) {
     if (!key(device)) return null;
-    const services = (Array.isArray(device.services) ? device.services : []).filter(value => typeof value === 'string' && /^(?:[\da-f]{4}|[\da-f]{8}|[\da-f]{8}(?:-[\da-f]{4}){3}-[\da-f]{12})$/i.test(value)).slice(0, 32);
+    const services = (Array.isArray(device.services) ? device.services : []).filter(value => typeof value === 'string' && /^(?:(?:0x)?(?:[\da-f]{4}|[\da-f]{8})|[\da-f]{8}(?:-[\da-f]{4}){3}-[\da-f]{12})$/i.test(value)).slice(0, 32);
     return { address: device.address, addressType: device.addressType,
-      name: String(device.name || '').slice(0, 128), label: String(device.label || '').slice(0, 128),
+      name: String(device.name || '').slice(0, 128), gattName: String(device.gattName || '').slice(0, 128), label: String(device.label || '').slice(0, 128),
       manufacturerName: String(device.manufacturerName || '').slice(0, 128), glyph: String(device.glyph || '').slice(0, 4),
-      services, serviceData: [], payloadHex: '', manufacturer: '', rssi: null, connectable: false };
+      services, serviceData: [], payloadHex: '', manufacturer: '', rssi: null, connectable: typeof device.connectable === 'boolean' ? device.connectable : undefined };
   }
   function identity(tab) { return `${tab.kind}:${tab.module || ''}:${key(tab.target).toLowerCase()}`; }
   function appearance(tab) {
-    const name = tab.target?.label || tab.target?.name || tab.target?.address || tab.title;
+    const name = [tab.target?.label, tab.target?.name, tab.target?.gattName].find(value => typeof value === 'string' && value.trim())?.trim() || tab.target?.address || tab.title;
     const manufacturer = tab.target?.manufacturerName || tab.module || name || 'Device';
     let hash = 0;
     for (const character of manufacturer) hash = (hash * 31 + character.charCodeAt(0)) >>> 0;

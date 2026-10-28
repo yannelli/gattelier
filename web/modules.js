@@ -6,6 +6,7 @@ const NanoModules = (() => {
   const standard = typeof module !== 'undefined' ? require('./standard-app.js') : NanoStandardApp;
   const library = typeof module !== 'undefined' ? require('./device-library.js') : NanoDeviceLibrary;
   const deviceApps = typeof module !== 'undefined' ? require('./device-apps.js') : NanoDeviceApps;
+  const displayName = device => typeof deviceDisplayName === 'function' ? deviceDisplayName(device) : [device.label, device.name, device.gattName].find(value => typeof value === 'string' && value.trim())?.trim() || device.address;
   const catalog = [
     { id: 'plaud', title: 'PLAUD', description: 'Authenticate your Note Pro and download recordings.', category: 'recorder' },
     { id: 'pocket', title: 'Pocket', description: 'Browse recorder storage and retrieve audio.', category: 'recorder' },
@@ -41,14 +42,15 @@ const NanoModules = (() => {
     if (target && !saved) localTargets.set(id, target);
     return target;
   }
-  function selectAppDevice(id, device) {
-    if (!rememberTarget(id, device)) return false;
-    if (!deviceApps.get(id)) hooks.select(device);
+  function selectAppDevice(id, device, restored = false) {
+    if (!rememberTarget(id, device, restored)) return false;
+    if (!deviceApps.get(id)) hooks.select(device, restored);
     NanoWorkspace.retarget?.(id, device);
     return true;
   }
-  function rememberTarget(id, device) {
-    if (!device || !matches(device).includes(id)) return false;
+  function rememberTarget(id, device, restored = false) {
+    if (!catalog.some(app => app.id === id) || typeof device?.address !== 'string' || !/^(?:[\da-f]{2}:){5}[\da-f]{2}$/i.test(device.address) || !Number.isInteger(device.addressType) || device.addressType < 0 || device.addressType > 3) return false;
+    if (restored !== true && !matches(device).includes(id)) return false;
     localTargets.set(id, device); return true;
   }
   function mount(options) {
@@ -80,17 +82,19 @@ const NanoModules = (() => {
     root.hidden = !id;
     if (!id) return;
     const target = appDevice(id), found = devices.filter(device => matches(device).includes(id));
-    const next = JSON.stringify([id, target?.address, target?.addressType, found.map(item => [item.address, item.addressType, item.name, item.label]), NanoLab.isActing(), NanoLab.getState().ble?.busy]);
+    const savedTarget = target && !found.some(item => item.address.toLowerCase() === target.address.toLowerCase() && item.addressType === target.addressType) ? target : null;
+    const choices = savedTarget ? [...found, savedTarget] : found;
+    const next = JSON.stringify([id, target?.address, target?.addressType, Boolean(savedTarget), choices.map(item => [item.address, item.addressType, item.name, item.label, item.gattName, item.streamLive, item.liveId]), NanoLab.isActing(), NanoLab.getState().ble?.busy]);
     if (next === pickerSignature) return; pickerSignature = next;
     const select = document.createElement('select'); select.dataset.focus = 'module-device-select'; select.setAttribute('aria-label', 'App device');
     const empty = document.createElement('option'); empty.value = ''; empty.textContent = found.length ? 'Choose a matched device' : 'No matched devices in this scan'; select.append(empty);
-    for (const item of found) {
+    for (const item of choices) {
       const option = document.createElement('option'); option.value = `${item.address}/${item.addressType}`;
-      option.textContent = `${item.label || item.name || item.address} · ${item.address}${item.streamLive || item.liveId != null ? '' : ' · saved'}`; select.append(option);
+      option.textContent = `${displayName(item)} · ${item.address}${item !== savedTarget && (item.streamLive || item.liveId != null) ? '' : ' · saved'}`; select.append(option);
     }
     select.value = target ? `${target.address}/${target.addressType}` : '';
-    select.disabled = NanoLab.isActing() || NanoLab.getState().ble?.busy || !found.length;
-    select.addEventListener('change', () => { const item = found.find(value => `${value.address}/${value.addressType}` === select.value); if (item) selectAppDevice(id, item); render(hooks.selected(), hooks.devices()); });
+    select.disabled = NanoLab.isActing() || NanoLab.getState().ble?.busy || !choices.length;
+    select.addEventListener('change', () => { const item = choices.find(value => `${value.address}/${value.addressType}` === select.value); if (item) selectAppDevice(id, item, item === savedTarget); render(hooks.selected(), hooks.devices()); });
     const fragment = document.createDocumentFragment(); fragment.append(document.createTextNode('Device'), select); replacePreservingFocus(root, fragment);
   }
   function render(device, devices) {
@@ -99,19 +103,19 @@ const NanoModules = (() => {
     document.getElementById('module-connection').hidden = active === 'medical' || Boolean(deviceApps.get(active));
     if (readers.has(active)) {
       const target = appDevice(active); readers.get(active).render(target, NanoLab.getState());
-      document.getElementById('recorder-context').textContent = target ? target.label || target.name || target.address : '';
+      document.getElementById('recorder-context').textContent = target ? displayName(target) : '';
     }
     const target = active ? appDevice(active) : device;
-    const connection = NanoConnection.describe(target), connectionKey = JSON.stringify([target?.address, target?.addressType, connection.status, connection.reason, connection.enabled, connection.label]);
+    const connection = NanoConnection.describe(target), connectionKey = JSON.stringify([target?.address, target?.addressType, connection.status, connection.reason, connection.enabled, connection.label, connection.details]);
     if (connectionKey !== connectionSignature) {
       connectionSignature = connectionKey;
       replacePreservingFocus(document.getElementById('module-connection'), NanoConnection.controls(target, 'module-connect'));
     }
-    const next = JSON.stringify([appQuery, appScope, device && [device.address, device.addressType, device.name, device.label, match], devices.map(item => [item.address, item.addressType, item.name, item.label, matches(item), item.liveId != null || item.streamLive === true])]);
+    const next = JSON.stringify([appQuery, appScope, device && [device.address, device.addressType, device.name, device.label, device.gattName, match], devices.map(item => [item.address, item.addressType, item.name, item.label, item.gattName, matches(item), item.liveId != null || item.streamLive === true])]);
     if (next !== signature) {
     signature = next;
     const root = document.getElementById('apps-catalog'), intro = document.createElement('p'); intro.className = 'hint';
-    intro.textContent = device && match.length ? `Apps for ${device.label || device.name || device.address} are shown first.` : '';
+    intro.textContent = device && match.length ? `Apps for ${displayName(device)} are shown first.` : '';
     const filters = document.createElement('div'); filters.className = 'app-catalog-filters';
     const searchLabel = document.createElement('label');
     const search = document.createElement('input'); search.type = 'search'; search.placeholder = 'Search apps'; search.setAttribute('aria-label', 'Search apps'); search.value = appQuery; search.dataset.focus = 'app-search'; searchLabel.append(search);
@@ -122,21 +126,22 @@ const NanoModules = (() => {
     search.addEventListener('input', () => { appQuery = search.value; render(hooks.selected(), hooks.devices()); });
     scope.addEventListener('change', () => { appScope = scope.value; render(hooks.selected(), hooks.devices()); });
     const grid = document.createElement('div'); grid.className = 'apps-grid';
-    const observed = new Set(devices.flatMap(item => matches(item)));
+    const nearby = devices.filter(item => item.streamLive === true || item.liveId != null);
+    const observed = new Set(nearby.flatMap(item => matches(item)));
     const visible = catalog.filter(app => (appScope !== 'observed' || observed.has(app.id)) && `${app.title} ${app.description} ${app.category}`.toLowerCase().includes(appQuery.trim().toLowerCase()));
     for (const app of [...visible].sort((a, b) => Number(match.includes(b.id)) - Number(match.includes(a.id)) || Number(observed.has(b.id)) - Number(observed.has(a.id)))) {
       const card = document.createElement('article'); card.className = `app-card${match.includes(app.id) ? ' matched' : ''}`;
       const heading = document.createElement('h3'); heading.textContent = app.title;
       const description = document.createElement('p'); description.textContent = app.description;
-      const found = devices.filter(item => matches(item).includes(app.id)), status = document.createElement('span'); status.className = 'badge'; status.textContent = match.includes(app.id) ? 'Matches selection' : found.length ? `${found.length} nearby` : '';
-      const open = document.createElement('button'); open.className = 'app-card-open'; open.type = 'button'; open.setAttribute('aria-label', `Open ${app.title}`);
+      const found = (appScope === 'observed' ? nearby : devices).filter(item => matches(item).includes(app.id)), nearbyCount = nearby.filter(item => matches(item).includes(app.id)).length, status = document.createElement('span'); status.className = 'badge'; status.textContent = match.includes(app.id) ? 'Matches selection' : nearbyCount ? `${nearbyCount} nearby` : found.length ? `${found.length} saved` : '';
+      const open = document.createElement('button'); open.className = 'app-card-open'; open.dataset.focus = `app-card-open-${app.id}`; open.type = 'button'; open.setAttribute('aria-label', `Open ${app.title}`);
       open.addEventListener('click', () => { if (!match.includes(app.id) && found.length === 1) selectAppDevice(app.id, found[0]); NanoWorkspace.openModule(app.id); render(hooks.selected(), hooks.devices()); });
       open.append(heading, description, ...status.textContent ? [status] : []); card.append(open);
       if (found.length > 1) {
         const label = document.createElement('label');
         const select = document.createElement('select'); select.setAttribute('aria-label', `${app.title} device`); select.dataset.focus = `app-device-${app.id}`;
         const placeholder = document.createElement('option'); placeholder.value = ''; placeholder.textContent = 'Choose a device'; select.append(placeholder);
-        for (const item of found) { const option = document.createElement('option'); option.value = `${item.address}/${item.addressType}`; option.textContent = `${item.label || item.name || item.address}${item.liveId == null && !item.streamLive ? ' · history' : ''}`; select.append(option); }
+        for (const item of found) { const option = document.createElement('option'); option.value = `${item.address}/${item.addressType}`; option.textContent = `${displayName(item)}${item.liveId == null && !item.streamLive ? ' · history' : ''}`; select.append(option); }
         select.addEventListener('change', () => { const item = found.find(value => `${value.address}/${value.addressType}` === select.value); if (item) { selectAppDevice(app.id, item); NanoWorkspace.openModule(app.id); render(hooks.selected(), hooks.devices()); } });
         label.append(select); card.append(label);
       }

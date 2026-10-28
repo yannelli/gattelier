@@ -5,6 +5,8 @@ import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 const require = createRequire(import.meta.url);
 const tabs = require('../web/workspace-tabs.js');
+const connection = require('../web/connection.js');
+const standard = require('../web/standard-app.js');
 const storageKey = 'nanoscope.workspace.tabs.v1';
 const modules = { sensor: 'Sensors', schlage: 'Schlage', standard: 'Standard BLE' };
 const device = { address: 'AA:BB:CC:DD:EE:01', addressType: 0, name: 'Room sensor', rssi: -50, services: ['181a'] };
@@ -116,4 +118,45 @@ test('tab keyboard controls select, wrap, and close while preserving focus', () 
   press(first.id, 'End'); assert.equal(model.current().id, last.id);
   press(last.id, 'Delete'); assert.equal(model.current().id, first.id); assert.equal(doc.activeElement.id, first.id);
   assert.equal(prevented, 3);
+});
+
+
+test('restored targets preserve connectability with an empty live scan', () => {
+  for (const kind of ['device', 'app']) for (const connectable of [true, false, undefined, 'false', 0]) {
+    const store = storage(), model = tabs.create({ storage: store, modules });
+    model.open(kind, kind === 'app' ? 'standard' : '', { ...device, connectable });
+    const restored = tabs.create({ storage: store, modules }).current().target;
+    assert.equal(restored.connectable, typeof connectable === 'boolean' ? connectable : undefined);
+    const status = connection.describe(restored, { state: { ble: { connected: false }, devices: [] }, selected: restored, online: true, pending: false });
+    assert.equal(status.enabled, connectable !== false);
+    assert.equal(status.status, connectable === false ? 'Broadcast only' : 'Saved device');
+    assert.equal(status.label, connectable === false ? 'Connect' : 'Try known address');
+  }
+});
+
+test('restored service context retains prefixed UUIDs and rejects malformed values', () => {
+  const store = storage(), model = tabs.create({ storage: store, modules });
+  const valid = ['0x180f', '0X181A', '1809', '12345678', '0x12345678', '0000180d-0000-1000-8000-00805f9b34fb'];
+  const invalid = ['0x180', '0x180ff', '0x180g', '0x', '0x123456789', ' 0x180f', '0x180f ', '0x0000180d-0000-1000-8000-00805f9b34fb', '0000180d-0000-1000-8000-00805f9b34fg', null, 6159, { uuid: '180f' }];
+  model.open('device', '', { ...device, connectable: true, services: [...invalid, ...valid] });
+  const restored = tabs.create({ storage: store, modules }).current().target;
+  assert.deepEqual(restored.services, valid);
+  assert.deepEqual(standard.matches(restored).map(item => item.uuid), ['180f', '181a', '1809', '180d']);
+  assert.equal(connection.describe(restored, { state: { ble: {}, devices: [] }, online: true, pending: false }).enabled, true);
+});
+
+test('restored tabs retain bounded learned names with label and advertised-name precedence', () => {
+  for (const kind of ['device', 'app']) for (const [names, expected] of [
+    [{ name: '', gattName: 'Learned sensor' }, 'Learned sensor'],
+    [{ name: '  ', gattName: ' Learned sensor ' }, 'Learned sensor'],
+    [{ name: 'Advertised sensor', gattName: 'Learned sensor' }, 'Advertised sensor'],
+    [{ label: 'Desk', name: 'Advertised sensor', gattName: 'Learned sensor' }, 'Desk'],
+    [{ name: '', gattName: 'x'.repeat(200) }, 'x'.repeat(128)]
+  ]) {
+    const store = storage(), model = tabs.create({ storage: store, modules });
+    model.open(kind, kind === 'app' ? 'standard' : '', { ...device, ...names });
+    const restored = tabs.create({ storage: store, modules }).current();
+    assert.equal(restored.target.gattName, names.gattName.slice(0, 128));
+    assert.equal(tabs.appearance(restored).name, expected);
+  }
 });

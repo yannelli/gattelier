@@ -95,14 +95,15 @@ let selectedFallback = null;
 let online = false, pending = false, selected = '', notice = '', transportError = '', pollPromise, timer, ticking = false;
 let listSignature = '', detailSignature = '', lastRender = 0;
 let vendorDatabase = null, vendorStatus = 'loading';
-let scanStore, scanStream, browserUI, stateController, apiGeneration = 0, lastStatePoll = 0;
+let scanStore, scanStream, browserUI, stateController, apiGeneration = 0, stateRevision = 0, lastStatePoll = 0;
 const browseDevices = () => scanStore ? scanStore.devices() : state.devices;
 const selectedDevice = () => browseDevices().find(item => deviceKey(item) === selected) || (selectedFallback && deviceKey(selectedFallback) === selected ? selectedFallback : null);
 const activeSession = () => Boolean(state.ble.connected || NanoDexcom.isAcquiring());
 const backgroundPolling = () => activeSession() || scanStore?.getPreference('backgroundScan', false);
-function selectDevice(device) {
+function selectDevice(device, restored = false) {
+  if (typeof readSession !== 'undefined' && readSession && readSession.key !== deviceKey(device)) readSession.stopped = true;
   selectedFallback = device; selected = deviceKey(device); scanStore?.setPreference('selectedDevice', selected);
-  if (NanoWorkspace.view() !== 'apps' || !NanoWorkspace.module() || NanoModules.rememberTarget(NanoWorkspace.module(), device)) NanoWorkspace.selectTarget?.(device);
+  if (restored || NanoWorkspace.view() !== 'apps' || !NanoWorkspace.module() || NanoModules.rememberTarget(NanoWorkspace.module(), device)) NanoWorkspace.selectTarget?.(device);
   else NanoWorkspace.openDevice?.(device);
   render();
   document.dispatchEvent(new CustomEvent('nanoscope:selection', { detail: device }));
@@ -212,7 +213,7 @@ function render() {
   NanoDevicePage.render();
   if (NanoWorkspace.view() === 'apps') NanoModules.render(device, browseDevices());
   browserUI?.update();
-  if (NanoWorkspace.view() === 'insights') NanoInsights.render($('insights-content'), selectedDevice(), browseDevices(), selectDevice, category => browserUI.setKind(category));
+  if (NanoWorkspace.view() === 'insights') NanoInsights.render($('insights-content'), selectedDevice(), browseDevices(), selectDevice, category => browserUI.setKind(category), state);
 }
 async function request(path, options = {}) {
   const controller = new AbortController();
@@ -229,14 +230,14 @@ async function request(path, options = {}) {
 }
 function poll({ streamOnly = false } = {}) {
   if (pollPromise) return pollPromise;
-  const generation = apiGeneration;
+  const generation = apiGeneration, revision = stateRevision;
   const pollingController = stateController = new AbortController();
   pollPromise = (async () => {
     const sessionWasActive = activeSession();
     try {
       if (!streamOnly || needsStatePoll(state, online, pending, Date.now() - lastStatePoll)) {
         const next = await request('state?devices=0', { signal: pollingController.signal });
-        if (generation !== apiGeneration) return;
+        if (generation !== apiGeneration || revision !== stateRevision) return;
         state = next; online = true; lastStatePoll = Date.now();
         scanStore?.ingest(state);
       }
@@ -245,7 +246,7 @@ function poll({ streamOnly = false } = {}) {
         if (generation !== apiGeneration) return;
         if (scanStream.status().supported === false) {
           const full = await request('state', { signal: pollingController.signal });
-          if (generation !== apiGeneration) return;
+          if (generation !== apiGeneration || revision !== stateRevision) return;
           state = full; scanStore?.ingest(state);
         }
       }
@@ -255,7 +256,7 @@ function poll({ streamOnly = false } = {}) {
         if (device) selected = deviceKey(device);
       }
     } catch (error) {
-      if (generation !== apiGeneration) return;
+      if (generation !== apiGeneration || revision !== stateRevision) return;
       if (error.name === 'AbortError' && online && NanoAPI.transport() === 'serial' && NanoAPI.serialStatus().connected) {
         transportError = 'USB is connected. Board status refresh is delayed; waiting for the next update.';
       } else {
@@ -323,8 +324,8 @@ async function boot() {
   scanStream = NanoScanStream.create(scanStore);
   selected = scanStore.getPreference('selectedDevice', '');
   browserUI = NanoBrowserUI.mount(scanStore, { change: () => { listSignature = ''; detailSignature = ''; render(); tick(); }, getSelected: selectedDevice, getState: () => state });
-  document.addEventListener('nanoscope:state', event => { state = event.detail; scanStore.ingest(state); online = true; transportError = ''; render(); });
-  document.addEventListener('nanoscope:busy', event => { pending = event.detail; render(); });
+  document.addEventListener('nanoscope:state', event => { stateRevision++; state = event.detail; scanStore.ingest(state); online = true; transportError = ''; render(); });
+  document.addEventListener('nanoscope:busy', event => { if (event.detail) stateRevision++; pending = event.detail; render(); });
   globalThis.addEventListener('nanoscope:api-change', () => {
     apiGeneration++; stateController?.abort(); scanStream.reset();
     clearTimeout(timer);
@@ -365,7 +366,7 @@ async function boot() {
       const recorder = NanoRecorders.identify(device), vendor = vendorTools.identify(device, vendorDatabase);
       return { name: deviceDisplayName(device), manufacturer: NanoSchlage.identify(device, state) ? 'Schlage' : recorder?.product.split(' ')[0] || vendor.manufacturer || vendor.addressVendor };
     },
-    selectModuleTarget: (id, device) => NanoModules.selectAppDevice(id, device),
+    selectModuleTarget: (id, device, restored) => NanoModules.selectAppDevice(id, device, restored),
     getModuleTarget: id => NanoModules.matches(selectedDevice()).includes(id) ? selectedDevice() : NanoModules.appDevice(id), onChange: render });
   $('scan').addEventListener('click', () => mutate(scanAction(state.ble)));
   $('search').addEventListener('input', renderList);

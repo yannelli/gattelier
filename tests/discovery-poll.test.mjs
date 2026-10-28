@@ -114,3 +114,43 @@ test('hidden connected sessions keep polling and render their final disconnect',
   acquiring = true;
   assert.equal(vm.runInContext('backgroundPolling()', context), true);
 });
+
+
+test('late background snapshots cannot overwrite newer action state', async () => {
+  for (const connected of [true, false]) {
+    const f = pollingFixture(); let release;
+    const old = { ...f.board, ble: { ...f.board.ble, connected: !connected }, services: [{ uuid: 'old' }] };
+    f.context.delayedRequest = () => new Promise(resolve => { release = resolve; });
+    vm.runInContext('request = delayedRequest;', f.context);
+    const polling = vm.runInContext('poll()', f.context);
+    const fresh = { ...f.board, ble: { ...f.board.ble, connected, busy: false }, services: [] };
+    f.handlers['nanoscope:state']({ detail: fresh });
+    release(old); await polling;
+    assert.equal(vm.runInContext('state', f.context), fresh);
+  }
+});
+
+test('late polling errors cannot mark a successful action offline', async () => {
+  const f = pollingFixture(); let reject;
+  f.context.delayedRequest = () => new Promise((_, no) => { reject = no; });
+  vm.runInContext('request = delayedRequest;', f.context);
+  const polling = vm.runInContext('poll()', f.context);
+  f.handlers['nanoscope:state']({ detail: f.board });
+  reject(new Error('Old network failure')); await polling;
+  assert.equal(vm.runInContext('online', f.context), true);
+  assert.equal(vm.runInContext('transportError', f.context), '');
+});
+
+
+test('a starting action invalidates an older background snapshot before its first state event', async () => {
+  const f = pollingFixture(); let release;
+  const source = readFileSync(new URL('../web/app.js', import.meta.url), 'utf8');
+  vm.runInContext(source.split('\n').find(line => line.includes("document.addEventListener('nanoscope:busy'")), f.context);
+  f.context.delayedRequest = () => new Promise(resolve => { release = resolve; });
+  vm.runInContext('request = delayedRequest;', f.context);
+  const polling = vm.runInContext('poll()', f.context);
+  f.handlers['nanoscope:busy']({ detail: true });
+  release({ ble: { connected: false }, devices: [], services: [] }); await polling;
+  assert.equal(vm.runInContext('state', f.context), f.board);
+  assert.equal(vm.runInContext('pending', f.context), true);
+});

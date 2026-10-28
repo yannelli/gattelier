@@ -51,7 +51,7 @@ const NanoBrowserUI = (() => {
     }
     return {
       update,
-      isFiltered() { return Object.entries(filters).some(([key, value]) => !['sort', 'source'].includes(key) && value !== defaults[key]); },
+      isFiltered() { return Object.entries(filters).some(([key, value]) => key !== 'sort' && value !== defaults[key]); },
       select(devices, database) { return NanoScanQuery.select(devices, filters, { now: Date.now(), identifyVendor: device => NanoVendors.identify(device, database).search, profile: NanoProfiles.identify, lookupUUID: NanoMetadata.lookup, protocolMatches: NanoCatalogs.match }); },
       setKind(category) {
         Object.assign(filters, defaults, { kind: category, source: 'all' });

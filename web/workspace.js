@@ -79,7 +79,7 @@ const NanoWorkspace = (() => {
       const device = tab.target && (preferences.resolveTarget?.(NanoWorkspaceTabs.key(tab.target)) || tab.target);
       if (device) {
         lastDevice = device;
-        if (tab.kind === 'app' && preferences.selectModuleTarget) preferences.selectModuleTarget(tab.module, device);
+        if (tab.kind === 'app' && preferences.selectModuleTarget) preferences.selectModuleTarget(tab.module, device, true);
         else (preferences.selectDevice || preferences.selectTarget)?.(device);
       }
     } finally { restoring = false; }

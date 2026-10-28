@@ -74,13 +74,13 @@ function memoryStorage() { const values = new Map(); return { getItem: key => va
 
 test('app opening uses its matched target and restores it after reload', () => {
   const storage = memoryStorage(), selected = [];
-  const hooks = { getSelected: () => other, getModuleTarget: () => target, selectModuleTarget: (id, device) => selected.push([id, device.address]) };
+  const hooks = { getSelected: () => other, getModuleTarget: () => target, selectModuleTarget: (id, device, restored) => selected.push([id, device.address, restored]) };
   const first = setup('discover', { tabs: true, storage, hooks });
   first.workspace.openModule('sensor');
   assert.equal(first.workspace.tabState()[0].target.address, target.address);
   const second = setup('discover', { tabs: true, storage, hooks });
   assert.equal(second.workspace.module(), 'sensor'); assert.equal(second.workspace.view(), 'apps');
-  assert.deepEqual(selected, [['sensor', target.address], ['sensor', target.address]]);
+  assert.deepEqual(selected, [['sensor', target.address, undefined], ['sensor', target.address, true]]);
 });
 
 test('app restoration leaves global selection to the module selection hook', () => {
