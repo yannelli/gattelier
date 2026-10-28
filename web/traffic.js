@@ -17,7 +17,7 @@ const NanoTraffic = (() => {
     if (!selected) { container.append(el('p', 'hint', 'No packet selected')); return; }
     const data = NanoPackets.bytes(selected.hex || '');
     get('offset').max = data.length;
-    const offset = Math.max(0, Math.min(data.length, Number(get('offset').value) || 0));
+    const offset = Math.max(0, Math.min(data.length, Math.trunc(Number(get('offset').value) || 0)));
     get('offset').value = offset;
     const result = NanoPackets.decode(selected.hex || '', offset);
     const table = el('table', 'byte-table');

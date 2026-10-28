@@ -129,3 +129,12 @@ test('clearing the selected imported packet resets its inspector heading', async
   assert.equal(h.get('selected').textContent, 'Packet inspector');
   assert.equal(h.get('decoder').textContent, 'No packet selected');
 });
+
+test('fractional byte offsets normalize before decoding a selected packet', async () => {
+  const h = harness(); await h.import(pklgCapture());
+  h.get('rows').children[0].children[0].children[0].click();
+  h.get('offset').value = '0.5';
+  assert.doesNotThrow(() => h.get('offset').listeners.input());
+  assert.equal(Number(h.get('offset').value), 0);
+  assert.ok(h.get('decoder').children.length > 0);
+});
