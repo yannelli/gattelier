@@ -10,7 +10,7 @@ const NanoDeviceSupport = (() => {
     const read = el('button', 'button secondary', 'Read device metadata'), inspect = el('button', 'button secondary', 'Inspect services'); read.type = inspect.type = 'button'; controls.append(read, inspect);
     const details = el('details'), title = el('summary', '', 'Protocol support & sources'); details.append(title);
     body.append(summary, controls, status, results, recipes, details); container.append(body);
-    let running = false, signature = '', targetKey = '', connectionKey = '', selectionVersion = 0, connectionVersion = 0;
+    let running = false, signature = '', targetKey = '', connectionKey = '', selectionVersion = 0, connectionVersion = 0, boardVersion = 0;
     const key = device => device ? `${String(device.address || '').toLowerCase()}/${device.addressType}` : '';
     const entries = families[kind].map(id => NanoDeviceLibrary.get(id));
     for (const entry of entries) {
@@ -45,9 +45,9 @@ const NanoDeviceSupport = (() => {
       }
     }
     read.addEventListener('click', async () => {
-      const initial = metadata(), device = initial.device, selection = selectionVersion;
+      const initial = metadata(), device = initial.device, selection = selectionVersion, board = boardVersion;
       if (!device || running || !initial.online || initial.pending || initial.state.ble?.busy || initial.state.usb?.mode === 'hci' || !initial.connected && device.connectable === false) return;
-      const selected = () => { const current = metadata(); return selection === selectionVersion && key(device) === key(current.device); };
+      const selected = () => { const current = metadata(); return board === boardVersion && selection === selectionVersion && key(device) === key(current.device); };
       running = true; render(); status.textContent = 'Connecting and reading available metadata…';
       try {
         const state = await NanoConnection.ensure(device), identity = new Set(['2a00', '2a19', '2a24', '2a25', '2a26', '2a27', '2a28', '2a29']);
@@ -70,9 +70,10 @@ const NanoDeviceSupport = (() => {
         guard();
         status.textContent = completed ? `Read ${completed} metadata values.` : 'This device exposes no standard readable identity or battery fields. Inspect its custom services.';
       } catch (error) { if (selected()) status.textContent = error.message; }
-      finally { running = false; render(); }
+      finally { if (board === boardVersion) running = false; render(); }
     });
     inspect.addEventListener('click', () => { const device = metadata().device; if (device) NanoDevicePage.services(device); });
+    globalThis.addEventListener?.('nanoscope:api-change', () => { boardVersion++; running = false; status.textContent = ''; render(); });
     lab.onState(render); document.addEventListener('nanoscope:busy', render); document.addEventListener('nanoscope:selection', () => { status.textContent = ''; render(); }); render();
     return { render };
   }
