@@ -13,6 +13,7 @@ const NanoStandardApp = (() => {
     return /^(?:[\da-f]{2}:){5}[\da-f]{2}$/.test(address) && Number.isInteger(type) && type >= 0 && type <= 3 ? `${address}/${type}` : '';
   }
   const connected = (device, state) => Boolean(key(device) && state?.ble?.connected && key(device) === key(state.ble));
+  const displayName = device => typeof deviceDisplayName === 'function' ? deviceDisplayName(device) : [device.label, device.name, device.gattName].find(value => typeof value === 'string' && value.trim())?.trim() || device.address;
   function services(device, state) {
     return connected(device, state) ? (state.services || []).filter(service => Object.hasOwn(profiles, uuid(service.uuid))) : [];
   }
@@ -46,8 +47,9 @@ const NanoStandardApp = (() => {
       if (found.length !== 1) throw new Error('This characteristic is no longer available.');
       return found[0];
     }
-    function button(label, callback, disabled) {
+    function button(label, callback, disabled, focusKey) {
       const node = el('button', 'button secondary', label); node.type = 'button'; node.disabled = disabled;
+      node.dataset.focus = focusKey;
       node.addEventListener('click', callback); return node;
     }
     async function act(token, target, action, mode) {
@@ -98,16 +100,23 @@ const NanoStandardApp = (() => {
       if (destroyed) return;
       const { device, state } = sync(), active = online && connected(device, state), ids = supported(device, online ? state : {});
       const busy = running || lab.isActing() || Boolean(state.ble?.busy), token = { target: targetKey, selection: selectionVersion, connection: connectionVersion };
-      context.textContent = device ? `${device.label || device.name || device.address} (${device.address}, type ${device.addressType})` : 'Choose a device in Discover.';
+      const nextControls = document.createDocumentFragment(), nextReadings = document.createDocumentFragment();
+      const update = () => {
+        for (const [root, content] of [[controls, nextControls], [readings, nextReadings]]) {
+          if (typeof replacePreservingFocus === 'function') replacePreservingFocus(root, content);
+          else root.replaceChildren(content);
+        }
+      };
+      context.textContent = device ? `${displayName(device)} (${device.address}, type ${device.addressType})` : 'Choose a device in Discover.';
       badge.textContent = !online ? 'Board offline' : active ? 'Connected' : 'Disconnected';
       profileList.replaceChildren(...ids.map(id => el('li', '', `${profiles[id]} (0x${id})`)));
-      controls.replaceChildren(); readings.replaceChildren(); message.textContent = notice;
-      if (!device) return;
-      if (!ids.length) { readings.append(el('p', 'vendor-note', 'No supported standard service was found.')); return; }
+      message.textContent = notice;
+      if (!device) return update();
+      if (!ids.length) { nextReadings.append(el('p', 'vendor-note', 'No supported standard service was found.')); return update(); }
       if (!active) {
         const label = state.ble?.connected ? 'Switch and connect' : 'Connect';
-        controls.append(button(label, () => connect(token), !online || busy || !targetKey || device.connectable === false || state.usb?.mode === 'hci'));
-        return;
+        nextControls.append(button(label, () => connect(token), !online || busy || !targetKey || device.connectable === false || state.usb?.mode === 'hci', `standard-${targetKey}-connect`));
+        return update();
       }
       for (const service of services(device, state)) {
         const section = el('section', 'protocol-evidence'); section.append(el('h3', '', profiles[uuid(service.uuid)]));
@@ -117,24 +126,28 @@ const NanoStandardApp = (() => {
           row.append(el('h4', '', name || `Characteristic ${item.uuid}`));
           const decoded = fields(item); if (decoded) row.append(decoded);
           const target = { service: uuid(service.uuid), uuid: uuid(item.uuid), handle: item.handle }, disabled = busy || !Number.isInteger(item.handle) || item.handle < 1 || item.handle > 65535;
-          if (properties.includes('read')) actions.append(button('Read', () => act(token, target, 'read'), disabled));
+          const itemKey = `standard-${targetKey}-${target.service}-${target.uuid}-${target.handle}`;
+          if (properties.includes('read')) actions.append(button('Read', () => act(token, target, 'read'), disabled, `${itemKey}-read`));
           const mode = properties.includes('notify') ? 'notify' : properties.includes('indicate') ? 'indicate' : '';
           if (mode) {
             const subscribed = ['notify', 'indicate'].includes(item.subscription);
-            actions.append(button('Subscribe', () => act(token, target, 'subscribe', mode), disabled || subscribed), button('Stop', () => act(token, target, 'subscribe', 'off'), disabled || !subscribed));
+            actions.append(button('Subscribe', () => act(token, target, 'subscribe', mode), disabled || subscribed, `${itemKey}-${mode}`), button('Stop', () => act(token, target, 'subscribe', 'off'), disabled || !subscribed, `${itemKey}-stop`));
             actions.append(el('span', 'vendor-note', subscribed ? `${item.subscription === 'indicate' ? 'Indications' : 'Notifications'} active` : `Uses ${mode === 'indicate' ? 'indications' : 'notifications'}`));
           }
           row.append(actions);
           if (item.readError) row.append(el('p', 'protocol-message', item.readError));
           if (typeof item.valueHex === 'string') {
-            const raw = el('details', 'protocol-details'); raw.append(el('summary', '', 'Raw bytes'), el('p', 'vendor-note', `${item.uuid} / handle ${item.handle}`), el('pre', 'protocol-preview', item.valueHex || '(empty value)')); row.append(raw);
+            const raw = el('details', 'protocol-details'), summary = el('summary', '', 'Raw bytes');
+            raw.dataset.persist = `${itemKey}-raw`; summary.dataset.focus = `${itemKey}-raw-summary`;
+            raw.append(summary, el('p', 'vendor-note', `${item.uuid} / handle ${item.handle}`), el('pre', 'protocol-preview', item.valueHex || '(empty value)')); row.append(raw);
           }
           section.append(row);
         }
         if (!service.characteristics?.length) section.append(el('p', 'vendor-note', 'No characteristics were discovered for this service.'));
-        readings.append(section);
+        nextReadings.append(section);
       }
-      if (!readings.children.length) readings.append(el('p', 'vendor-note', 'No supported characteristics were discovered on this connection.'));
+      if (!nextReadings.children.length) nextReadings.append(el('p', 'vendor-note', 'No supported characteristics were discovered on this connection.'));
+      update();
     }
     const offState = lab.onState((state, available = true) => { online = available; render(); });
     const offEvents = lab.onEvents?.((events, meta = {}) => {

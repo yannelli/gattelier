@@ -6,6 +6,8 @@ import standard from '../web/standard-app.js';
 import gatt from '../web/gatt-values.js';
 
 const source = readFileSync(new URL('../web/standard-app.js', import.meta.url), 'utf8');
+const sharedSource = readFileSync(new URL('../web/app.js', import.meta.url), 'utf8');
+const focusHelper = sharedSource.slice(sharedSource.indexOf('function replacePreservingFocus('), sharedSource.indexOf('\nfunction empty('));
 const device = { address: 'AA:BB:CC:DD:EE:01', addressType: 0, name: 'Fixture sensor', services: ['180d', '180f'] };
 const characteristic = (uuid, handle, properties, valueHex = null) => ({ uuid, handle, properties, valueHex, subscription: 'off' });
 const initial = () => ({ ble: { ...device, connected: true, busy: false, connectionAttempt: 7 }, services: [
@@ -13,18 +15,28 @@ const initial = () => ({ ble: { ...device, connected: true, busy: false, connect
   { uuid: '180f', characteristics: [characteristic('2a19', 8, ['read'], '53')] }
 ] });
 function deferred() { let resolve, reject; const promise = new Promise((yes, no) => { resolve = yes; reject = no; }); return { promise, resolve, reject }; }
-function harness({ state = initial(), target = device, online = true, action, ensure } = {}) {
+function harness({ state = initial(), target = device, online = true, action, ensure, displayName } = {}) {
   const calls = [], connections = [], events = new Map(); let onState, onEvents, acting = false;
   class Element {
-    constructor(tag) { this.tag = tag; this.children = []; this.listeners = {}; this.attributes = {}; this.classList = { add() {} }; this.ownText = ''; }
+    constructor(tag) { this.tag = tag; this.children = []; this.listeners = {}; this.attributes = {}; this.dataset = {}; this.open = false; this.classList = { add() {} }; this.ownText = ''; }
     set textContent(value) { this.ownText = String(value); this.children = []; }
     get textContent() { return this.ownText + this.children.map(child => child.textContent).join(''); }
-    append(...nodes) { this.children.push(...nodes); }
-    replaceChildren(...nodes) { this.ownText = ''; this.children = nodes; }
+    append(...nodes) { this.children.push(...nodes.flatMap(node => node.tag === 'fragment' ? node.children.splice(0) : [node])); }
+    replaceChildren(...nodes) { if (this.contains(document.activeElement)) document.activeElement = null; this.ownText = ''; this.children = []; this.append(...nodes); }
+    contains(node) { return this === node || this.children.some(child => child.contains(node)); }
+    focus() { if (!this.disabled) document.activeElement = this; }
+    querySelectorAll(selector) {
+      const nodes = [], visit = node => { nodes.push(node); node.children.forEach(visit); }; this.children.forEach(visit);
+      return nodes.filter(node => selector === '[data-focus]' ? node.dataset.focus !== undefined
+        : selector === 'details[data-persist]' ? node.tag === 'details' && node.dataset.persist !== undefined
+        : selector === 'details[open][data-persist]' ? node.tag === 'details' && node.open && node.dataset.persist !== undefined : false);
+    }
     setAttribute(name, value) { this.attributes[name] = value; }
     addEventListener(type, callback) { this.listeners[type] = callback; }
     click() { return this.disabled ? undefined : this.listeners.click?.(); }
   }
+  const document = { activeElement: null, createElement: tag => new Element(tag), createElementNS: (ns, tag) => new Element(tag), createDocumentFragment: () => new Element('fragment'),
+    addEventListener: (type, callback) => events.set(type, callback), removeEventListener: type => events.delete(type) };
   const container = new Element('section'), lab = {
     getState: () => state, isActing: () => acting,
     onState(callback) { onState = callback; callback(state, online); return () => { onState = null; }; },
@@ -37,12 +49,12 @@ function harness({ state = initial(), target = device, online = true, action, en
     }
   };
   const context = { NanoGattValues: gatt, NanoConnection: { async ensure(value) { connections.push(value); if (ensure) return ensure(value); state.ble = { ...state.ble, ...value, connected: true }; onState?.(state, online); return state; } },
-    document: { createElement: tag => new Element(tag), createElementNS: (ns, tag) => new Element(tag),
-      addEventListener: (type, callback) => events.set(type, callback), removeEventListener: type => events.delete(type) } };
+    document, replacePreservingFocus: vm.runInNewContext(`(${focusHelper})`, { document }) };
+  if (displayName) context.deviceDisplayName = displayName;
   vm.runInNewContext(source + '\nthis.app = NanoStandardApp;', context);
   const app = context.app.mount(container, lab, { selected: () => target });
   const all = () => { const nodes = []; const visit = node => { nodes.push(node); node.children.forEach(visit); }; visit(container); return nodes; };
-  return { app, container, calls, connections, all, lab,
+  return { app, container, calls, connections, all, lab, document,
     button: (label, index = 0) => all().filter(node => node.tag === 'button' && node.ownText === label)[index],
     select(value, render = true) { target = value; if (render) events.get('nanoscope:selection')?.(); },
     update(value, available = online) { state = value; online = available; onState?.(state, online); },
@@ -181,4 +193,80 @@ test('undecoded bytes stay collapsed and empty characteristics show actionable c
   assert.match(details[0].textContent, /0048/); assert.equal(h.all().filter(node => node.tag === 'dl').length, 0);
   assert.doesNotMatch(h.container.textContent, /No decoded|No reading|No captured|72 bpm/);
   assert.equal(h.button('Read', 1).disabled, false); assert.equal(h.button('Subscribe').disabled, false); assert.deepEqual(h.calls, []);
+});
+
+test('idle state refresh preserves action and Raw bytes focus and disclosure', () => {
+  for (const label of ['Read', 'Subscribe', 'Stop', 'Raw bytes']) {
+    const state = initial(); if (label === 'Stop') state.services[0].characteristics[0].subscription = 'notify';
+    const h = harness({ state }), raw = h.all().find(node => node.tag === 'details'); raw.open = true;
+    const control = label === 'Raw bytes' ? raw.children[0] : h.button(label), focusKey = control.dataset.focus; control.focus();
+    for (let poll = 0; poll < 2; poll++) {
+      h.update(structuredClone(h.state));
+      assert.equal(h.document.activeElement, h.all().find(node => node.dataset.focus === focusKey));
+      assert.ok(h.container.contains(h.document.activeElement));
+      assert.equal(h.all().find(node => node.tag === 'details').open, true);
+      assert.equal(h.all().filter(node => node.tag === 'details')[1].open, false);
+    }
+    assert.deepEqual(h.calls, []); assert.deepEqual(h.connections, []);
+  }
+});
+
+test('idle state refresh preserves Connect and Switch and connect focus', () => {
+  for (const connected of [false, true]) {
+    const state = initial(); state.ble.connected = connected;
+    const h = harness({ state, target: connected ? { ...device, addressType: 1 } : device }), label = connected ? 'Switch and connect' : 'Connect';
+    h.button(label).focus(); h.update(structuredClone(h.state));
+    assert.equal(h.document.activeElement, h.button(label)); assert.ok(h.container.contains(h.document.activeElement));
+    assert.deepEqual(h.calls, []); assert.deepEqual(h.connections, []);
+  }
+});
+
+test('focus and Raw bytes follow characteristic handles through reordering and normalized identities', () => {
+  const state = initial(); state.services[0].characteristics.push(characteristic('2a37', 11, ['read', 'notify'], '0050'));
+  const h = harness({ state }), raw = h.all().filter(node => node.tag === 'details')[1], read = h.button('Read', 1);
+  raw.open = true; read.focus();
+  h.select({ ...device, address: device.address.toLowerCase() }, false);
+  state.services[0].uuid = '0000180D-0000-1000-8000-00805F9B34FB';
+  state.services[0].characteristics[1].uuid = '0x2A37';
+  state.services[0].characteristics.reverse(); state.services.reverse(); h.update(structuredClone(state));
+  assert.equal(h.document.activeElement, h.all().find(node => node.dataset.focus === read.dataset.focus));
+  assert.ok(h.container.contains(h.document.activeElement));
+  const details = h.all().filter(node => node.tag === 'details');
+  assert.deepEqual(details.filter(node => node.open).map(node => node.dataset.persist), [raw.dataset.persist]);
+  const keys = h.all().filter(node => node.dataset.focus !== undefined).map(node => node.dataset.focus);
+  assert.equal(new Set(keys).size, keys.length); assert.deepEqual(h.calls, []); assert.deepEqual(h.connections, []);
+});
+
+test('focus and Raw bytes do not transfer to another device, service, UUID or handle', () => {
+  for (const change of [
+    h => { const target = { ...device, addressType: 1 }; h.select(target, false); h.update({ ...h.state, ble: { ...h.state.ble, ...target } }); },
+    h => { const target = { ...device, address: 'AA:BB:CC:DD:EE:02' }; h.select(target, false); h.update({ ...h.state, ble: { ...h.state.ble, ...target } }); },
+    h => { h.state.services[0].uuid = '181a'; h.update(h.state); },
+    h => { h.state.services[0].characteristics[0].uuid = '2a19'; h.update(h.state); },
+    h => { h.state.services[0].characteristics[0].handle = 12; h.update(h.state); }
+  ]) {
+    const h = harness(); h.all().find(node => node.tag === 'details').open = true; h.button('Read').focus(); change(h);
+    assert.equal(h.document.activeElement, null);
+    assert.ok(h.all().filter(node => node.tag === 'details').every(node => !node.open));
+    assert.deepEqual(h.calls, []); assert.deepEqual(h.connections, []);
+  }
+});
+
+test('context uses trimmed label, advertised name, remembered GATT name and shared display naming', () => {
+  for (const [names, expected] of [
+    [{ label: ' Local label ', name: 'Advertised', gattName: 'Remembered' }, 'Local label'],
+    [{ label: ' ', name: ' Advertised ', gattName: 'Remembered' }, 'Advertised'],
+    [{ label: ' ', name: '', gattName: ' Remembered ' }, 'Remembered'],
+    [{ label: '', name: ' ', gattName: '' }, device.address]
+  ]) {
+    const h = harness({ target: { ...device, ...names } });
+    assert.equal(h.container.children[1].children[0].textContent, `${expected} (${device.address}, type 0)`);
+  }
+  const target = { ...device, gattName: 'Learned sensor' }, calls = [];
+  const h = harness({ target, displayName: value => { calls.push(value); return `Shared ${value.gattName}`; } });
+  assert.equal(h.container.children[1].children[0].textContent, `Shared Learned sensor (${device.address}, type 0)`);
+  target.gattName = 'Updated sensor'; h.update(h.state);
+  assert.equal(h.container.children[1].children[0].textContent, `Shared Updated sensor (${device.address}, type 0)`);
+  assert.ok(calls.length > 0 && calls.every(value => value === target));
+  assert.deepEqual(h.calls, []); assert.deepEqual(h.connections, []);
 });
