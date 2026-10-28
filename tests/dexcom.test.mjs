@@ -72,7 +72,7 @@ test('history timestamps require an original receive-time anchor and deduplicate
 });
 
 function fixture() {
-  let state = { uptime: 200, ble: { connected: true, address: device.address }, services: [{ uuid: p.SERVICE, characteristics: [{ uuid: p.CONTROL, handle: 4 }, { uuid: p.BACKFILL, handle: 6 }] }] };
+  let state = { uptime: 200, ble: { connected: true, ...device, connectionAttempt: 1 }, services: [{ uuid: p.SERVICE, characteristics: [{ uuid: p.CONTROL, handle: 4 }, { uuid: p.BACKFILL, handle: 6 }] }] };
   const eventListeners = new Set(), stateListeners = new Set(), actions = [];
   const lab = { getState: () => state,
     onState(callback) { stateListeners.add(callback); callback(state, true); return () => stateListeners.delete(callback); },
@@ -81,7 +81,7 @@ function fixture() {
   };
   const client = createClient(lab, { now: () => receivedAt });
   const emit = (events = [], meta = {}) => { for (const callback of eventListeners) callback(events, { bootId: 'boot-1', gaps: 0, ...meta }); };
-  const event = (extra = {}) => ({ seq: 2, address: device.address, kind: 'notification', handle: 4, uuid: p.CONTROL, hex: glucoseHex, ms: 199000, ...extra });
+  const event = (extra = {}) => ({ seq: 2, ...device, connectionAttempt: 1, kind: 'notification', handle: 4, uuid: p.CONTROL, hex: glucoseHex, ms: 199000, ...extra });
   const setState = (next, online = true) => { state = next; for (const callback of stateListeners) callback(state, online); };
   const start = () => { client.listen(device); emit([], { cursor: 1 }); };
   return { client, emit, event, setState, start, state, actions, eventListeners, stateListeners };
@@ -117,4 +117,43 @@ test('selection changes clear previous health data and import requires an explic
   f.start(); assert.throws(() => f.client.importPacket(device, p.CONTROL, glucoseHex), /Stop capture/);
   f.client.select(null); assert.equal(f.client.snapshot().listening, false); assert.equal(f.client.snapshot().records.length, 0);
   f.client.destroy();
+});
+
+test('capture requires the selected address type before listening', () => {
+  const f = fixture();
+  assert.throws(() => f.client.listen({ ...device, addressType: 0 }), /Connect the selected Dexcom/);
+  assert.equal(f.client.snapshot().listening, false); assert.deepEqual(f.actions, []); f.client.destroy();
+});
+
+test('capture stops after the address type or connection attempt changes', () => {
+  for (const change of [{ addressType: 0 }, { connectionAttempt: 2 }]) {
+    const f = fixture(); f.start(); f.emit([f.event()]);
+    f.setState({ ...f.state, ble: { ...f.state.ble, ...change } });
+    assert.equal(f.client.snapshot().listening, false);
+    assert.match(f.client.snapshot().error, /connection changed/);
+    f.emit([f.event({ seq: 3, ...change })]);
+    assert.equal(f.client.snapshot().packets, 1); assert.deepEqual(f.actions, []); f.client.destroy();
+  }
+});
+
+test('foreign connection metadata is ignored before interpreting data or disconnect events', () => {
+  const f = fixture(); f.start();
+  f.emit([
+    f.event({ addressType: 0 }), f.event({ seq: 3, connectionAttempt: 0 }),
+    f.event({ seq: 4, kind: 'disconnect', addressType: 0 }),
+    f.event({ seq: 5, kind: 'disconnect', connectionAttempt: 0 }), f.event({ seq: 6 })
+  ]);
+  assert.equal(f.client.snapshot().listening, true); assert.equal(f.client.snapshot().packets, 1);
+  f.emit([f.event({ seq: 7, addressType: undefined, connectionAttempt: undefined })]);
+  assert.equal(f.client.snapshot().packets, 2); assert.deepEqual(f.actions, []); f.client.destroy();
+});
+
+test('explicit capture restart after reconnect retains readings and accepts the new attempt', () => {
+  const f = fixture(); f.start(); f.emit([f.event()]);
+  f.setState({ ...f.state, ble: { ...f.state.ble, connectionAttempt: 2 } });
+  assert.equal(f.client.snapshot().listening, false); assert.equal(f.client.snapshot().packets, 1);
+  f.client.listen(device); f.emit([], { cursor: 2 });
+  f.emit([f.event({ seq: 3, connectionAttempt: 2 })]);
+  assert.equal(f.client.snapshot().listening, true); assert.equal(f.client.snapshot().packets, 2);
+  assert.deepEqual(f.actions, []); f.client.destroy();
 });

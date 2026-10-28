@@ -5,14 +5,15 @@ const NanoDexcom = (() => {
   const protocol = () => typeof NanoDexcomProtocol !== 'undefined' ? NanoDexcomProtocol : require('./dexcom-protocol.js');
   function createClient(lab, options = {}) {
     const p = protocol(), now = options.now || Date.now;
-    let state = lab.getState(), online = false, store = null, listening = false, primed = false, boot = '', cursor = 0, gaps = 0, error = '', anchor = null;
+    let state = lab.getState(), online = false, store = null, listening = false, primed = false, boot = '', cursor = 0, gaps = 0, error = '', anchor = null, captureAttempt = null;
     const changed = () => options.onChange?.(snapshot());
     function stop(message = '') { listening = false; error = message; changed(); }
     function snapshot() { return { listening, error, ...(store?.snapshot() || { records: [], packets: 0 }) }; }
+    const connected = scope => online && state.ble?.connected && state.ble.address?.toLowerCase() === scope.address && state.ble.addressType === scope.addressType;
     const offState = lab.onState((next, available = true) => {
       state = next; online = available;
       anchor = Number.isFinite(next.uptime) ? now() - next.uptime * 1000 : null;
-      if (listening && (!online || !state.ble?.connected || state.ble.address?.toLowerCase() !== store.snapshot().scope.address)) stop('Capture stopped because the connection changed.');
+      if (listening && (!connected(store.snapshot().scope) || state.ble.connectionAttempt !== captureAttempt)) stop('Capture stopped because the connection changed.');
     });
     const offEvents = lab.onEvents((events, meta = {}) => {
       if (!listening) return;
@@ -25,6 +26,7 @@ const NanoDexcom = (() => {
         if (!Number.isInteger(event.seq) || event.seq <= cursor) continue;
         cursor = event.seq;
         if (event.address?.toLowerCase() !== scope.address) continue;
+        if (event.addressType !== undefined && event.addressType !== scope.addressType || event.connectionAttempt !== undefined && event.connectionAttempt !== captureAttempt) continue;
         if (event.kind === 'disconnect') { stop('Capture stopped because Dexcom disconnected.'); break; }
         if (!['notification', 'indication', 'read'].includes(event.kind) || event.request) continue;
         const characteristic = p.characteristics(state).find(item => item.handle === event.handle);
@@ -46,9 +48,9 @@ const NanoDexcom = (() => {
       listen(device) {
         select(device);
         if (!store) throw new Error('Select a Dexcom device first.');
-        if (!online || !state.ble?.connected || state.ble.address?.toLowerCase() !== store.snapshot().scope.address) throw new Error('Connect the selected Dexcom before capturing received packets.');
+        if (!connected(store.snapshot().scope)) throw new Error('Connect the selected Dexcom before capturing received packets.');
         if (!p.characteristics(state).length) throw new Error('The connection has no documented Dexcom control or backfill characteristic.');
-        listening = true; primed = false; error = ''; changed();
+        captureAttempt = state.ble.connectionAttempt; listening = true; primed = false; error = ''; changed();
       },
       importPacket(device, uuid, value, receivedAt = null) {
         select(device);
