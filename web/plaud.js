@@ -4,28 +4,30 @@ const NanoPlaud = (() => {
   function mount(container, lab) {
     if (!container) return;
     const p = NanoPlaudProtocol, maxBytes = 64 * 1024 * 1024;
-    let current = {}, online = false, credentials = null, session = null, authenticated = false, running = false;
+    let current = {}, online = false, credentials = null, session = null, authenticated = false, running = null;
     let target = '', bootId = '', generation = 0, waiter = null, transfer = null, verified = null, records = [];
     let tx = Promise.resolve(), rx = Promise.resolve(), latestSeq = 0, credentialStamp = '';
     const get = id => container.querySelector(`#plaud-${id}`);
     const el = (tag, cls, text) => { const item = document.createElement(tag); if (cls) item.className = cls; if (text !== undefined) item.textContent = text; return item; };
     const u16 = (data, offset) => data[offset] | data[offset + 1] << 8;
     const u32 = (data, offset) => new DataView(data.buffer, data.byteOffset, data.byteLength).getUint32(offset, true);
+    const key = device => device?.address ? `${device.address.toLowerCase()}/${device.addressType}` : '';
+    const connectedKey = (state, available = true) => available && state.ble?.connected ? `${key(state.ble)}/${state.ble.connectionAttempt}` : '';
+    let selectedKey = key(selection());
     container.innerHTML = '<div class="panel-heading"><div><h2>PLAUD recordings</h2></div><div class="heading-tools"><span class="badge">Note Pro</span><details class="help"><summary aria-label="About PLAUD"><span aria-hidden="true">?</span></summary><div class="help-body"><p>Authenticate with the device credentials file, then list and download recordings as Ogg audio.</p><p>Downloads keep the original recording, up to 64 MiB. Saving requires the full byte count, a clean end marker and valid Ogg checksums.</p><p>Credentials must match the recorder’s serial. Back them up in Settings › Credentials.</p></div></details></div></div><div class="plaud-body"><p id="plaud-target" class="hint"></p><p id="plaud-credentials" class="plaud-credentials" role="status"></p><div id="plaud-credential-tools" class="credential-controls"><label class="button secondary credentials-import">Import credentials JSON<input id="plaud-credentials-file" type="file" accept=".json,application/json" aria-label="Import PLAUD credentials JSON or recorder backup"></label><button id="plaud-credential-settings" class="button quiet" type="button">Credential settings</button></div><div class="plaud-controls"><button id="plaud-authenticate" class="button primary">Authenticate</button><button id="plaud-list" class="button secondary">List recordings</button><button id="plaud-stop" class="button secondary" hidden>Stop download</button></div><p id="plaud-status" class="plaud-status" role="status"></p><div id="plaud-files" class="plaud-files"></div><progress id="plaud-meter" max="1" value="0" hidden aria-label="Recording download progress"></progress><p id="plaud-progress" class="plaud-progress" role="status"></p><button id="plaud-save" class="button primary" hidden>Save Ogg</button></div>';
     function selection() {
       const device = NanoConnection.snapshot().selected;
       return NanoRecorders.identify(device)?.product === 'PLAUD Note Pro' ? device : null;
     }
     function identity() {
-      const address = current.ble?.connected ? current.ble.address : '';
       const selected = selection();
-      const device = selected?.address.toLowerCase() === address.toLowerCase() ? selected : current.devices?.find(item => item.address.toLowerCase() === address.toLowerCase());
+      const device = current.ble?.connected ? key(selected) === key(current.ble) ? selected : current.devices?.find(item => key(item) === key(current.ble)) : null;
       const info = device && NanoRecorders.identify(device);
       return info?.product === 'PLAUD Note Pro' ? info : null;
     }
     function matches() {
       const selected = selection(), info = identity();
-      return Boolean(selected && current.ble?.address === selected.address && credentials && info?.serial.toLowerCase() === credentials.serial.toLowerCase());
+      return Boolean(selected && current.ble?.connected && key(current.ble) === key(selected) && credentials && info?.serial.toLowerCase() === credentials.serial.toLowerCase());
     }
     function candidate() {
       const device = selection(), info = NanoRecorders.identify(device);
@@ -42,6 +44,7 @@ const NanoPlaud = (() => {
     function guard(token = generation) {
       if (token !== generation) throw new Error('The PLAUD session changed. Authenticate again.');
       if (!online || !current.ble?.connected) throw new Error('Connect the PLAUD recorder before continuing.');
+      if (connectedKey(current, online) !== target) throw new Error('The PLAUD connection changed. Authenticate again.');
       if (!matches()) throw new Error('Credentials must match the serial advertised by the connected PLAUD recorder.');
       const handles = p.handles(current);
       if (!Number.isInteger(handles.command) || !Number.isInteger(handles.response)) throw new Error('PLAUD command and response characteristics are unavailable.');
@@ -49,7 +52,7 @@ const NanoPlaud = (() => {
     }
     function sync() {
       const device = selection(), info = NanoRecorders.identify(device), ready = online && matches() && Number.isInteger(p.handles(current).command);
-      const connected = Boolean(device && current.ble?.connected && current.ble.address === device.address);
+      const connected = Boolean(device && current.ble?.connected && key(current.ble) === key(device));
       get('target').textContent = info ? `${info.product} · ${info.serial} · ${!online ? 'board offline' : connected ? 'connected' : 'disconnected'}` : '';
       const canAuthenticate = online && Boolean(candidate());
       get('credentials').textContent = credentials ? `Credentials for ${credentials.serial.toUpperCase()} · ${NanoCredentials.status().persistent ? 'saved in this browser' : 'memory only; export a backup in Settings'}` : selection() ? 'No saved credentials' : '';
@@ -69,8 +72,10 @@ const NanoPlaud = (() => {
       if (waiter) { const pending = waiter; waiter = null; clearTimeout(pending.timer); pending.reject(new Error(message)); }
     }
     function reset(message) {
-      generation++; authenticated = false; session = null; fail(message);
-      if (transfer?.active) transfer.active = false;
+      if (running || transfer?.active) lab.setFastCapture(false);
+      generation++; running = null; authenticated = false; session = null; fail(message);
+      if (transfer?.active) { transfer.active = false; transfer.buffer = null; }
+      tx = Promise.resolve(); rx = Promise.resolve();
       records = []; renderFiles(); get('status').textContent = message; sync();
     }
     function touch() { if (waiter) { clearTimeout(waiter.timer); waiter.timer = setTimeout(() => fail('PLAUD did not return a complete reply before the timeout.'), waiter.timeout); } }
@@ -94,6 +99,7 @@ const NanoPlaud = (() => {
     }
     async function receive(event, token) {
       if (token !== generation) return;
+      guard(token);
       const bytes = NanoPackets.bytes(event.hex || ''), pending = waiter;
       if (event.truncated) { fail('PLAUD packet was truncated. Repeat the operation.'); return; }
       const packet = pending?.raw ? bytes : session ? session.open(bytes) : null;
@@ -109,7 +115,8 @@ const NanoPlaud = (() => {
       if (meta.dropped && waiter) fail('Packet capture has a gap. The operation is incomplete.');
       const handle = p.handles(current).response, token = generation;
       for (const event of events) {
-        if (event.address !== target || event.handle !== handle || !['notification', 'indication'].includes(event.kind)) continue;
+        if (event.address?.toLowerCase() !== current.ble?.address?.toLowerCase() || event.handle !== handle || !['notification', 'indication'].includes(event.kind)) continue;
+        if (event.addressType !== undefined && event.addressType !== current.ble.addressType || event.connectionAttempt !== undefined && event.connectionAttempt !== current.ble.connectionAttempt) continue;
         rx = rx.then(() => receive(event, token)).catch(error => {
           if (token !== generation) return;
           fail(error.message); if (!running) { authenticated = false; session = null; get('status').textContent = 'PLAUD session validation failed. Authenticate again.'; }
@@ -118,34 +125,44 @@ const NanoPlaud = (() => {
       sync();
     });
     lab.onState((state, available = true) => {
-      const next = state.ble?.connected ? state.ble.address : '';
+      const next = connectedKey(state, available), previous = target;
       current = state; online = available;
-      if (target && target !== next) reset('PLAUD disconnected. Saved credentials are ready for reconnection.');
-      target = next; loadSaved();
+      target = next;
+      const connecting = running?.connecting && online && running.key === key(selection());
+      if (previous && previous !== next && !connecting) reset('PLAUD connection changed. Saved credentials are ready for reconnection.');
+      if (connecting && state.ble?.connected && key(state.ble) === running.key) running.connecting = false;
+      loadSaved();
       if (!online && waiter) fail('The board is unavailable. The operation is incomplete.');
       sync();
     });
     async function perform(operation, connectFirst = false) {
       if (running) return;
-      running = true; get('status').classList.remove('error'); lab.setFastCapture(true); sync();
+      const operationState = running = { token: generation, key: key(selection()), connecting: connectFirst && (!current.ble?.connected || key(current.ble) !== key(selection())) };
+      const active = () => running === operationState && operationState.token === generation && operationState.key === key(selection());
+      get('status').classList.remove('error'); lab.setFastCapture(true); sync();
       try {
         if (connectFirst) {
           const device = candidate();
           if (!online || !device) throw new Error('Select the PLAUD recorder matching the saved credentials.');
           get('status').textContent = 'Connecting to the matching PLAUD recorder…';
-          current = await NanoConnection.ensure(device); target = current.ble?.address || '';
+          const state = await NanoConnection.ensure(device);
+          if (!active()) return;
+          current = state; target = connectedKey(current, online); operationState.connecting = false;
         }
-        guard(); await operation();
+        guard(operationState.token); await operation(operationState.token);
       }
       catch (error) {
+        if (!active()) return;
         fail(error.message); get('status').textContent = error.message; get('status').classList.add('error');
-        const stopping = transfer?.active; generation++;
+        const stopping = transfer?.active; operationState.token = ++generation;
         if (stopping && session && matches() && online && current.ble?.connected) {
-          try { await write(session.seal(p.command(29))); } catch { get('status').textContent += ' Stop could not be confirmed.'; }
+          try { await write(session.seal(p.command(29))); } catch { if (active()) get('status').textContent += ' Stop could not be confirmed.'; }
         }
       } finally {
-        if (transfer) { transfer.active = false; transfer.buffer = null; }
-        running = false; lab.setFastCapture(false); sync();
+        if (running === operationState) {
+          if (transfer) { transfer.active = false; transfer.buffer = null; }
+          running = null; lab.setFastCapture(false); sync();
+        }
       }
     }
     get('credentials-file').addEventListener('change', async () => {
@@ -157,12 +174,18 @@ const NanoPlaud = (() => {
       finally { get('credentials-file').value = ''; sync(); }
     });
     document.addEventListener('nanoscope:credentials-changed', () => { loadSaved(); sync(); });
-    document.addEventListener('nanoscope:selection', () => { loadSaved(); sync(); });
+    document.addEventListener('nanoscope:selection', () => {
+      const next = key(selection());
+      if (next !== selectedKey) { selectedKey = next; reset(''); }
+      loadSaved(); sync();
+    });
+    globalThis.addEventListener?.('nanoscope:api-change', () => { current = {}; online = false; target = ''; bootId = ''; latestSeq = 0; reset(''); });
     get('credential-settings').addEventListener('click', () => { NanoSettings.open('credentials'); });
-    get('authenticate').addEventListener('click', () => perform(async () => {
+    get('authenticate').addEventListener('click', () => perform(async token => {
       authenticated = false; session = null; records = []; renderFiles();
       get('status').textContent = 'Subscribing and authenticating the device signature…';
-      await lab.action('subscribe', { handle: guard().response, mode: 'notify' });
+      await lab.action('subscribe', { handle: guard(token).response, mode: 'notify' });
+      guard(token);
       const assembler = new p.Assembler(); let publicKeySent = false;
       const wrapped = await exchange(token => sendChunks(0xfe10, credentials.signature, token), async (packet, token) => {
         if (packet.length < 2) throw new Error('Truncated PLAUD authentication reply.');
@@ -172,6 +195,7 @@ const NanoPlaud = (() => {
           await sendChunks(0xfe12, new TextEncoder().encode(credentials.publicKeyPem), token);
         } else if (opcode === 0xfe12) { const result = assembler.add(packet); if (result) return result; }
       }, true);
+      guard(token);
       session = new p.Session(credentials.privateKeyPem, wrapped);
       get('status').textContent = 'Confirming the encrypted session…'; let second = false;
       await exchange(token => write(session.seal(p.handshake(credentials.userId)), token), async (packet, token) => {
@@ -183,6 +207,7 @@ const NanoPlaud = (() => {
           return true;
         }
       });
+      guard(token);
       authenticated = true; get('status').textContent = 'Authenticated. Ready to list recordings.';
     }, true));
     function renderFiles() {
@@ -192,14 +217,14 @@ const NanoPlaud = (() => {
         const row = el('div', 'plaud-recording'), label = el('div');
         label.append(el('strong', '', `Recording ${recording.id}`), el('small', '', `${recording.size.toLocaleString()} bytes${recording.size > maxBytes ? ' · exceeds 64 MiB download limit' : ''}`));
         const button = el('button', 'button secondary', 'Download'); button.dataset.size = recording.size;
-        button.addEventListener('click', () => perform(() => download(recording))); row.append(label, button); get('files').append(row);
+        button.addEventListener('click', () => perform(token => download(recording, token))); row.append(label, button); get('files').append(row);
       }
       sync();
     }
-    get('list').addEventListener('click', () => perform(async () => {
+    get('list').addEventListener('click', () => perform(async token => {
       get('status').textContent = 'Reading the recording list…';
       const request = p.listRequest(0), requestId = u32(request, 3), entries = new Map(); let total = null;
-      records = await exchange(token => write(session.seal(request), token), packet => {
+      const found = await exchange(token => write(session.seal(request), token), packet => {
         if (packet.length < 3 || packet[0] !== 1 || u16(packet, 1) !== 26) return;
         const page = p.parseList(packet); if (page.requestId !== requestId) return;
         if (total !== null && total !== page.total) throw new Error('The recording list changed while being read. Retry the list.');
@@ -213,13 +238,14 @@ const NanoPlaud = (() => {
           if (!entries.has(index)) throw new Error('The recording list is incomplete.'); return entries.get(index);
         });
       }, false, 30000);
+      guard(token); records = found;
       renderFiles(); get('status').textContent = `${records.length} recordings found.`;
     }));
-    async function download(recording) {
+    async function download(recording, token) {
       if (!authenticated || !session) throw new Error('Authenticate before downloading.');
       if (!Number.isSafeInteger(recording.size) || recording.size < 1 || recording.size > maxBytes) throw new Error('This recorder supports downloads from 1 byte through 64 MiB in this browser.');
       verified = null; transfer = { active: true, size: recording.size, id: recording.id, received: 0, buffer: new Uint8Array(recording.size), header: false, ended: false, error: '' };
-      const item = transfer, token = generation; get('status').textContent = `Downloading recording ${recording.id}…`; sync();
+      const item = transfer; get('status').textContent = `Downloading recording ${recording.id}…`; sync();
       await exchange(token => write(session.seal(p.downloadRequest(recording.id, 0, recording.size)), token), packet => {
         if (packet[0] === 1 && packet.length >= 3 && u16(packet, 1) === 28) {
           if (packet.length < 8 || u32(packet, 3) !== item.id || packet[7] !== 0) throw new Error('PLAUD rejected the recording download header.');
@@ -239,6 +265,7 @@ const NanoPlaud = (() => {
         }
         if (item.header && item.ended && item.received === item.size) return true;
       }, false, 30000);
+      guard(token);
       get('status').textContent = 'All recording bytes received. Decrypting and verifying Ogg pages…';
       await new Promise(resolve => setTimeout(resolve, 0));
       guard(token); if (item.error) throw new Error(item.error);
