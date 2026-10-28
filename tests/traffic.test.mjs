@@ -50,7 +50,9 @@ function harness() {
   vm.runInNewContext(readFileSync(new URL('../web/traffic.js', import.meta.url), 'utf8') + '\nthis.traffic = NanoTraffic;', context);
   const live = packets.createCapture(); context.traffic.mount(new Element('section'), live.snapshot);
   const get = id => ids.get('traffic-' + id);
-  return { get, downloads, calls: () => calls, async import(data, name = 'synthetic.log', size = data.length) {
+  return { get, downloads, calls: () => calls, ingest(events) {
+    live.ingest({ bootId: 'live', events }); get('handle').listeners.input();
+  }, async import(data, name = 'synthetic.log', size = data.length) {
     get('import').files = [{ name, size, arrayBuffer: async () => data.buffer.slice(data.byteOffset, data.byteOffset + data.length) }];
     await get('import').listeners.change();
   }, async exported() { get('json').click(); return JSON.parse(await downloads.at(-1).text()); } };
@@ -73,6 +75,22 @@ test('PacketLogger content imports with a .log name and completeness remains unv
   assert.equal(h.get('rows').children.length, 1); assert.match(h.get('export-status').textContent, /PacketLogger/);
   const result = await h.exported(); assert.equal(result.format, 'pklg'); assert.equal(result.metadata.byteOrder, 'big'); assert.equal(result.completeness, 'unverified'); assert.equal(result.events[0].hex, 'bb');
   h.get('live').click(); assert.equal(h.get('rows').children.length, 0); assert.equal(h.get('live').hidden, true);
+});
+
+test('connection stream options and packet selection export the selected connection only', async () => {
+  const h = harness(), base = { bootId: 'live', address: 'aa:bb:cc:dd:ee:01', addressType: 0, connectionAttempt: 1, handle: 8, kind: 'notification', ms: 1, length: 1, hex: 'aa' };
+  const second = { ...base, seq: 2, connectionAttempt: 2, hex: 'bb' };
+  h.ingest([{ ...base, seq: 1 }, second, { ...base, seq: 3, addressType: undefined, connectionAttempt: undefined, hex: 'cc' }]);
+  assert.equal(h.get('stream').children.length, 3);
+  assert.match(h.get('stream').children[0].textContent, /type 0.*connection 1/);
+  assert.match(h.get('stream').children[1].textContent, /connection 2/);
+  h.get('rows').children[1].children[0].children[0].click();
+  assert.equal(h.get('stream').value, packets.streamKey(second));
+  h.get('binary').click();
+  assert.equal(packets.hex(new Uint8Array(await h.downloads.at(-1).arrayBuffer())), 'bb');
+  h.get('stream').value = h.get('stream').children[0].value; h.get('binary').click();
+  assert.equal(packets.hex(new Uint8Array(await h.downloads.at(-1).arrayBuffer())), 'aa');
+  assert.equal(h.calls(), 0);
 });
 
 test('arbitrary logs, unsupported btsnoop formats and oversized files do not replace the trace', async () => {

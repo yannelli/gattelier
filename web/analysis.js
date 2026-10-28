@@ -1,6 +1,7 @@
 'use strict';
 
 const NanoAnalysis = (() => {
+  const packets = typeof module !== 'undefined' ? require('./packets.js') : NanoPackets;
   function bytes(hex) {
     if (typeof hex !== 'string' || hex.length > 8192 || !/^(?:[\da-f]{2})*$/i.test(hex)) throw new Error('Expected complete HEX bytes, up to 4096 bytes.');
     return (hex.match(/../g) || []).map(value => parseInt(value, 16));
@@ -12,8 +13,9 @@ const NanoAnalysis = (() => {
     return changes;
   }
   function previous(events, current) {
-    const rx = event => ['notification', 'indication', 'read'].includes(event.kind);
-    return events.filter(event => event.seq < current.seq && event.bootId === current.bootId && event.address === current.address && event.handle === current.handle && rx(event) === rx(current) && event.hex && !event.redacted && !event.truncated).at(-1) || null;
+    const direction = event => event.protocolDirection || packets.direction(event.kind);
+    const stream = packets.streamKey(current);
+    return events.filter(event => event.seq < current.seq && packets.streamKey(event) === stream && direction(event) === direction(current) && event.hex && !event.redacted && !event.truncated).at(-1) || null;
   }
   function filter(events, direction, uuid) {
     const needle = String(uuid || '').toLowerCase().replace(/^0x/, '');

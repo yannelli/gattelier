@@ -55,16 +55,17 @@ const NanoTraffic = (() => {
     const prior = get('stream').value;
     const found = new Map();
     for (const event of events) if (NanoPackets.isRx(event)) {
-      const streamKey = JSON.stringify([event.bootId, event.address, event.handle]);
-      if (!found.has(streamKey)) found.set(streamKey, { bootId: event.bootId, address: event.address, handle: event.handle });
+      const streamKey = NanoPackets.streamKey(event);
+      if (!found.has(streamKey)) found.set(streamKey, { bootId: event.bootId, address: event.address, handle: event.handle, addressType: event.addressType, connectionAttempt: event.connectionAttempt });
     }
     streams = [...found.values()];
     const signature = [...found.keys()].join('|');
     if (get('stream').dataset.signature === signature) return;
     get('stream').dataset.signature = signature;
     get('stream').replaceChildren(...streams.map(stream => {
-      const option = el('option', '', `Handle ${stream.handle} · ${stream.address || 'Unknown device'} · boot ${stream.bootId}`);
-      option.value = JSON.stringify([stream.bootId, stream.address, stream.handle]); return option;
+      const scope = `${stream.addressType === undefined ? '' : ` · type ${stream.addressType}`}${stream.connectionAttempt === undefined ? '' : ` · connection ${stream.connectionAttempt}`}`;
+      const option = el('option', '', `Handle ${stream.handle} · ${stream.address || 'Unknown device'}${scope} · boot ${stream.bootId}`);
+      option.value = NanoPackets.streamKey(stream); return option;
     }));
     if (found.has(prior)) get('stream').value = prior;
     get('binary').disabled = !streams.length;
@@ -85,8 +86,8 @@ const NanoTraffic = (() => {
       choose.type = 'button'; choose.setAttribute('aria-label', `Inspect packet ${event.seq}, ${event.kind}`);
       choose.addEventListener('click', () => {
         selected = event; get('offset').value = 0;
-        const value = JSON.stringify([event.bootId, event.address, event.handle]);
-        if (streams.some(stream => JSON.stringify([stream.bootId, stream.address, stream.handle]) === value)) get('stream').value = value;
+        const value = NanoPackets.streamKey(event);
+        if (streams.some(stream => NanoPackets.streamKey(stream) === value)) get('stream').value = value;
         decodeSelected(); render();
       });
       cell.append(choose); row.append(cell, el('td', 'packet-direction', event.protocolDirection || NanoPackets.direction(event.kind)), el('td', '', event.kind), el('td', 'mono', event.handle ?? ''));
@@ -111,7 +112,7 @@ const NanoTraffic = (() => {
     get('export-status').textContent = `Exported ${capture.events.length} retained events. Capture completeness: ${capture.completeness}.`;
   }
   function exportBinary() {
-    const stream = streams.find(item => JSON.stringify([item.bootId, item.address, item.handle]) === get('stream').value);
+    const stream = streams.find(item => NanoPackets.streamKey(item) === get('stream').value);
     if (!stream) return;
     const result = NanoPackets.rxBinary(getCapture(), stream);
     const status = result.incomplete ? 'incomplete' : 'unverified';

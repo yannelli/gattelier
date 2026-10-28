@@ -36,6 +36,7 @@ const NanoPackets = (() => {
   }
   const direction = kind => kind === 'write' || kind === 'write-result' ? 'TX' : ['read', 'notification', 'indication'].includes(kind) ? 'RX' : 'EVENT';
   const isRx = event => !event.request && (event.protocolDirection || direction(event.kind)) === 'RX' && event.success !== false;
+  const streamKey = event => JSON.stringify([event.bootId, String(event.address || '').toLowerCase(), event.handle, event.addressType ?? null, event.connectionAttempt ?? null]);
   function redact(event) {
     const dexcomAuthWrite = (event.protocolDirection || direction(event.kind)) === 'TX' && /^f808353[58]-849e-531c-c594-30f1f86a4ea5$/i.test(event.uuid || '');
     return sensitive(event.hex || '', event.uuid) || dexcomAuthWrite ? { ...event, hex: '', message: 'Authentication payload redacted', redacted: true } : { ...event };
@@ -78,13 +79,13 @@ const NanoPackets = (() => {
       && (!query || `${event.hex || ''} ${ascii(bytes(event.hex || ''))} ${event.address || ''} ${event.uuid || ''} ${event.message || ''}`.toLowerCase().includes(query)));
   }
   function csv(capture) {
-    const fields = ['bootId', 'seq', 'ms', 'direction', 'kind', 'address', 'uuid', 'handle', 'hex', 'ascii', 'length', 'success', 'truncated', 'message', 'captureGaps', 'browserDropped'];
+    const fields = ['bootId', 'seq', 'ms', 'direction', 'kind', 'address', 'addressType', 'connectionAttempt', 'uuid', 'handle', 'hex', 'ascii', 'length', 'success', 'truncated', 'message', 'captureGaps', 'browserDropped'];
     const quote = value => `"${String(value ?? '').replace(/"/g, '""')}"`;
     const rows = capture.events.map(event => ({ ...event, direction: event.protocolDirection || direction(event.kind), ascii: ascii(bytes(event.hex || '')), captureGaps: capture.stats.gaps, browserDropped: capture.stats.browserDropped }));
     return [fields.join(','), ...rows.map(row => fields.map(field => quote(row[field])).join(','))].join('\r\n');
   }
   function rxBinary(capture, stream) {
-    const packets = capture.events.filter(event => isRx(event) && event.handle === stream.handle && event.address === stream.address && event.bootId === stream.bootId);
+    const key = streamKey(stream), packets = capture.events.filter(event => isRx(event) && streamKey(event) === key);
     const chunks = packets.map(event => bytes(event.hex || ''));
     const data = new Uint8Array(chunks.reduce((sum, item) => sum + item.length, 0));
     let position = 0;
@@ -92,6 +93,6 @@ const NanoPackets = (() => {
     const incomplete = capture.stats.gaps > 0 || capture.stats.browserDropped > 0 || packets.some(event => event.truncated || event.redacted || (event.length ?? bytes(event.hex || '').length) > bytes(event.hex || '').length);
     return { data, packets: packets.length, incomplete, verified: false };
   }
-  return { bytes, hex, ascii, sensitive, payload, decode, direction, isRx, createCapture, filter, csv, rxBinary };
+  return { bytes, hex, ascii, sensitive, payload, decode, direction, isRx, streamKey, createCapture, filter, csv, rxBinary };
 })();
 if (typeof module !== 'undefined') module.exports = NanoPackets;

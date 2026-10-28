@@ -85,6 +85,26 @@ test('RX export isolates boot/address/handle and flags incomplete captures', () 
   assert.equal(binary.incomplete, true);
 });
 
+test('RX streams keep address types and connection attempts separate and normalize address casing', () => {
+  const capture = packets.createCapture();
+  capture.ingest(batch([
+    event(1, { addressType: 0, connectionAttempt: 1, hex: 'aa', length: 1 }),
+    event(2, { addressType: 0, connectionAttempt: 2, hex: 'bb', length: 1 }),
+    event(3, { addressType: 1, connectionAttempt: 2, hex: 'cc', length: 1 }),
+    event(4, { hex: 'dd', length: 1 }),
+    event(5, { address: 'aa:bb:cc:dd:ee:ff', addressType: 0, connectionAttempt: 2, hex: 'ee', length: 1 })
+  ]));
+  const saved = capture.snapshot(), stream = saved.events[1];
+  const result = packets.rxBinary(saved, stream);
+  assert.equal(packets.hex(result.data), 'bbee'); assert.equal(result.packets, 2);
+  assert.equal(packets.hex(packets.rxBinary(saved, saved.events[2]).data), 'cc');
+  assert.equal(packets.hex(packets.rxBinary(saved, saved.events[3]).data), 'dd');
+  assert.equal(packets.hex(packets.rxBinary(saved, { ...stream, addressType: null, connectionAttempt: null }).data), 'dd');
+  const csv = packets.csv(saved);
+  assert.match(csv.split('\r\n')[0], /address,addressType,connectionAttempt,uuid/);
+  assert.match(csv.split('\r\n')[2], /"AA:BB:CC:DD:EE:FF","0","2"/);
+});
+
 function labWithResponses(responses) {
   const calls = [], events = [];
   const context = {
