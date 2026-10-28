@@ -3,7 +3,7 @@ const NanoPocket = (() => {
   function mount(container, lab) {
     if (!container) return;
     const p = PocketProtocol;
-    let current = {}, online = false, target = '', authenticated = false, running = false, transferActive = false, waiter, transfer, recording, lastPacket = 0, bootId = '', address = '', credentialStamp = '';
+    let current = {}, online = false, target = '', authenticated = false, running = null, transferActive = false, waiter, transfer, recording, lastPacket = 0, bootId = '', credentialStamp = '';
     const el = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text !== undefined) n.textContent = text; return n; };
     const title = el('div', 'panel-heading'); title.append(el('h2', '', 'Pocket recordings'));
     title.insertAdjacentHTML('beforeend', '<details class="help"><summary aria-label="About Pocket"><span aria-hidden="true">?</span></summary><div class="help-body"><p>Authenticate with the recorder’s 16-character session key, then browse recordings by date and save them as MP3.</p><p>Load the key directly or extract it from an iPhone PacketLogger capture. Keys are saved in this browser for this Pocket address and left out of traffic exports. Backups and capture steps are in Settings › Credentials.</p></div></details>');
@@ -45,6 +45,27 @@ const NanoPocket = (() => {
       const device = NanoConnection.snapshot().selected;
       return NanoRecorders.identify(device)?.product === 'Pocket Recorder' ? device : null;
     }
+    const deviceKey = device => device?.address ? `${device.address.toLowerCase()}/${device.addressType}` : '';
+    const connectionKey = state => state.ble?.connected ? `${deviceKey(state.ble)}/${state.ble.connectionAttempt}` : '';
+    let selectedTarget = deviceKey(selection());
+    function reset(message = '', keepOperation = false) {
+      authenticated = false; rejectWait(message || 'The Pocket session changed.');
+      if (running || transferActive) lab.setFastCapture(false);
+      if (!keepOperation) running = null;
+      transferActive = false;
+      if (!transfer?.complete) { transfer = null; recording = null; progress.textContent = ''; save.hidden = true; }
+      files.replaceChildren(); dates.replaceChildren(datePlaceholder); dates.value = ''; datePlaceholder.textContent = 'No dates loaded';
+      key.value = ''; credentialStamp = ''; loadSaved(); status.textContent = keepOperation ? 'Working…' : message;
+    }
+    function observeSelection() {
+      const next = deviceKey(selection());
+      if (next !== selectedTarget) { selectedTarget = next; reset(); }
+    }
+    function active(operation) {
+      const valid = running === operation && online && deviceKey(selection()) === operation.device && (!operation.connection || connectionKey(current) === operation.connection);
+      if (!valid && running === operation) { reset(); sync(); }
+      return valid;
+    }
     function loadSaved(force = false) {
       if (running) return;
       const device = selection(), saved = device ? NanoCredentials.getPocket(device.address) : null;
@@ -55,7 +76,8 @@ const NanoPocket = (() => {
       else if (!authenticated) status.textContent = saved ? `Saved key ready for ${device.label || device.name || device.address}.` : 'Load the session key or an iPhone PacketLogger capture for this Pocket.';
     }
     function sync() {
-      const device = selection(), connected = Boolean(device && current.ble?.connected && current.ble.address === device.address);
+      observeSelection();
+      const device = selection(), connected = Boolean(device && current.ble?.connected && deviceKey(current.ble) === deviceKey(device));
       const ready = online && connected && p.handles(current).command;
       const disabled = !ready || running || current.ble?.busy;
       const secret = key.value.trim() || (device && NanoCredentials.getPocket(device.address));
@@ -71,37 +93,46 @@ const NanoPocket = (() => {
     }
     async function perform(operation, connectFirst = false) {
       if (running) return;
-      running = true; status.textContent = 'Working…'; sync();
+      const device = selection(), pending = { device: deviceKey(device), connection: deviceKey(current.ble) === deviceKey(device) ? connectionKey(current) : '' };
+      running = pending; status.textContent = 'Working…'; sync();
+      const check = () => { if (!active(pending)) throw new Error('The Pocket session changed. Reconnect and try again.'); };
       try {
-        const device = selection();
         if (!device) throw new Error('Select a Pocket recorder first.');
-        if (connectFirst) { current = await NanoConnection.ensure(device); address = current.ble.address; }
-        if (selection()?.address !== device.address) throw new Error('The selected Pocket changed. Choose the recorder and try again.');
-        if (!current.ble?.connected || current.ble.address !== device.address) throw new Error('Connect the selected Pocket recorder before continuing.');
-        await operation();
-      } catch (error) { status.textContent = error.message; }
-      finally { running = false; transferActive = false; lab.setFastCapture(false); sync(); }
+        check();
+        if (connectFirst) {
+          const state = await NanoConnection.ensure(device); check();
+          if (pending.connection && connectionKey(state) !== pending.connection) { reset(); sync(); return; }
+          current = state; target = connectionKey(state);
+        }
+        if (!current.ble?.connected || deviceKey(current.ble) !== pending.device) throw new Error('Connect the selected Pocket recorder before continuing.');
+        pending.connection = connectionKey(current); check();
+        await operation(check);
+      } catch (error) { if (active(pending)) status.textContent = error.message; }
+      finally { if (running === pending) { running = null; transferActive = false; lab.setFastCapture(false); sync(); } }
     }
-    function rejectWait(message) { if (waiter) { clearTimeout(waiter.timer); waiter.reject(new Error(message)); waiter = null; } }
-    function command(text, done, timeout = 15000) {
+    function rejectWait(message, pending = waiter) { if (pending && waiter === pending) { clearTimeout(pending.timer); waiter = null; pending.reject(new Error(message)); } }
+    function command(text, done, check, timeout = 15000) {
+      check();
       if (waiter) return Promise.reject(new Error('A Pocket command is already waiting for a reply.'));
       const h = p.handles(current);
       const hex = p.encode(text);
       const reply = new Promise((resolve, reject) => {
         waiter = { armed: false, hex, auth: text.startsWith('APP&SK&'), messages: [], done, resolve, reject,
-          timer: setTimeout(() => rejectWait('Pocket did not return a complete reply before the timeout.'), timeout) };
+          timer: setTimeout(() => rejectWait('Pocket did not return a complete reply before the timeout.', pending), timeout) };
       });
-      const write = lab.action('write', { handle: h.command, hex, response: true }).catch(error => { rejectWait(error.message); throw error; });
+      const pending = waiter;
+      const write = lab.action('write', { handle: h.command, hex, response: true }).catch(error => { rejectWait(error.message, pending); throw error; });
       return Promise.all([reply, write]).then(([messages]) => messages);
     }
     lab.onEvents((events, meta) => {
-      if (bootId && bootId !== meta.bootId) { authenticated = false; rejectWait('The board restarted. Reconnect and authenticate again.'); if (transferActive) transfer.error = 'Board restarted during transfer.'; }
+      if (bootId && bootId !== meta.bootId) reset('The board restarted. Reconnect and authenticate again.');
       bootId = meta.bootId;
+      if (!running || !active(running) || !running.connection) return;
       if (meta.dropped && waiter?.armed) { rejectWait('Packet capture has a gap. Repeat the command.'); }
       if (meta.dropped && transferActive) transfer.lost += meta.dropped;
       const h = p.handles(current);
       for (const event of events) {
-        if (event.address !== address) continue;
+        if (event.address?.toLowerCase() !== current.ble.address.toLowerCase() || event.addressType !== undefined && event.addressType !== current.ble.addressType || event.connectionAttempt !== undefined && event.connectionAttempt !== current.ble.connectionAttempt) continue;
         if (event.kind === 'write' && event.handle === h.command && waiter && (event.hex === waiter.hex || (waiter.auth && event.message.includes('redacted')))) waiter.armed = true;
         if (event.kind !== 'notification' && event.kind !== 'indication') continue;
         if (transferActive && event.handle === h.audio) { transfer.append(event.hex, event.truncated); lastPacket = Date.now(); }
@@ -124,12 +155,15 @@ const NanoPocket = (() => {
     });
     lab.onState((state, isOnline = true) => {
       current = state; online = isOnline;
-      const next = state.ble?.connected ? state.ble.address : '';
-      if (target && target !== next) {
-        authenticated = false; key.value = ''; status.textContent = 'Pocket disconnected. Reconnect to continue.'; rejectWait('Pocket disconnected.');
-        if (transferActive && !transfer.complete) transfer.error = 'Disconnected before the recording was complete.';
-      }
-      target = next; address = next; loadSaved(); sync();
+      observeSelection();
+      const next = connectionKey(state);
+      if (target && target !== next || !online) reset('Pocket disconnected. Reconnect to continue.', online && Boolean(running && !running.connection));
+      target = next;
+      if (running && !running.connection && next && deviceKey(state.ble) === running.device) running.connection = next;
+      loadSaved(); sync();
+    });
+    globalThis.addEventListener?.('nanoscope:api-change', () => {
+      reset(); current = {}; online = false; target = ''; bootId = ''; sync();
     });
     keyFile.addEventListener('change', async () => {
       const file = keyFile.files[0]; if (!file) return;
@@ -157,18 +191,18 @@ const NanoPocket = (() => {
     unlock.addEventListener('click', () => {
       // Read before perform(): switching devices disconnects the old one, and that clears the key field.
       const typed = key.value.trim();
-      perform(async () => {
+      perform(async check => {
         const device = selection(), secret = typed || NanoCredentials.getPocket(device.address);
         if (!/^[A-Za-z0-9]{16}$/.test(secret)) throw new Error('Enter the existing 16-character Pocket session key.');
         const h = p.handles(current);
         await lab.action('subscribe', { handle: h.response, mode: 'notify' });
-        await command(`APP&SK&${secret}`, message => message === 'MCU&SK&OK');
+        await command(`APP&SK&${secret}`, message => message === 'MCU&SK&OK', check); check();
         authenticated = true; const result = NanoCredentials.savePocket(device.address, secret); key.value = '';
         status.textContent = result.error || 'Authenticated. Key saved for reconnection.';
       }, true);
     });
-    directories.addEventListener('click', () => perform(async () => {
-      const replies = await command('APP&LIST_DIRS', message => /^MCU&DIRS_SUM&\d+$/.test(message));
+    directories.addEventListener('click', () => perform(async check => {
+      const replies = await command('APP&LIST_DIRS', message => /^MCU&DIRS_SUM&\d+$/.test(message), check); check();
       const found = replies.filter(message => message.startsWith('MCU&DIRS&')).map(message => message.slice(9));
       const count = Number(replies.find(message => message.startsWith('MCU&DIRS_SUM&')).slice(13));
       if (found.length !== count || found.some(date => !p.safeId(date))) throw new Error('The recording-date list is incomplete. Try again.');
@@ -176,9 +210,9 @@ const NanoPocket = (() => {
       if (!found.length) { datePlaceholder.textContent = 'No recording dates'; dates.append(datePlaceholder); }
       status.textContent = `${found.length} recording dates found.`;
     }));
-    list.addEventListener('click', () => perform(async () => {
+    list.addEventListener('click', () => perform(async check => {
       if (!p.safeId(dates.value)) throw new Error('Choose a recording date.');
-      const replies = await command(`APP&LIST&${dates.value}`, message => /^MCU&LIST&\d+$/.test(message));
+      const replies = await command(`APP&LIST&${dates.value}`, message => /^MCU&LIST&\d+$/.test(message), check); check();
       const result = p.listing(replies);
       if (!result.complete) throw new Error('The recording list is incomplete. Try again.');
       files.replaceChildren();
@@ -186,24 +220,26 @@ const NanoPocket = (() => {
         const row = el('div', 'pocket-file');
         const label = el('div'); label.append(el('strong', '', file.name), el('small', '', `${file.date} · ${Math.floor(file.seconds / 60)}m ${file.seconds % 60}s`));
         const download = el('button', 'button secondary', 'Download');
-        download.addEventListener('click', () => perform(() => downloadFile(file)));
+        download.addEventListener('click', () => perform(check => downloadFile(file, check)));
         row.append(label, download); files.append(row);
       }
       status.textContent = `${result.files.length} recordings. Downloading keeps the original on Pocket.`;
     }));
-    info.addEventListener('click', () => perform(async () => {
-      const firmware = await command('APP&FW', message => message.startsWith('MCU&FW&'));
-      const space = await command('APP&SPACE', message => message.startsWith('MCU&SPA&'));
+    info.addEventListener('click', () => perform(async check => {
+      const firmware = await command('APP&FW', message => message.startsWith('MCU&FW&'), check);
+      const space = await command('APP&SPACE', message => message.startsWith('MCU&SPA&'), check); check();
       status.textContent = [...firmware, ...space].join(' · ');
     }));
-    async function downloadFile(file) {
+    async function downloadFile(file, check) {
       recording = file; transfer = new p.Transfer(); save.hidden = true; transferActive = true;
       await lab.action('subscribe', { handle: p.handles(current).audio, mode: 'notify' });
+      check();
       lab.setFastCapture(true); lastPacket = Date.now();
-      await command(`APP&U&${file.date}&${file.name}`, message => /^MCU&U&\d+$/.test(message));
+      await command(`APP&U&${file.date}&${file.name}`, message => /^MCU&U&\d+$/.test(message), check); check();
       while (!transfer.complete && !transfer.error && !transfer.lost) {
         if (Date.now() - lastPacket > 30000) { transfer.error = 'Transfer stalled before all bytes arrived.'; break; }
         await new Promise(resolve => setTimeout(resolve, 100));
+        check();
       }
       if (!transfer.complete) throw new Error('Recording incomplete. No complete MP3 was produced. Inspect the capture gaps and retry.');
       status.textContent = "Recording received. The byte count matches Pocket's announced size. Save the MP3 below.";
