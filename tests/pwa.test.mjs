@@ -108,25 +108,38 @@ test('explicit metadata download bypasses the installed shell catalog', async ()
   assert.equal(intercepted, false);
 });
 
-async function appFixture() {
-  const elements = new Map(), handlers = new Map(), messages = [];
-  let updates = 0, reloads = 0, failUpdate = false;
+async function appFixture({ registrationFails = false, secure = true, initialInstallation = false } = {}) {
+  const elements = new Map(), handlers = new Map(), messages = [], registrationHandlers = new Map();
+  let installation, resolveReady;
+  const ready = new Promise(resolve => { resolveReady = resolve; });
+  let updates = 0, reloads = 0, registrations = 0, failUpdate = false;
   const get = key => {
     if (!elements.has(key)) elements.set(key, { textContent: '', hidden: false, disabled: false, addEventListener() {} });
     return elements.get(key);
   };
   const pending = { postMessage: message => messages.push(message) };
-  const registration = { active: {}, waiting: pending, installing: null, addEventListener() {},
+  const registration = { active: initialInstallation ? null : {}, waiting: initialInstallation ? null : pending, installing: null, addEventListener: (type, callback) => registrationHandlers.set(type, callback),
     async update() { updates++; if (failUpdate) throw new Error('offline'); } };
-  const context = vm.createContext({ module: { exports: {} }, isSecureContext: true, document: { hidden: false },
-    navigator: { serviceWorker: { register: async () => registration, addEventListener: (type, callback) => handlers.set(type, callback) } },
+  function startInstallation() {
+    const listeners = [], worker = { state: 'installing', addEventListener: (_type, callback) => listeners.push(callback) };
+    registration.installing = worker;
+    installation = state => {
+      worker.state = state; registration.installing = null;
+      if (state === 'activated') { registration.active = worker; resolveReady(registration); }
+      listeners.forEach(callback => callback());
+    };
+    registrationHandlers.get('updatefound')?.();
+  }
+  if (initialInstallation) startInstallation();
+  const context = vm.createContext({ module: { exports: {} }, isSecureContext: secure, document: { hidden: false },
+    navigator: { serviceWorker: { ready, register: async () => { registrations++; if (registrationFails) throw new Error('worker download failed (503)'); if (initialInstallation && registrations > 1) startInstallation(); return registration; }, addEventListener: (type, callback) => handlers.set(type, callback) } },
     location: { reload: () => reloads++ }, addEventListener() {},
   });
   vm.runInContext(readFileSync(new URL('../web/pwa.js', import.meta.url), 'utf8'), context);
   await context.module.exports.mount({ classList: { add() {} }, querySelector: get });
   return { app: context.module.exports, registration, get, messages,
-    setOffline: value => { failUpdate = value; }, updates: () => updates, reloads: () => reloads,
-    controllerChanged: () => handlers.get('controllerchange')?.() };
+    setOffline: value => { failUpdate = value; }, setRegistrationFailure: value => { registrationFails = value; }, registrations: () => registrations, updates: () => updates, reloads: () => reloads,
+    controllerChanged: () => handlers.get('controllerchange')?.(), startInstallation, failInstallation: () => installation('redundant'), finishInstallation: () => installation('activated') };
 }
 
 test('a downloaded waiting update can install without another network check', async () => {
@@ -145,4 +158,48 @@ test('an unavailable update check retains a usable retry action', async () => {
   assert.equal(f.updates(), 1); assert.equal(f.messages.length, 0);
   assert.equal(f.get('[data-pwa-update]').disabled, false);
   assert.equal(f.get('[data-pwa-detail]').textContent, 'offline');
+});
+
+test('initial offline setup failures can be retried without reloading the app', async () => {
+  const f = await appFixture({ registrationFails: true });
+  assert.equal(f.get('[data-pwa-update]').disabled, false);
+  assert.equal(f.get('[data-pwa-update]').textContent, 'Retry offline setup');
+  assert.equal(f.registrations(), 1);
+  f.setRegistrationFailure(false); f.registration.waiting = null;
+  await f.app.refresh();
+  assert.equal(f.registrations(), 2); assert.equal(f.updates(), 0); assert.equal(f.reloads(), 0);
+  assert.equal(f.get('[data-pwa-status]').textContent, 'Available offline');
+  assert.equal(f.get('[data-pwa-detail]').textContent, '');
+  assert.equal(f.get('[data-pwa-update]').disabled, false);
+});
+
+test('a repeated setup failure keeps the retry action available', async () => {
+  const f = await appFixture({ registrationFails: true });
+  await f.app.refresh();
+  assert.equal(f.registrations(), 2);
+  assert.equal(f.get('[data-pwa-status]').textContent, 'Offline setup unavailable');
+  assert.equal(f.get('[data-pwa-update]').disabled, false);
+  assert.match(f.get('[data-pwa-detail]').textContent, /retry/i);
+});
+
+test('offline setup stays disabled on an insecure page', async () => {
+  const f = await appFixture({ secure: false });
+  await f.app.refresh();
+  assert.equal(f.registrations(), 0);
+  assert.equal(f.get('[data-pwa-update]').disabled, true);
+  assert.equal(f.get('[data-pwa-status]').textContent, 'Needs HTTPS for offline use');
+});
+
+test('failed first asset installation reports a terminal failure and retries in place', async () => {
+  const f = await appFixture({ initialInstallation: true });
+  assert.equal(f.get('[data-pwa-status]').textContent, 'Saving for offline use…');
+  assert.equal(f.get('[data-pwa-update]').disabled, true);
+  f.failInstallation();
+  assert.equal(f.get('[data-pwa-status]').textContent, 'Offline setup unavailable');
+  assert.equal(f.get('[data-pwa-update]').textContent, 'Retry offline setup');
+  f.registration.update = async () => { throw new Error('Registration was removed'); };
+  await f.app.refresh(); f.finishInstallation(); await Promise.resolve();
+  assert.equal(f.get('[data-pwa-status]').textContent, 'Available offline');
+  assert.equal(f.get('[data-pwa-detail]').textContent, '');
+  assert.equal(f.registrations(), 2); assert.equal(f.updates(), 0); assert.equal(f.reloads(), 0);
 });

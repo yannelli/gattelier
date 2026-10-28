@@ -10,8 +10,9 @@ var NanoPWA = (() => {
     panel.querySelector('[data-pwa-status]').textContent = status;
     panel.querySelector('[data-pwa-detail]').textContent = message;
     const update = panel.querySelector('[data-pwa-update]');
-    update.disabled = !registration || updating;
-    update.textContent = updating ? 'Updating…' : registration?.waiting ? 'Install update' : 'Check for updates';
+    const preparing = !registration?.active && registration?.installing?.state === 'installing';
+    update.disabled = !secure() || updating || preparing;
+    update.textContent = preparing ? 'Saving…' : updating ? registration ? 'Updating…' : 'Setting up…' : registration?.waiting ? 'Install update' : secure() && (!registration || status === 'Offline setup unavailable') ? 'Retry offline setup' : 'Check for updates';
     panel.querySelector('[data-pwa-install]').hidden = !installPrompt || installed();
   }
   function reportConnection(connected) {
@@ -29,10 +30,31 @@ var NanoPWA = (() => {
       worker.postMessage({ type: 'REFRESH_SHELL' }, [channel.port2]);
     });
   }
+  function setupFailed() { status = 'Offline setup unavailable'; message = 'Could not save the app for offline use. Check your connection and retry.'; }
+  async function setup() {
+    status = 'Saving for offline use…'; message = ''; render();
+    try {
+      registration = await navigator.serviceWorker.register('/sw.js', { scope: '/', updateViaCache: 'none' });
+      const ready = () => { status = registration.waiting ? 'Update ready' : installed() ? 'Installed · available offline' : 'Available offline'; message = ''; render(); };
+      const watch = () => {
+        const worker = registration.installing;
+        if (!worker) return;
+        const changed = () => {
+          if (registration.waiting || registration.active) ready();
+          else if (worker.state === 'redundant') { setupFailed(); render(); }
+        };
+        worker.addEventListener('statechange', changed); changed();
+      };
+      registration.addEventListener('updatefound', watch); watch();
+      if (registration.active) ready();
+      else navigator.serviceWorker.ready.then(ready);
+    } catch { setupFailed(); }
+  }
   async function refresh() {
-    if (!registration || updating) return;
+    if (!secure() || updating || !registration?.active && registration?.installing?.state === 'installing') return;
     updating = true; message = ''; render();
     try {
+      if (!registration?.active && !registration?.waiting) { await setup(); updating = false; render(); return; }
       if (!registration.waiting) await registration.update();
       if (!registration.waiting && registration.installing) await new Promise((resolve, reject) => {
         const worker = registration.installing;
@@ -49,7 +71,10 @@ var NanoPWA = (() => {
         if (!worker) throw new Error('The offline app is still installing. Try again shortly.');
         await sendRefresh(worker); location.reload();
       }
-    } catch (error) { message = error.message; updating = false; render(); }
+    } catch (error) {
+      if (!registration?.active && !registration?.waiting) setupFailed(); else message = error.message;
+      updating = false; render();
+    }
   }
   async function mount(container, hooks = {}) {
     if (!container || panel) return;
@@ -62,18 +87,9 @@ var NanoPWA = (() => {
     globalThis.addEventListener('appinstalled', render);
     globalThis.addEventListener('online', () => { failures = 0; retry(); });
     if (!secure()) { status = 'Needs HTTPS for offline use'; render(); return; }
-    try {
-      registration = await navigator.serviceWorker.register('/sw.js', { scope: '/', updateViaCache: 'none' });
-      const ready = () => { status = registration.waiting ? 'Update ready' : installed() ? 'Installed · available offline' : 'Available offline'; render(); };
-      registration.addEventListener('updatefound', () => {
-        registration.installing?.addEventListener('statechange', () => {
-          if (registration.waiting || registration.active) ready();
-        });
-      });
-      if (registration.active) ready();
-      else { status = 'Saving for offline use…'; navigator.serviceWorker.ready.then(ready); }
-    } catch (error) { status = 'Offline setup unavailable'; message = error.message; }
-    render();
+    updating = true; render();
+    await setup();
+    updating = false; render();
   }
   return { mount, reportConnection, pollDelay, refresh };
 })();
