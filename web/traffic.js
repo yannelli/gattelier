@@ -2,7 +2,7 @@
 
 const NanoTraffic = (() => {
   let getCapture, imported = null, liveMessage = 'Listening for BLE events', selected = null, scheduled = null, streams = [];
-  let paused = false, markers = [];
+  let paused = false, markers = [], importGeneration = 0;
   const el = (tag, className, text) => { const item = document.createElement(tag); if (className) item.className = className; if (text !== undefined) item.textContent = text; return item; };
   const get = id => document.getElementById(`traffic-${id}`);
   const key = event => `${event.bootId}:${event.seq}`;
@@ -13,8 +13,8 @@ const NanoTraffic = (() => {
   }
   function decodeSelected() {
     const container = get('decoder'); container.replaceChildren();
+    get('selected').textContent = selected ? `Packet ${selected.seq} · ${selected.kind} · handle ${selected.handle ?? '—'} · ${selected.address || 'No address'}` : 'Packet inspector';
     if (!selected) { container.append(el('p', 'hint', 'No packet selected')); return; }
-    get('selected').textContent = `Packet ${selected.seq} · ${selected.kind} · handle ${selected.handle ?? '—'} · ${selected.address || 'No address'}`;
     const data = NanoPackets.bytes(selected.hex || '');
     get('offset').max = data.length;
     const offset = Math.max(0, Math.min(data.length, Number(get('offset').value) || 0));
@@ -124,9 +124,12 @@ const NanoTraffic = (() => {
   }
   async function importFile(file) {
     if (!file) return;
+    const generation = ++importGeneration;
     try {
       if (file.size > 32 * 1024 * 1024) throw new Error('Choose an HCI capture smaller than 32 MB.');
-      const data = await file.arrayBuffer(), btsnoop = NanoBTSnoop.matches(data);
+      const data = await file.arrayBuffer();
+      if (generation !== importGeneration) return;
+      const btsnoop = NanoBTSnoop.matches(data);
       if (!btsnoop && !NanoPKLG.matches(data)) throw new Error('Unrecognized capture. Use PacketLogger or uncompressed btsnoop; compressed btsnooz needs AOSP conversion.');
       const result = btsnoop ? NanoBTSnoop.parse(data) : NanoPKLG.parse(data);
       result.pocketKeys.length = 0;
@@ -140,8 +143,8 @@ const NanoTraffic = (() => {
       for (const id of ['handle', 'kind', 'search', 'direction', 'uuid']) get(id).value = '';
       selected = null; get('live').hidden = false; connection(liveMessage); render(); decodeSelected();
       get('export-status').textContent = `${file.name}: ${btsnoop ? 'btsnoop' : 'PacketLogger'}, ${result.counts.records} HCI records, ${result.counts.attPackets} ATT packets, ${result.events.length} decoded events, ${result.counts.redacted} authentication payloads redacted. Completeness ${imported.completeness}. ${result.warnings.slice(0, 2).join(' ')} ${result.errors.slice(0, 2).join(' ')}`;
-    } catch (error) { get('export-status').textContent = error.message; }
-    finally { get('import').value = ''; }
+    } catch (error) { if (generation === importGeneration) get('export-status').textContent = error.message; }
+    finally { if (generation === importGeneration) get('import').value = ''; }
   }
   function mount(container, captureProvider) {
     getCapture = () => imported || captureProvider();
@@ -164,7 +167,7 @@ const NanoTraffic = (() => {
     get('offset').addEventListener('input', decodeSelected);
     get('json').addEventListener('click', () => exportCapture('json')); get('csv').addEventListener('click', () => exportCapture('csv'));
     get('import').addEventListener('change', () => importFile(get('import').files[0]));
-    get('live').addEventListener('click', () => { imported = null; selected = null; get('live').hidden = true; connection(liveMessage); render(); decodeSelected(); });
+    get('live').addEventListener('click', () => { importGeneration++; imported = null; selected = null; get('live').hidden = true; connection(liveMessage); render(); decodeSelected(); });
     get('binary').addEventListener('click', exportBinary); render(); decodeSelected();
   }
   return { mount, refresh, connection };

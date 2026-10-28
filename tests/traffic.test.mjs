@@ -24,7 +24,7 @@ function harness() {
     constructor(tag) { this.tag = tag; this.children = []; this.listeners = {}; this.attributes = {}; this.dataset = {}; this.value = ''; this.hidden = false; this.text = ''; this.classList = { add() {}, toggle() {} }; }
     set innerHTML(html) {
       this.html = html;
-      for (const match of html.matchAll(/<([a-z]+)\b[^>]*\bid="([^"]+)"[^>]*>/g)) {
+      for (const match of html.matchAll(/<([a-z][a-z0-9]*)\b[^>]*\bid="([^"]+)"[^>]*>/g)) {
         const node = new Element(match[1]); node.hidden = /\bhidden\b/.test(match[0]); node.value = /\bvalue="([^"]*)"/.exec(match[0])?.[1] || '';
         ids.set(match[2], node); this.children.push(node);
       }
@@ -89,4 +89,43 @@ test('import retains the latest 10000 events and exports original parser counts'
   const result = await h.exported();
   assert.equal(result.events.length, 10000); assert.equal(result.events[0].seq, 2); assert.equal(result.counts.records, 10001); assert.equal(result.counts.events, 10001);
   assert.equal(result.stats.browserDropped, 1); assert.equal(result.completeness, 'incomplete'); assert.equal(result.events[0].elapsedMicros, '1'); assert.equal(h.calls(), 0);
+});
+
+function delayedImport(h, name = 'slow.btsnoop') {
+  let resolve, reject;
+  const data = new Promise((yes, no) => { resolve = yes; reject = no; });
+  h.get('import').files = [{ name, size: 100, arrayBuffer: () => data }];
+  const pending = h.get('import').listeners.change();
+  return { pending, resolve: buffer => resolve(buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.length)), reject };
+}
+
+test('the last selected import owns the trace when file reads finish out of order', async () => {
+  const h = harness(), first = delayedImport(h);
+  await h.import(pklgCapture(), 'latest.pklg');
+  first.resolve(btsnoopCapture()); await first.pending;
+  assert.match(h.get('export-status').textContent, /latest.pklg/);
+  const result = await h.exported();
+  assert.equal(result.format, 'pklg'); assert.equal(result.source, 'latest.pklg');
+});
+
+test('returning to live capture cancels pending imported file results and errors', async () => {
+  for (const fails of [false, true]) {
+    const h = harness(); await h.import(pklgCapture());
+    const delayed = delayedImport(h);
+    h.get('live').click();
+    if (fails) delayed.reject(new Error('Old file failed')); else delayed.resolve(btsnoopCapture());
+    await delayed.pending;
+    assert.equal(h.get('live').hidden, true); assert.equal(h.get('rows').children.length, 0);
+    assert.equal((await h.exported()).format, undefined);
+    assert.doesNotMatch(h.get('export-status').textContent, /Old file failed|slow.btsnoop/);
+  }
+});
+
+test('clearing the selected imported packet resets its inspector heading', async () => {
+  const h = harness(); await h.import(pklgCapture());
+  h.get('rows').children[0].children[0].children[0].click();
+  assert.match(h.get('selected').textContent, /^Packet 1/);
+  h.get('live').click();
+  assert.equal(h.get('selected').textContent, 'Packet inspector');
+  assert.equal(h.get('decoder').textContent, 'No packet selected');
 });
