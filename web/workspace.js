@@ -54,7 +54,7 @@ const NanoWorkspace = (() => {
   }
   function closeDrawer() { drawer = false; renderPane(); get('pane-toggle')?.focus(); }
   function togglePane() {
-    if (mobile()) { drawer = !drawer; renderPane(); if (drawer) get('pane-close')?.focus(); }
+    if (mobile()) { drawer = !drawer; renderPane(); get(drawer ? 'pane-close' : 'pane-toggle')?.focus(); }
     else setPane(paneOpen ? 'closed' : 'open');
   }
   function renderViews() {
@@ -65,8 +65,8 @@ const NanoWorkspace = (() => {
     for (const key of Object.keys(modules)) { const panel = get(`${key}-panel`); if (panel) panel.hidden = key !== activeModule; }
     get('module-title').textContent = modules[activeModule] || 'Apps';
     const current = sessionTabs?.current();
-    if (current) get(`view-${current.kind === 'app' ? 'apps' : 'device'}`)?.setAttribute('aria-labelledby', current.id);
-    else get('view-apps')?.setAttribute('aria-labelledby', 'tab-apps');
+    get('view-apps')?.setAttribute('aria-labelledby', current?.kind === 'app' ? current.id : 'tab-apps');
+    get('view-device')?.setAttribute('aria-labelledby', current?.kind === 'device' ? current.id : 'device-page-title');
     renderPane(); tabView?.render(lastUpdate);
     document.dispatchEvent(new CustomEvent('nanoscope:workspace', { detail: { view: active, module: activeModule, tab: current?.id || '', target: current?.target || null } }));
   }
@@ -112,6 +112,7 @@ const NanoWorkspace = (() => {
   }
   function selectTarget(device) {
     lastDevice = device;
+    if (!restoring && active === 'device') { openDevice(device); return; }
     if (!restoring && active === 'apps' && activeModule) sessionTabs?.setTarget(display(device));
     if (mobile() && drawer) closeDrawer();
   }

@@ -6,7 +6,7 @@ const model = require('../web/snapshot-model.js');
 const device = () => ({ address: '02:00:00:00:00:03', addressType: 1, name: 'Recorder', manufacturer: '0102', payloadHex: '03030918',
   services: ['0x1809'], serviceData: [{ uuid: '1809', hex: '0100' }], firstSeen: 10, lastSeen: 20, rssi: -61 });
 const characteristic = (handle = 3, uuid = '2a1c') => ({ uuid, handle, properties: ['read', 'notify'], valueHex: '1234', valueText: 'private text', descriptors: [{ uuid: '2902', handle: handle + 1 }] });
-const state = () => ({ ble: { connected: true, address: device().address }, services: [{ uuid: '1809', characteristics: [characteristic()] }] });
+const state = () => ({ ble: { connected: true, address: device().address, addressType: device().addressType }, services: [{ uuid: '1809', characteristics: [characteristic()] }] });
 const clone = value => JSON.parse(JSON.stringify(value));
 
 test('capture defaults to metadata, omits values and freezes an independent clone', () => {
@@ -25,6 +25,13 @@ test('GATT requires the selected device to be the connected device', () => {
   assert.equal(model.capture(device(), other).gatt, null);
   other.ble.connected = false; other.ble.address = device().address;
   assert.equal(model.capture(device(), other).gatt, null);
+});
+
+test('GATT and loaded values require the selected address type', () => {
+  const other = state(); other.ble.addressType = 0;
+  const saved = model.capture(device(), other, { includeValues: true });
+  assert.equal(saved.device.addressType, 1);
+  assert.equal(saved.gatt, null);
 });
 
 test('diff reports handles, properties, descriptor handles and advertisement bytes', () => {

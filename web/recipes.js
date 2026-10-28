@@ -37,7 +37,7 @@ const NanoRecipes = (() => {
     }
     lab.onState((next, available = true) => {
       const address = state?.ble?.connected ? state.ble.address : '', nextAddress = next.ble?.connected ? next.ble.address : '';
-      if (address !== nextAddress || online && !available) { generation++; fail('Device connection changed. Recipe stopped.'); }
+      if (address !== nextAddress || state.ble?.addressType !== next.ble?.addressType || state.ble?.connectionAttempt !== next.ble?.connectionAttempt || online && !available) { generation++; fail('Device connection changed. Recipe stopped.'); }
       state = next; online = available;
     });
     lab.onEvents((events, meta) => {

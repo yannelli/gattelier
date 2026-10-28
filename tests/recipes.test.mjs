@@ -8,7 +8,7 @@ const packets = require('../web/packets.js');
 const address = 'aa:bb:cc:dd:ee:ff';
 const recipe = steps => ({ version: 1, name: 'Test recipe', steps });
 const step = (action, extra = {}) => ({ action, uuid: '2a19', ...extra });
-const state = () => ({ ble: { connected: true, busy: false, address, mtu: 23 }, services: [{ uuid: '180f', characteristics: [{ uuid: '2a19', handle: 12, properties: ['read', 'write', 'write-no-response', 'notify'] }] }] });
+const state = () => ({ ble: { connected: true, busy: false, address, addressType: 0, connectionAttempt: 1, mtu: 23 }, services: [{ uuid: '180f', characteristics: [{ uuid: '2a19', handle: 12, properties: ['read', 'write', 'write-no-response', 'notify'] }] }] });
 
 function fixture(onAction = () => {}) {
   let current = state(), sequence = 0, bootId = 'boot-1', active = false;
@@ -102,6 +102,18 @@ test('cancellation during an in-flight action prevents later commands', async ()
   await began; f.runner.cancel();
   await assert.rejects(task, /Cancelled/); release();
   assert.equal(f.actions.length, 1); assert.equal(f.runner.running(), false); assert.deepEqual(f.fast, [true, false]);
+});
+
+test('replacement connections with the same address stop remaining recipe steps', async () => {
+  for (const change of [{ addressType: 1 }, { connectionAttempt: 2 }]) {
+    const f = fixture(async (action, body, { emit, setState }) => {
+      if (action === 'write') setState({ ...state(), ble: { ...state().ble, ...change } });
+      if (action === 'read') emit([{ kind: 'read', hex: '64' }]);
+    });
+    await assert.rejects(f.runner.execute(recipe([step('write', { hex: '01' }), step('read')])), /connection changed/);
+    assert.deepEqual(f.actions.map(item => item.action), ['write']);
+    assert.equal(f.runner.running(), false); assert.deepEqual(f.fast, [true, false]);
+  }
 });
 
 test('capture gaps, truncated packets and disconnects stop remaining steps', async () => {

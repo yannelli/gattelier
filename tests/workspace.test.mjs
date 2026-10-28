@@ -148,3 +148,34 @@ test('live status and signal graphics use reported state and exact connected ide
   workspace.update({ device: { ...target, rssi: -40 }, online: false, state });
   assert.equal(element('session-status-label').textContent, 'Board offline'); assert.equal(element('session-signal').dataset.level, '0');
 });
+
+test('selecting another device in its full page activates a separate target tab', () => {
+  const { workspace } = setup('discover', { tabs: true });
+  workspace.openDevice(target);
+  workspace.selectTarget(other);
+  assert.deepEqual(workspace.tabState().map(item => item.target.address), [target.address, other.address]);
+  assert.equal(workspace.view(), 'device');
+  workspace.selectTarget(target);
+  assert.equal(workspace.tabState().length, 2);
+});
+
+test('closed tabs and global navigation leave panel labels pointing to existing headings', () => {
+  const { workspace, element } = setup('discover', { tabs: true });
+  workspace.openDevice(target);
+  assert.equal(element('view-device').attributes['aria-labelledby'], workspace.tabState()[0].id);
+  workspace.show('insights');
+  assert.equal(element('view-device').attributes['aria-labelledby'], 'device-page-title');
+  workspace.openModule('sensor', target);
+  workspace.openDevice(target);
+  assert.equal(element('view-apps').attributes['aria-labelledby'], 'tab-apps');
+});
+
+test('mobile pane shortcut returns focus to its toggle when closing', () => {
+  const { element, listeners } = setup('discover', { mobile: true });
+  const event = { key: '[', altKey: true, preventDefault() {} };
+  listeners.keydown(event);
+  assert.equal(element('pane-close').focused, true);
+  listeners.keydown(event);
+  assert.equal(element('workspace-pane').hidden, true);
+  assert.equal(element('pane-toggle').focused, true);
+});

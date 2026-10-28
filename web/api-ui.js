@@ -32,11 +32,12 @@ var NanoAPIUI = (() => {
     const wifiOff = panel.querySelector('[data-api-wifi-off]');
     const appOrigin = globalThis.location?.origin || 'https://your-app.example';
     panel.querySelector('[data-api-command]').textContent = `NANOSCOPE_ALLOWED_ORIGIN=${appOrigin} NANOSCOPE_BOARD_URL=http://nanoscope.local scripts/start-pwa.sh --serve`;
-    let wifiChanging = false, checkGeneration = 0;
+    let wifiChanging = false, checkGeneration = 0, originDirty = false;
 
-    function render(text = '') {
+    function render(text = '', resetOrigin = false) {
       const origin = NanoAPI.origin(), usb = NanoAPI.transport() === 'serial', status = NanoAPI.serialStatus();
-      if (globalThis.document.activeElement !== input) input.value = origin || '';
+      if (resetOrigin) originDirty = false;
+      if (!originDirty && (resetOrigin || globalThis.document.activeElement !== input)) input.value = origin || '';
       for (const radio of panel.querySelectorAll('[name="board-transport"]')) radio.checked = radio.value === NanoAPI.transport();
       panel.querySelector('.api-usb').hidden = !usb; panel.querySelector('.api-network').hidden = usb;
       connect.disabled = !status.supported || !status.secure || status.state !== 'disconnected';
@@ -81,20 +82,22 @@ var NanoAPIUI = (() => {
     wifiOff.addEventListener('change', async () => {
       if (!NanoAPI.serialStatus().connected) return;
       const value = wifiOff.checked;
+      let errorMessage = '';
       wifiChanging = true; render();
       try { await NanoAPI.setSerialWifiOff(value); }
-      catch (error) { message.textContent = error.message; }
-      finally { wifiChanging = false; render(); }
+      catch (error) { errorMessage = error.message; }
+      finally { wifiChanging = false; render(errorMessage); }
     });
+    input.addEventListener('input', () => { originDirty = true; });
     panel.querySelector('[data-api-form]').addEventListener('submit', event => {
       event.preventDefault();
-      try { NanoAPI.setOrigin(input.value); render('Saved. Testing…'); check(); }
+      try { NanoAPI.setOrigin(input.value); render('Saved. Testing…', true); check(); }
       catch (error) { render(error.message); }
     });
     panel.querySelector('[data-api-check]').addEventListener('click', check);
     panel.querySelector('[data-api-clear]').addEventListener('click', () => {
       NanoAPI.clearOrigin();
-      render(NanoAPI.configured() ? 'Using this page\'s address.' : 'Address cleared.');
+      render(NanoAPI.configured() ? 'Using this page\'s address.' : 'Address cleared.', true);
     });
     globalThis.addEventListener('nanoscope:api-change', () => { checkGeneration++; render(); });
     globalThis.addEventListener('nanoscope:serial', () => render());

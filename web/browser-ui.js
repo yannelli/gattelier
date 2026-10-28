@@ -52,7 +52,7 @@ const NanoBrowserUI = (() => {
     return {
       update,
       isFiltered() { return Object.entries(filters).some(([key, value]) => key !== 'sort' && value !== defaults[key]); },
-      select(devices, database) { return NanoScanQuery.select(devices, filters, { now: Date.now(), identifyVendor: device => NanoVendors.identify(device, database).search, profile: NanoProfiles.identify, lookupUUID: NanoMetadata.lookup, protocolMatches: NanoCatalogs.match }); },
+      select(devices, database) { return NanoScanQuery.select(devices, filters, { now: Date.now(), identifyVendor: device => NanoVendors.identify(device, database).search, profile: device => NanoProfiles.identify(device, hooks.getState?.() || {}), lookupUUID: NanoMetadata.lookup, protocolMatches: NanoCatalogs.match }); },
       setKind(category) {
         Object.assign(filters, defaults, { kind: category, source: 'all' });
         for (const [key, id] of Object.entries(controls)) { const control = get(id); if (control.type === 'checkbox') control.checked = filters[key]; else control.value = filters[key]; store.setPreference(key, filters[key]); }

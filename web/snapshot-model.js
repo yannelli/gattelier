@@ -80,7 +80,7 @@ const NanoSnapshotModel = (() => {
   }
   function capture(device, state = {}, options = {}) {
     if (!device) fail('Select a device in Discover before saving a snapshot.');
-    const connected = state.ble?.connected && String(state.ble.address).toUpperCase() === String(device.address).toUpperCase();
+    const connected = state.ble?.connected && state.ble.addressType === device.addressType && String(state.ble.address).toUpperCase() === String(device.address).toUpperCase();
     return validate({ version: 1, label: options.label || device.name || device.address, capturedAt: new Date().toISOString(),
       firstSeen: device.firstSeenMs ? new Date(device.firstSeenMs).toISOString() : device.firstSeen ?? null,
       lastSeen: device.lastSeenMs ? new Date(device.lastSeenMs).toISOString() : device.lastSeen ?? null, rssi: device.rssi ?? null, includeValues: options.includeValues === true,
