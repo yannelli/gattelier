@@ -2,7 +2,7 @@
 
 const NanoSensorSession = (() => {
   const profiles = typeof module !== 'undefined' ? require('./sensor-profiles.js') : NanoSensorProfiles;
-  const keyOf = device => device ? `${device.address}/${device.addressType}` : '';
+  const keyOf = device => device ? `${device.address.toLowerCase()}/${device.addressType}` : '';
   const frame = device => JSON.stringify([device.manufacturer, device.serviceData]);
   const encrypted = profile => profile?.protocol === 'bthome' && profile.fields.some(field => field.label === 'Encryption' && field.value === 'Encrypted');
   function create(history, options = {}) {
@@ -40,6 +40,7 @@ const NanoSensorSession = (() => {
       if (version !== generation) return;
       if (recording && profile && !message && !duplicate && (!requiresEncryption || profile.authenticated)) history.ingest(next, profile);
       change();
+      if (version === generation && seen !== `${device.lastSeenMs}/${frame(device)}`) return observe(device);
     }
     function select(next) {
       if (keyOf(next) !== keyOf(device)) { device = next; requiresEncryption = false; counter = null; acceptedFrame = ''; lock(); }

@@ -89,6 +89,6 @@ const NanoSensorApp = (() => {
     history.init().then(paint); paint();
     return { render(device) { session.select(device); paint(); } };
   }
-  function update(devices) { const selected = controller?.status().device; if (selected) controller.observe(devices.find(device => device.address === selected.address && device.addressType === selected.addressType)); }
+  function update(devices) { const selected = controller?.status().device; if (selected) controller.observe(devices.find(device => device.address.toLowerCase() === selected.address.toLowerCase() && device.addressType === selected.addressType)); }
   return { mount, update };
 })();
