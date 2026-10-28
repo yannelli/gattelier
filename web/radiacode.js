@@ -90,26 +90,32 @@ const NanoRadiaCode = (() => {
     const status = el('p', 'radiacode-status'), controls = el('div', 'radiacode-actions'), results = el('div', 'radiacode-results'), buttons = [];
     const empty = el('div', 'radiacode-empty'), sections = new Map();
     const titles = { measurements: 'Measurements', spectrum: 'Energy spectrum', identity: 'Device identity', status: 'Device status', resetDose: 'Dose reset' };
-    let selectedAddress = String(getDevice()?.address || '').toLowerCase(), selectionVersion = 0, wasConnected = false, destroyed = false;
+    const deviceKey = device => device?.address ? `${device.address.toLowerCase()}/${device.addressType}` : '';
+    let selectedKey = deviceKey(getDevice()), selectionVersion = 0, liveVersion = 0, connectedKey = '', destroyed = false;
     const live = el('button', 'button secondary', 'Start live'), liveBadge = el('span', 'badge', 'Manual reads');
     const active = () => !document.hidden && (options.isActive ? options.isActive() : typeof NanoWorkspace === 'undefined' || NanoWorkspace.view() === 'apps' && NanoWorkspace.module() === 'radiacode');
-    const poller = createPoller({ read: kind => client.read(kind, getDevice()), onResult: result => { showResult(result); setStatus('Live readings updated.', 'success'); render(); }, onError: error => { setStatus(error.message, 'error'); render(); }, onChange: () => render(), stopRead: () => { if (client.busy()) { client.stop(); setStatus('RadiaCode transfer stopped. Reconnect before reading again.', 'error'); } }, intervalMs: options.pollIntervalMs ?? 5000 });
+    const poller = createPoller({ read: kind => { if (!liveCurrent()) return; liveVersion = selectionVersion; return client.read(kind, getDevice()); }, onResult: result => { if (!liveCurrent()) return; showResult(result); setStatus('Live readings updated.', 'success'); render(); }, onError: error => { if (!current(liveVersion)) return; setStatus(error.message, 'error'); render(); }, onChange: () => render(), stopRead: () => { if (client.busy()) { client.stop(); setStatus('RadiaCode transfer stopped. Reconnect before reading again.', 'error'); } }, intervalMs: options.pollIntervalMs ?? 5000 });
     status.setAttribute('role', 'status'); status.setAttribute('aria-atomic', 'true');
     heading.append(el('h2', '', 'RadiaCode'), liveBadge);
     const deviceInfo = el('div'); deviceInfo.append(deviceName, addressLabel); selected.append(deviceInfo, connectionBadge);
     empty.append(el('h3', '', 'No readings yet'));
     function setStatus(message, state = 'idle') { status.textContent = message; status.dataset.state = state; }
+    function clearResults() { sections.clear(); results.replaceChildren(); }
+    function current(version) { if (!destroyed) render(); return !destroyed && active() && version === selectionVersion; }
+    function liveCurrent() { render(); if (destroyed || !active()) poller.stop(); return poller.active(); }
     function render() {
-      const device = getDevice(), context = connection.snapshot(), address = String(device?.address || '').toLowerCase();
-      if (address !== selectedAddress) {
-        selectedAddress = address; selectionVersion++; poller.stop();
-        sections.clear(); results.replaceChildren(); setStatus('');
+      if (destroyed) return;
+      const device = getDevice(), context = connection.snapshot(), key = deviceKey(device);
+      const connected = Boolean(context.online && key && context.state.ble?.connected && deviceKey(context.state.ble) === key);
+      const nextConnected = connected ? `${key}/${context.state.ble.connectionAttempt}` : '';
+      const selectionChanged = key !== selectedKey, connectionChanged = connectedKey && connectedKey !== nextConnected;
+      selectedKey = key; connectedKey = nextConnected;
+      if (selectionChanged || connectionChanged) {
+        selectionVersion++; poller.stop(); clearResults();
+        if (selectionChanged || !client.busy()) setStatus('');
       }
       deviceName.textContent = device ? device.label || device.name || 'RadiaCode device' : ''; selected.hidden = !device;
       addressLabel.textContent = device?.address || '';
-      const connected = Boolean(context.online && device && context.state.ble?.connected && String(context.state.ble.address || '').toLowerCase() === address);
-      const disconnected = wasConnected && !connected; wasConnected = connected;
-      if (disconnected) { selectionVersion++; poller.stop(); }
       connectionBadge.textContent = connected ? 'Connected' : '';
       connectionBadge.className = `badge${connected ? ' connected' : ''}`; connectionBadge.hidden = !device;
       for (const button of buttons) button.disabled = !device || client.busy() || poller.active() || !context.online || context.pending || context.state.ble?.busy;
@@ -147,14 +153,14 @@ const NanoRadiaCode = (() => {
       results.replaceChildren(...Object.keys(titles).filter(kind => sections.has(kind)).map(kind => sections.get(kind)));
     }
     async function run(kind) {
-      if (poller.active()) return;
+      if (destroyed || !active() || poller.active()) return;
       render(); const version = selectionVersion;
       setStatus(`Reading ${titles[kind]?.toLowerCase() || 'RadiaCode'}...`, 'reading');
       const operation = client.read(kind, getDevice()); render();
       try {
-        const result = await operation; if (destroyed || version !== selectionVersion) return;
+        const result = await operation; if (!current(version)) return;
         showResult(result); setStatus(`${titles[kind]} updated.`, 'success'); return result;
-      } catch (error) { if (!destroyed && version === selectionVersion) setStatus(error.message, 'error'); }
+      } catch (error) { if (current(version)) setStatus(error.message, 'error'); }
       finally { if (!destroyed) render(); }
     }
     for (const [kind, label] of [['measurements', 'Read measurements'], ['spectrum', 'Read spectrum'], ['identity', 'Identity'], ['status', 'Status']]) {
@@ -164,12 +170,14 @@ const NanoRadiaCode = (() => {
     live.type = 'button'; live.addEventListener('click', () => { let operation; if (poller.active()) { const interrupted = client.busy(); poller.stop(); if (!interrupted) setStatus('Live refresh stopped.'); } else if (active()) operation = poller.start(); render(); return operation; }); controls.append(live);
     const reset = el('button', 'button radiacode-reset', 'Reset dose'); reset.type = 'button'; buttons.push(reset); controls.append(reset);
     reset.addEventListener('click', async () => {
+      if (destroyed || !active()) return;
+      render();
       const device = getDevice(), version = selectionVersion;
       if (client.busy() || poller.active() || !device || !(options.confirm || globalThis.confirm)(`Reset the accumulated dose on ${device.label || device.name || device.address}? This clears the device's dose history and statistics.`)) return;
-      if (device.address.toLowerCase() !== String(getDevice()?.address || '').toLowerCase() || version !== selectionVersion) return;
+      if (deviceKey(device) !== deviceKey(getDevice()) || !current(version)) return;
       const operation = client.resetDose(device, true); setStatus('Resetting accumulated dose...', 'reading'); render();
-      try { const result = await operation; if (!destroyed && version === selectionVersion) { sections.delete('measurements'); showResult(result); setStatus('Device acknowledged the dose reset. Read measurements to check the new values.', 'success'); } }
-      catch (error) { if (!destroyed && version === selectionVersion) setStatus(error.message, 'error'); }
+      try { const result = await operation; if (current(version)) { sections.delete('measurements'); showResult(result); setStatus('Device acknowledged the dose reset. Read measurements to check the new values.', 'success'); } }
+      catch (error) { if (current(version)) setStatus(error.message, 'error'); }
       finally { if (!destroyed) render(); }
     });
     const stop = el('button', 'button quiet', 'Stop'); stop.type = 'button'; stop.addEventListener('click', () => { poller.stop(); render(); }); controls.append(stop);
@@ -177,8 +185,10 @@ const NanoRadiaCode = (() => {
     const help = el('details', 'radiacode-help'); help.append(el('summary', '', 'About these readings'), el('p', '', 'Live refresh reads measurements and the spectrum every 5 seconds after the previous read finishes. It stops when you leave this app, hide the page, change devices or disconnect. Spectrum energy uses the calibration stored with the spectrum, in keV. Dose values use device units. Reset dose clears accumulated dose on the device after confirmation.'), source);
     body.append(selected, controls, status, empty, results, help); container.replaceChildren(heading, body);
     const onVisibility = () => { if (!active()) { selectionVersion++; poller.stop(); } render(); };
+    const onApiChange = () => { selectionVersion++; connectedKey = ''; poller.stop(); clearResults(); setStatus(''); render(); };
     const off = lab.onState(render); document.addEventListener('nanoscope:selection', render); document.addEventListener('nanoscope:busy', render); document.addEventListener('nanoscope:workspace', onVisibility); document.addEventListener('visibilitychange', onVisibility); render();
-    return { read: run, stop: () => poller.stop(), destroy() { destroyed = true; poller.stop(); client.destroy(); off?.(); document.removeEventListener('nanoscope:selection', render); document.removeEventListener('nanoscope:busy', render); document.removeEventListener('nanoscope:workspace', onVisibility); document.removeEventListener('visibilitychange', onVisibility); } };
+    globalThis.addEventListener?.('nanoscope:api-change', onApiChange);
+    return { read: run, stop: () => poller.stop(), destroy() { destroyed = true; poller.stop(); client.destroy(); off?.(); document.removeEventListener('nanoscope:selection', render); document.removeEventListener('nanoscope:busy', render); document.removeEventListener('nanoscope:workspace', onVisibility); document.removeEventListener('visibilitychange', onVisibility); globalThis.removeEventListener?.('nanoscope:api-change', onApiChange); } };
   }
   return { createClient, createPoller, mount };
 })();
