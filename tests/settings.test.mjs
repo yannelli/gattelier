@@ -6,8 +6,8 @@ import vm from 'node:vm';
 function fixture(saved = 'app', initialVisible = true) {
   const names = ['connection', 'wifi', 'workspace', 'history', 'collection', 'libraries', 'credentials', 'board', 'app'];
   const handlers = {}, globalHandlers = {}, panels = new Map(), menus = [];
-  let visible = initialVisible, width = 300, focused = null;
-  const nav = { scrollLeft: 0, get clientWidth() { return visible ? width : 0; }, getBoundingClientRect: () => ({ left: 0, right: width }) };
+  let visible = initialVisible, width = 300, focused = null, display = 'flex';
+  const nav = { attributes: {}, setAttribute(key, value) { this.attributes[key] = value; }, scrollLeft: 0, get clientWidth() { return visible ? width : 0; }, getBoundingClientRect: () => ({ left: 0, right: width }) };
   const buttons = names.map((section, index) => ({
     dataset: { section }, attributes: { 'aria-controls': `settings-${section}` }, parentElement: nav, listeners: {},
     setAttribute(key, value) { this.attributes[key] = value; }, getAttribute(key) { return this.attributes[key]; },
@@ -15,7 +15,7 @@ function fixture(saved = 'app', initialVisible = true) {
     addEventListener(type, callback) { this.listeners[type] = callback; }, focus() { focused = this; },
   }));
   const context = vm.createContext({
-    localStorage: { getItem: () => saved, setItem() {} },
+    localStorage: { getItem: () => saved, setItem() {} }, getComputedStyle: () => ({ display, flexDirection: 'row' }),
     addEventListener: (type, callback) => { globalHandlers[type] = callback; },
     document: { querySelectorAll: selector => selector.startsWith('.settings-nav') ? buttons : menus.filter(menu => menu.open),
       addEventListener: (type, callback) => { handlers[type] = callback; },
@@ -24,7 +24,7 @@ function fixture(saved = 'app', initialVisible = true) {
   vm.runInContext(readFileSync(new URL('../web/settings.js', import.meta.url), 'utf8') + '\nglobalThis.settings = NanoSettings;', context);
   context.settings.mount();
   return { nav, buttons, menus, handlers, focused: () => focused, enter() { visible = true; handlers['nanoscope:workspace']({ detail: { view: 'settings' } }); },
-    resize(value) { width = value; globalHandlers.resize(); } };
+    resize(value) { width = value; globalHandlers.resize(); }, layout(value) { display = value; globalHandlers.resize(); } };
 }
 
 test('a restored Settings section is revealed when its previously hidden view opens', () => {
@@ -74,4 +74,14 @@ test('Escape dismisses a visible menu and restores summary focus without handlin
   visible.open = true;
   f.handlers.keydown({ key: 'Escape', defaultPrevented: true });
   assert.equal(visible.open, true);
+});
+
+test('tab orientation follows horizontal strips and vertical navigation even while hidden', () => {
+  const f = fixture('connection', false);
+  assert.equal(f.nav.attributes['aria-orientation'], 'horizontal');
+  f.layout('grid');
+  assert.equal(f.nav.attributes['aria-orientation'], 'vertical');
+  f.enter(); f.layout('flex');
+  assert.equal(f.nav.attributes['aria-orientation'], 'horizontal');
+  assert.equal(f.focused(), null);
 });

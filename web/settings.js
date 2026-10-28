@@ -5,6 +5,10 @@ const NanoSettings = (() => {
   let buttons = [];
   function reveal() {
     const selected = buttons.find(button => button.getAttribute('aria-selected') === 'true'), nav = selected?.parentElement;
+    if (nav) {
+      const style = getComputedStyle(nav);
+      nav.setAttribute('aria-orientation', style.display === 'flex' && style.flexDirection.startsWith('row') ? 'horizontal' : 'vertical');
+    }
     if (!nav?.clientWidth) return;
     const tab = selected.getBoundingClientRect(), viewport = nav.getBoundingClientRect();
     nav.scrollLeft += tab.left < viewport.left ? tab.left - viewport.left : tab.right > viewport.right ? tab.right - viewport.right : 0;
