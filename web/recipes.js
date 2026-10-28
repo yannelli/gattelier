@@ -64,6 +64,7 @@ const NanoRecipes = (() => {
       if (!online || !state.ble?.connected) throw new Error('Connect a device before running a recipe.');
       const address = state.ble.address.toLowerCase();
       if (recipe.address && recipe.address !== address) throw new Error('The connected address does not match this recipe.');
+      if (recipe.addressType !== undefined && recipe.addressType !== state.ble.addressType) throw new Error('The connected address type does not match this recipe.');
       recipe.steps.forEach(step => model.resolve(state, step));
       const active = { address, generation, boot: bootId, consumed: cursor, baseline: cursor, events: [], error: '' }; run = active;
       let index = -1; lab.setFastCapture(true);
@@ -80,12 +81,12 @@ const NanoRecipes = (() => {
             const body = { handle: characteristic.handle };
             if (step.action === 'write') Object.assign(body, { hex: step.hex, response: step.response });
             if (step.action === 'subscribe') body.mode = step.mode;
-            const completion = lab.action(step.action, body);
+            const baseline = cursor, completion = lab.action(step.action, body);
             const timeout = wait(() => false, step.timeoutMs);
             try { await Promise.race([completion, timeout]); } finally { if (pending) { clearTimeout(pending.timer); pending = null; } }
             guard(active);
             if (step.action === 'read') {
-              const event = await reply(active, event => event.kind === 'read' && matches(event, characteristic), deadline);
+              const event = await reply(active, event => event.kind === 'read' && event.seq > baseline && matches(event, characteristic), deadline);
               if (event.success === false) throw new Error(event.message || 'Characteristic read failed.');
               result = event.redacted || packets.sensitive(event.hex || '', characteristic.uuid) ? 'Read payload redacted' : event.hex || '(empty value)';
             } else result = step.action === 'write' ? `${step.hex.length / 2} bytes sent${step.response ? ' with response' : ' without response'}` : `Subscription ${step.mode}`;
@@ -160,7 +161,7 @@ const NanoRecipes = (() => {
       saved = value.map(model.validate).filter(recipe => model.canStore(recipe, packets.sensitive));
     } catch { persistent = false; saved = []; }
     const help = el('details'); help.append(el('summary', '', 'Recipe format'));
-    help.append(el('p', 'vendor-note', 'Version 1: name, optional target address, and 1–32 steps. Every step has action and uuid. Add service and zero-based instance to resolve repeated UUIDs; instances follow ascending handles. write uses hex and response; subscribe uses mode notify/indicate/off; wait accepts optional HEX prefix. timeoutMs: 100–30000, default 10000. Wait consumes the next matching notification received during this run, including replies received during the preceding write. Cancel stops later steps.'));
+    help.append(el('p', 'vendor-note', 'Version 1: name, optional address and addressType (0-3), and 1–32 steps. addressType requires address. Every step has action and uuid. Add service and zero-based instance to resolve repeated UUIDs; instances follow ascending handles. write uses hex and response; subscribe uses mode notify/indicate/off; wait accepts optional HEX prefix. timeoutMs: 100–30000, default 10000. Wait consumes the next matching notification received during this run, including replies received during the preceding write. Cancel stops later steps.'));
     const library = el('div', 'recipe-library'), advanced = el('details', 'recipe-advanced'), editorActions = el('div', 'inspector-shortcuts'), importButton = el('label', 'button quiet file-button', 'Import');
     // Run leads the primary row; saving and exporting act on the editor, so they live beside it.
     buttons.run.className = 'button primary'; controls.prepend(buttons.run); importButton.append(importFile); editorActions.append(buttons.save, buttons.export, importButton);

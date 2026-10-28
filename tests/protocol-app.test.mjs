@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import apps from '../web/device-apps.js';
 import recipes from '../web/recipe-model.js';
+import runners from '../web/recipes.js';
 const source = readFileSync(new URL('../web/protocol-app.js', import.meta.url), 'utf8');
 const coffee = { address: '02:00:00:00:00:01', addressType: 0, name: 'Vertuo_CV6_020000000001', services: ['06aa1910-f22a-11e3-9daa-0002a5d5c51b'], manufacturer: '0225000900000000', rssi: -60, lastSeenMs: 1000 };
 function harness(id, initial = coffee) {
@@ -110,4 +111,20 @@ test('Bose capture JSON decodes locally and reference preview requires product e
   h.label('Captured raw BMAP product-ID response (QC Ultra Gen1 0x4066)').value = '00030303406601'; h.submit();
   const plan = JSON.parse(h.all().find(node => node.className?.includes('protocol-command-preview')).textContent);
   assert.equal(plan.hex, '00030100'); assert.equal(plan.steps, undefined); assert.equal(h.calls(), 0);
+});
+
+test('exported device recipes reject the same address with another Bluetooth address type', async () => {
+  const h = harness('nespresso'), operation = h.label('Operation'); operation.value = 'water-hardness'; operation.listeners.change();
+  h.label('Current settings HEX').value = '2c010218'; h.label('Water hardness level').value = '4'; h.submit();
+  h.button('Export command plan').click(); const exported = JSON.parse(await h.exported()), step = exported.steps[0];
+  const state = { ble: { connected: true, address: coffee.address, addressType: 1, mtu: 23 },
+    services: [{ uuid: step.service || coffee.services[0], characteristics: [{ uuid: step.uuid, handle: 12, properties: ['write', 'write-no-response'] }] }] };
+  const sent = []; let events;
+  const runner = runners.createRunner({ getState: () => state, isActing: () => false, onState: callback => callback(state, true),
+    onEvents: callback => { events = callback; }, setFastCapture: enabled => { if (enabled) queueMicrotask(() => events([], { bootId: 'fixture', cursor: 0, gaps: 0 })); },
+    action: async (...args) => { sent.push(args); return state; } });
+  const error = await runner.execute(exported).then(() => null, error => error);
+  assert.equal(sent.length, 0);
+  assert.match(error?.message || '', /address type/);
+  assert.equal(exported.addressType, coffee.addressType); assert.equal(h.calls(), 0);
 });

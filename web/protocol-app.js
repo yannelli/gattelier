@@ -70,7 +70,7 @@ const NanoProtocolApp = (() => {
     });
     save.addEventListener('click', () => {
       if (!plan || save.disabled) return;
-      const output = plan.steps ? NanoRecipeModel.validate({ version: 1, name: plan.summary.slice(0, 80), address: hooks.selected().address, steps: plan.steps }) : { version: 1, app: id, createdAt: new Date().toISOString(), plan };
+      const output = plan.steps ? NanoRecipeModel.validate({ version: 1, name: plan.summary.slice(0, 80), address: hooks.selected().address, addressType: hooks.selected().addressType, steps: plan.steps }) : { version: 1, app: id, createdAt: new Date().toISOString(), plan };
       download(`gattelier-${id}-command.json`, output);
     });
     exportSnapshot.addEventListener('click', () => { if (currentSnapshot) download(`gattelier-${id}-snapshot.json`, { version: 1, app: id, capturedAt: new Date().toISOString(), snapshot: currentSnapshot, changes: samples }); });

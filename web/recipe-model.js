@@ -22,7 +22,7 @@ const NanoRecipeModel = (() => {
   }
   function validate(input) {
     if (new TextEncoder().encode(JSON.stringify(input)).length > 65536) throw new Error('Recipe exceeds 64 KiB.');
-    object(input, 'Recipe', ['version', 'name', 'address', 'steps']);
+    object(input, 'Recipe', ['version', 'name', 'address', 'addressType', 'steps']);
     if (input.version !== 1) throw new Error('Recipe version must be 1.');
     if (typeof input.name !== 'string' || !input.name.trim() || input.name.trim().length > 80) throw new Error('Recipe name must contain 1 to 80 characters.');
     if (!Array.isArray(input.steps) || !input.steps.length || input.steps.length > 32) throw new Error('A recipe requires 1 to 32 steps.');
@@ -30,6 +30,11 @@ const NanoRecipeModel = (() => {
     if (input.address !== undefined) {
       if (typeof input.address !== 'string' || !/^(?:[0-9a-f]{2}:){5}[0-9a-f]{2}$/i.test(input.address)) throw new Error('Target address must be a Bluetooth MAC address.');
       result.address = input.address.toLowerCase();
+    }
+    if (input.addressType !== undefined) {
+      if (!result.address) throw new Error('Address type requires a target address.');
+      if (!Number.isInteger(input.addressType) || input.addressType < 0 || input.addressType > 3) throw new Error('Target address type must be an integer from 0 to 3.');
+      result.addressType = input.addressType;
     }
     result.steps = input.steps.map((step, index) => {
       object(step, `Step ${index + 1}`, ['action', 'service', 'uuid', 'instance', 'timeoutMs', ...(Object.hasOwn(fields, step?.action) ? fields[step.action] : [])]);

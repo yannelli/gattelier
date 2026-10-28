@@ -138,3 +138,39 @@ test('target mismatch prevents commands and runtime authentication write results
   await g.runner.execute(recipe([step('read')]));
   assert.equal(g.updates.find(item => item.status === 'Complete').result, 'Read payload redacted');
 });
+
+test('recipes retain an optional Bluetooth address type bound to their target address', () => {
+  for (const addressType of [0, 1, 2, 3]) {
+    const value = model.validate({ ...recipe([step('read')]), address, addressType });
+    assert.equal(value.addressType, addressType);
+    assert.equal(model.validate(JSON.parse(JSON.stringify(value))).addressType, addressType);
+  }
+  for (const addressType of [-1, 4, 0.5, '0', true, null, NaN]) assert.throws(() => model.validate({ ...recipe([step('read')]), address, addressType }), /address type/);
+  assert.throws(() => model.validate({ ...recipe([step('read')]), addressType: 0 }), /requires a target address/);
+});
+
+test('typed recipe targets reject another address type before capture or commands', async () => {
+  const f = fixture(); f.setState({ ...state(), ble: { ...state().ble, addressType: 1 } });
+  await assert.rejects(f.runner.execute({ ...recipe([step('write', { hex: '01' })]), address, addressType: 0 }), /address type/);
+  assert.deepEqual(f.actions, []); assert.deepEqual(f.fast, []);
+});
+
+test('matching typed targets, address-only recipes, and portable recipes remain executable', async () => {
+  for (const target of [{ address, addressType: 1 }, { address }, {}]) {
+    const f = fixture(async (_action, _body, { emit }) => emit([{ kind: 'read', hex: '64' }]));
+    f.setState({ ...state(), ble: { ...state().ble, addressType: 1 } });
+    await f.runner.execute({ ...recipe([step('read')]), ...target });
+    assert.equal(f.actions.length, 1); assert.equal(f.updates.at(-1).status, 'Recipe complete');
+  }
+});
+
+test('a read step ignores read results buffered before its command started', async () => {
+  for (const old of [{ hex: '11' }, { hex: '', success: false, message: 'An earlier read failed' }]) {
+    const f = fixture(async (action, _body, { emit }) => {
+      if (action === 'write') emit([{ kind: 'read', ...old }]);
+      if (action === 'read') emit([{ kind: 'read', hex: '22' }]);
+    });
+    await f.runner.execute(recipe([step('write', { hex: '01' }), step('read')]));
+    assert.equal(f.updates.find(item => item.status === 'Complete' && item.action === 'read').result, '22');
+  }
+});
