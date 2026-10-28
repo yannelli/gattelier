@@ -33,8 +33,8 @@ var NanoPWA = (() => {
     if (!registration || updating) return;
     updating = true; message = ''; render();
     try {
-      await registration.update();
-      if (registration.installing) await new Promise((resolve, reject) => {
+      if (!registration.waiting) await registration.update();
+      if (!registration.waiting && registration.installing) await new Promise((resolve, reject) => {
         const worker = registration.installing;
         worker.addEventListener('statechange', () => {
           if (worker.state === 'installed' || worker.state === 'activated') resolve();

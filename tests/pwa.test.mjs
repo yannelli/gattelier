@@ -107,3 +107,42 @@ test('explicit metadata download bypasses the installed shell catalog', async ()
   instance.listeners.fetch({ request: { method: 'GET', url: 'https://nano.test/metadata-v1.json', cache: 'no-store' }, respondWith() { intercepted = true; } });
   assert.equal(intercepted, false);
 });
+
+async function appFixture() {
+  const elements = new Map(), handlers = new Map(), messages = [];
+  let updates = 0, reloads = 0, failUpdate = false;
+  const get = key => {
+    if (!elements.has(key)) elements.set(key, { textContent: '', hidden: false, disabled: false, addEventListener() {} });
+    return elements.get(key);
+  };
+  const pending = { postMessage: message => messages.push(message) };
+  const registration = { active: {}, waiting: pending, installing: null, addEventListener() {},
+    async update() { updates++; if (failUpdate) throw new Error('offline'); } };
+  const context = vm.createContext({ module: { exports: {} }, isSecureContext: true, document: { hidden: false },
+    navigator: { serviceWorker: { register: async () => registration, addEventListener: (type, callback) => handlers.set(type, callback) } },
+    location: { reload: () => reloads++ }, addEventListener() {},
+  });
+  vm.runInContext(readFileSync(new URL('../web/pwa.js', import.meta.url), 'utf8'), context);
+  await context.module.exports.mount({ classList: { add() {} }, querySelector: get });
+  return { app: context.module.exports, registration, get, messages,
+    setOffline: value => { failUpdate = value; }, updates: () => updates, reloads: () => reloads,
+    controllerChanged: () => handlers.get('controllerchange')?.() };
+}
+
+test('a downloaded waiting update can install without another network check', async () => {
+  const f = await appFixture(); f.setOffline(true);
+  assert.equal(f.get('[data-pwa-update]').textContent, 'Install update');
+  await f.app.refresh();
+  assert.equal(f.updates(), 0);
+  assert.equal(f.messages[0]?.type, 'SKIP_WAITING');
+  f.controllerChanged(); assert.equal(f.reloads(), 1);
+  assert.equal(f.get('[data-pwa-detail]').textContent, '');
+});
+
+test('an unavailable update check retains a usable retry action', async () => {
+  const f = await appFixture(); f.registration.waiting = null; f.setOffline(true);
+  await f.app.refresh();
+  assert.equal(f.updates(), 1); assert.equal(f.messages.length, 0);
+  assert.equal(f.get('[data-pwa-update]').disabled, false);
+  assert.equal(f.get('[data-pwa-detail]').textContent, 'offline');
+});
