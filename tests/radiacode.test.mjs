@@ -168,6 +168,17 @@ test('foreign-device traffic is ignored and wrong sequence responses stop the tr
   await assert.rejects(wrong.client.read('status', device), /sequence/); wrong.client.destroy();
 });
 
+test('retained packets from another address type or attempt cannot interrupt a RadiaCode reply', async () => {
+  for (const scope of [{ addressType: 1 }, { connectionAttempt: 0 }]) {
+    const f = fixture((request, context) => {
+      context.emit([{ kind: 'disconnect', ...scope }]);
+      context.notify(request, new Uint8Array(), { truncated: true, ...scope });
+      return false;
+    });
+    assert.equal((await f.client.read('status', device)).flags, 5); f.client.destroy();
+  }
+});
+
 test('capture gaps, truncated packets and disconnects abort the read', async () => {
   for (const disrupt of [
     context => context.emit([], { gaps: 1 }),

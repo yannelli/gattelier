@@ -41,6 +41,7 @@ const NanoNotifyClient = (() => {
       for (const event of events) {
         cursor = Math.max(cursor, event.seq || 0);
         if (!pending || event.seq <= pending.after || event.address?.toLowerCase() !== target) continue;
+        if (event.addressType !== undefined && event.addressType !== current.ble?.addressType || event.connectionAttempt !== undefined && event.connectionAttempt !== current.ble?.connectionAttempt) continue;
         if (event.kind === 'disconnect') { fail(text.disconnect); continue; }
         const handles = p.handles(current);
         if (!handles || event.handle !== handles.notify.handle || !['notification', 'indication'].includes(event.kind)) continue;

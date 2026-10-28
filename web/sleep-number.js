@@ -105,6 +105,7 @@ const NanoSleep = (() => {
       for (const event of events) {
         cursor = Math.max(cursor, event.seq);
         if (!running || event.address !== target) continue;
+        if (event.addressType !== undefined && event.addressType !== current.ble?.addressType || event.connectionAttempt !== undefined && event.connectionAttempt !== current.ble?.connectionAttempt) continue;
         if (event.kind === 'disconnect') { generation++; rejectAll('Sleep Number disconnected.'); continue; }
         if (event.truncated) { rejectAll('A Sleep Number packet was truncated. Repeat the query.'); continue; }
         if (event.kind === 'write' && event.handle === p.handles(current).bamkey?.handle && event.hex === commandHex) armed = true;

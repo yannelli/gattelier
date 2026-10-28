@@ -49,6 +49,7 @@ const NanoRecipes = (() => {
       if (meta.dropped || (meta.gaps || 0) > run.gaps) { fail('Packet capture has a gap. Recipe stopped.'); return; }
       for (const event of events) {
         if (event.address?.toLowerCase() !== run.address || event.seq <= run.baseline) continue;
+        if (event.addressType !== undefined && event.addressType !== run.addressType || event.connectionAttempt !== undefined && event.connectionAttempt !== run.connectionAttempt) continue;
         if (event.kind === 'disconnect') { generation++; fail('Device disconnected. Recipe stopped.'); return; }
         if (event.truncated) { fail('A recipe packet was truncated. Recipe stopped.'); return; }
         if (['notification', 'indication', 'read'].includes(event.kind)) run.events.push(event);
@@ -66,7 +67,7 @@ const NanoRecipes = (() => {
       if (recipe.address && recipe.address !== address) throw new Error('The connected address does not match this recipe.');
       if (recipe.addressType !== undefined && recipe.addressType !== state.ble.addressType) throw new Error('The connected address type does not match this recipe.');
       recipe.steps.forEach(step => model.resolve(state, step));
-      const active = { address, generation, boot: bootId, consumed: cursor, baseline: cursor, events: [], error: '' }; run = active;
+      const active = { address, addressType: state.ble.addressType, connectionAttempt: state.ble.connectionAttempt, generation, boot: bootId, consumed: cursor, baseline: cursor, events: [], error: '' }; run = active;
       let index = -1; lab.setFastCapture(true);
       try {
         onUpdate({ status: 'Synchronizing capture', index }); await wait(() => false, 5000, true); guard(active);

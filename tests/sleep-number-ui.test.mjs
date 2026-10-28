@@ -88,6 +88,20 @@ function fixture(initial = ready()) {
   };
 }
 
+test('retained packets from another address type or attempt cannot satisfy or interrupt a Fuzion query', async () => {
+  for (const scope of [{ addressType: 0 }, { connectionAttempt: 0 }]) {
+    const f = fixture();
+    f.actionWith((path, body) => {
+      f.emit({ kind: 'disconnect', ...scope });
+      f.emit({ kind: 'read', handle: body.handle, hex: '00', success: false, truncated: true, ...scope });
+      f.reply(path, body);
+    });
+    f.start(); await flush();
+    assert.match(f.status.textContent, /Metadata verified/); assert.equal(f.result.children.length, 1);
+    assert.equal(f.timers.size, 0);
+  }
+});
+
 for (const replacement of [{ connectionAttempt: 2 }, { addressType: 0 }]) {
   test(`a delayed Auth read stops after same-MAC replacement ${JSON.stringify(replacement)}`, async () => {
     const f = fixture(), pending = deferred();

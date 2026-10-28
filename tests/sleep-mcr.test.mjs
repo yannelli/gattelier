@@ -93,6 +93,17 @@ test('foreign device and unrelated frames do not satisfy a response wait', async
   assert.equal((await f.client.read('firmness', device)).right, 60); f.client.destroy();
 });
 
+test('retained packets from another address type or attempt cannot interrupt MCR binding', async () => {
+  for (const scope of [{ addressType: 1 }, { connectionAttempt: 0 }]) {
+    const f = fixture((request, context) => {
+      context.emit([{ kind: 'disconnect', ...scope }]);
+      context.notify(`${bindReply.slice(0, -2)}ff`, scope);
+      return false;
+    });
+    assert.equal((await f.client.read('firmness', device)).right, 60); f.client.destroy();
+  }
+});
+
 test('gaps, corrupt frames, interrupted links and timeouts abort MCR reads', async () => {
   for (const [disrupt, pattern] of [
     [context => context.emit([], { dropped: 1 }), /gap/],

@@ -85,6 +85,20 @@ test('runner consumes fast write replies in order and reports read values', asyn
   assert.deepEqual(f.fast, [true, false]);
 });
 
+test('recipe reads ignore retained packets from another address type or connection attempt', async () => {
+  for (const scope of [{ addressType: 1 }, { connectionAttempt: 0 }]) {
+    const f = fixture(async (action, _body, { emit }) => {
+      if (action === 'read') emit([
+        { kind: 'disconnect', ...scope },
+        { kind: 'read', hex: 'ff', success: false, message: 'Old read failed.', ...scope },
+        { kind: 'read', hex: '64', addressType: 0, connectionAttempt: 1 }
+      ]);
+    });
+    await f.runner.execute(recipe([step('read')]));
+    assert.equal(f.updates.find(item => item.status === 'Complete').result, '64');
+  }
+});
+
 test('notification waits reject stale, wrong-UUID and already consumed replies', async () => {
   const f = fixture(async (action, body, { emit }) => {
     if (action === 'write') emit([{ kind: 'notification', hex: 'aa', uuid: '2a20' }, { kind: 'notification', hex: 'bb' }]);
