@@ -5,7 +5,9 @@ const NanoSleep = (() => {
     if (!container) return;
     const p = NanoSleepProtocol;
     let current = {}, online = false, running = false, generation = 0, target = '', bootId = '', cursor = 0, failure = '';
-    let sessionId = null, armed = false, commandHex = '', waiters = new Set();
+    let sessionId = null, armed = false, commandHex = '', waiters = new Set(), connecting = false, queryTarget = '';
+    const key = device => device ? `${String(device.address || '').toLowerCase()}/${device.addressType}` : '';
+    const connectionKey = state => state.ble?.connected ? JSON.stringify([key(state.ble), state.ble.connectionAttempt]) : '';
     const el = (tag, cls, text) => { const item = document.createElement(tag); if (cls) item.className = cls; if (text !== undefined) item.textContent = text; return item; };
     const heading = el('div', 'panel-heading'); heading.append(el('h2', '', 'Sleep Number Fuzion'));
     heading.insertAdjacentHTML('beforeend', '<details class="help"><summary aria-label="About the Fuzion reader"><span aria-hidden="true">?</span></summary><div class="help-body"><p>Reads Fuzion bed settings. If the bed reports an authentication or encryption error, pair it in Security. Cloud sleep scores are not available over BLE.</p><a href="https://github.com/kristofferR/ha-adjustable-bed/blob/main/docs/beds/sleep_number.md" target="_blank" rel="noopener noreferrer">Protocol source</a></div></details>');
@@ -18,7 +20,7 @@ const NanoSleep = (() => {
         body.append(status, controls, results); container.replaceChildren(heading, body);
     function sync() {
       const selected = NanoConnection.snapshot().selected;
-      const handles = p.handles(current), same = current.ble?.connected && selected?.address === current.ble.address;
+      const handles = p.handles(current), same = current.ble?.connected && key(selected) === key(current.ble);
       const ready = online && selected && ((same && handles.variant === 'Fuzion') || selected.services?.some(uuid => uuid.toLowerCase() === p.SERVICE));
       for (const button of buttons) button.disabled = !ready || running || current.ble?.busy || lab.isActing();
       stop.hidden = !running;
@@ -64,7 +66,12 @@ const NanoSleep = (() => {
       try {
         const device = NanoConnection.snapshot().selected;
         if (!device) throw new Error('Select a Fuzion bed.');
-        current = await NanoConnection.ensure(device); target = current.ble.address; failure = '';
+        queryTarget = key(device); connecting = !current.ble?.connected || key(current.ble) !== queryTarget;
+        const connected = await NanoConnection.ensure(device);
+        connecting = false;
+        if (failure) throw new Error(failure);
+        if (connectionKey(connected) !== connectionKey(current)) throw new Error('Sleep Number connection changed.');
+        current = connected; target = current.ble.address;
         const token = generation;
         const h = guard(token);
         if (!h.auth.properties.includes('read') || !['read', 'notify', 'write-no-response'].every(property => h.bamkey.properties.includes(property))) throw new Error('Fuzion characteristics do not expose the required read, notify, and write properties.');
@@ -87,8 +94,8 @@ const NanoSleep = (() => {
         guard(token);
         for (const field of p.response(kind, response)) { const item = el('div'); item.append(el('dt', '', field.label), el('dd', '', field.value)); results.append(item); }
         status.textContent = `Metadata verified at ${new Date().toLocaleTimeString()}.`;
-      } catch (error) { status.textContent = error.message; rejectAll(error.message); }
-      finally { running = false; sessionId = null; armed = false; commandHex = ''; lab.setFastCapture(false); sync(); }
+      } catch (error) { const message = failure || error.message; status.textContent = message; rejectAll(message); }
+      finally { running = false; connecting = false; queryTarget = ''; sessionId = null; armed = false; commandHex = ''; lab.setFastCapture(false); sync(); }
     }
     stop.addEventListener('click', () => { generation++; rejectAll('Metadata query stopped.'); status.textContent = 'Metadata query stopped.'; });
     lab.onEvents((events, meta) => {
@@ -110,12 +117,16 @@ const NanoSleep = (() => {
     });
     lab.onState((state, available = true) => {
       const next = state.ble?.connected ? state.ble.address : '';
-      if (target !== next) { generation++; if (running) rejectAll('Sleep Number connection changed.'); results.replaceChildren(); }
+      if (connectionKey(current) !== connectionKey(state)) { generation++; if (running && !connecting) rejectAll('Sleep Number connection changed.'); results.replaceChildren(); }
       current = state; target = next; online = available;
       if (!online && running) rejectAll('The board is unavailable.');
       sync();
     });
-    document.addEventListener('nanoscope:selection', () => { if (running) { generation++; rejectAll('Selected device changed.'); } sync(); });
+    globalThis.addEventListener('nanoscope:api-change', () => {
+      generation++; if (running) rejectAll('Sleep Number connection changed.');
+      current = {}; target = ''; online = false; bootId = ''; cursor = 0; results.replaceChildren(); sync();
+    });
+    document.addEventListener('nanoscope:selection', () => { if (running && key(NanoConnection.snapshot().selected) !== queryTarget) { generation++; rejectAll('Selected device changed.'); } sync(); });
     sync();
   }
   return { mount };
