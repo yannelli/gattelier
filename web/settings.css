@@ -1,5 +1,5 @@
 .settings-layout { display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 28px; align-items: start; }
-.settings-nav { position: sticky; top: 16px; display: grid; gap: 2px; }
+.settings-nav { position: sticky; top: calc(var(--toolbar-height) + 76px); display: grid; gap: 2px; }
 .settings-nav button { display: flex; align-items: center; gap: 10px; min-height: 40px; padding: 8px 12px; border: 0; border-radius: 10px; background: transparent; color: var(--text); font-size: 13px; font-weight: 550; text-align: left; }
 .settings-nav button:hover { background: color-mix(in srgb, var(--text) 5%, transparent); }
 .settings-nav button[aria-selected="true"] { background: var(--accent); color: var(--surface); }

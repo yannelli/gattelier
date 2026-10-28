@@ -3,6 +3,12 @@
 const NanoSettings = (() => {
   const key = 'nanoscope.settingsSection';
   let buttons = [];
+  function reveal() {
+    const selected = buttons.find(button => button.getAttribute('aria-selected') === 'true'), nav = selected?.parentElement;
+    if (!nav?.clientWidth) return;
+    const tab = selected.getBoundingClientRect(), viewport = nav.getBoundingClientRect();
+    nav.scrollLeft += tab.left < viewport.left ? tab.left - viewport.left : tab.right > viewport.right ? tab.right - viewport.right : 0;
+  }
   function show(section, focus = false) {
     const selected = buttons.find(button => button.dataset.section === section) || buttons[0];
     if (!selected) return;
@@ -12,6 +18,7 @@ const NanoSettings = (() => {
       document.getElementById(button.getAttribute('aria-controls')).hidden = !current;
     }
     if (focus) selected.focus();
+    reveal();
     try { localStorage.setItem(key, selected.dataset.section); } catch {}
   }
   function mount() {
@@ -27,20 +34,22 @@ const NanoSettings = (() => {
     }
     let saved; try { saved = localStorage.getItem(key); } catch {}
     show(saved);
+    globalThis.addEventListener?.('resize', reveal);
+    document.addEventListener('nanoscope:workspace', event => { if (event.detail?.view === 'settings') reveal(); });
   }
   function open(section) { NanoWorkspace.show('settings'); show(section); }
   return { mount, open };
 })();
 
-// Help popovers: only one stays open, and outside clicks or Escape close it.
 document.addEventListener('toggle', event => {
   if (!event.target.matches?.('details.help') || !event.target.open) return;
   for (const help of document.querySelectorAll('details.help[open]')) if (help !== event.target) help.open = false;
 }, true);
 document.addEventListener('click', event => {
-  for (const menu of document.querySelectorAll(':is(details.help, .traffic-filter-menu, .traffic-export-menu)[open]')) if (!menu.contains(event.target)) menu.open = false;
+  for (const menu of document.querySelectorAll(':is(details.help, .traffic-filter-menu, .traffic-export-menu, .header-connection)[open]')) if (!menu.contains(event.target)) menu.open = false;
 });
 document.addEventListener('keydown', event => {
-  const open = event.key === 'Escape' && document.querySelector('details.help[open]');
-  if (open) { open.open = false; open.querySelector('summary').focus(); }
+  if (event.key !== 'Escape' || event.defaultPrevented) return;
+  const open = [...document.querySelectorAll(':is(details.help, .traffic-filter-menu, .traffic-export-menu, .header-connection)[open]')].find(menu => menu.getClientRects().length);
+  if (open) { event.preventDefault(); open.open = false; open.querySelector('summary').focus(); }
 });
