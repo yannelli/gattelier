@@ -276,14 +276,17 @@ function poll({ streamOnly = false } = {}) {
 }
 async function mutate(action, data = {}) {
   if (pending || !online || state.ble.busy) return;
+  const generation = apiGeneration;
   pending = true; notice = ''; render();
   try {
     await NanoLab.action(action, data);
+    if (generation !== apiGeneration) return;
     if (pollPromise) await pollPromise;
+    if (generation !== apiGeneration) return;
     await poll();
   } catch (error) {
-    notice = error.name === 'AbortError' ? 'The request timed out. Refresh the board status before trying again.' : error.message;
-  } finally { pending = false; render(); }
+    if (generation === apiGeneration) notice = error.name === 'AbortError' ? 'The request timed out. Refresh the board status before trying again.' : error.message;
+  } finally { if (generation === apiGeneration) { pending = false; render(); } }
 }
 async function tick() {
   clearTimeout(timer);
@@ -331,7 +334,7 @@ async function boot() {
     apiGeneration++; stateController?.abort(); scanStream.reset();
     clearTimeout(timer);
     state = { wifi: {}, ble: {}, devices: [], services: [] };
-    online = false; pending = false; transportError = NanoAPI.transport() === 'serial' ? NanoAPI.configured() ? 'Checking the USB board.' : 'Connect USB in Settings.' : NanoAPI.configured() ? 'Checking the new board endpoint.' : 'Set the private board endpoint in Settings.';
+    online = false; pending = false; notice = ''; transportError = NanoAPI.transport() === 'serial' ? NanoAPI.configured() ? 'Checking the USB board.' : 'Connect USB in Settings.' : NanoAPI.configured() ? 'Checking the new board endpoint.' : 'Set the private board endpoint in Settings.';
     scanStore?.setOffline(); NanoLab.update(state, false); render();
     Promise.resolve(pollPromise).finally(tick);
   });
