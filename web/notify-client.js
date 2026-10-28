@@ -5,15 +5,16 @@
 const NanoNotifyClient = (() => {
   function create(lab, p, { name, text, connection, timeout, chunk, check, writeResponse, reset, onFrame }) {
     let current = lab.getState(), online = false, target = '', boot = '', cursor = 0, gaps, pending = null, priming = null;
-    let running = false, failure = '', poisoned = false, lastAddress = '';
+    let running = false, failure = '', poisoned = false, lastConnection = '', targetConnection = '';
+    const connectionKey = state => state.ble?.connected ? `${state.ble.address?.toLowerCase()}/${state.ble.addressType}/${state.ble.connectionAttempt}` : '';
     function fail(message) {
-      if (!running) return;
-      failure = message; poisoned = Boolean(target); reset('fail');
+      if (!running || failure) return;
+      failure = message; poisoned = Boolean(target && connectionKey(current) === targetConnection); reset('fail');
       pending?.reject(new Error(message)); priming?.reject(new Error(message));
     }
     function guard() {
       if (failure) throw new Error(failure);
-      if (!online || !current.ble?.connected || current.ble.address?.toLowerCase() !== target) throw new Error(text.changed);
+      if (!online || !targetConnection || connectionKey(current) !== targetConnection) throw new Error(text.changed);
       const handles = p.handles(current); check(handles); return handles;
     }
     function wait(holder, label) {
@@ -53,25 +54,31 @@ const NanoNotifyClient = (() => {
       priming?.resolve();
     });
     const offState = lab.onState((state, available = true) => {
-      const address = state.ble?.connected ? state.ble.address?.toLowerCase() || '' : '';
-      if (address !== lastAddress) { reset('address'); poisoned = false; lastAddress = address; }
+      const key = connectionKey(state);
+      if (key !== lastConnection) { reset('address'); poisoned = false; lastConnection = key; }
       current = state; online = available;
-      if (running && target && (!online || address !== target)) fail(text.moved);
+      if (running && target && (!online || key !== targetConnection)) fail(text.moved);
     });
+    function onApiChange() {
+      fail(text.moved); reset('address'); poisoned = false; lastConnection = ''; online = false;
+      boot = ''; cursor = 0; gaps = undefined;
+    }
+    globalThis.addEventListener?.('nanoscope:api-change', onApiChange);
     async function prime() { priming = wait('priming', 'Live packet capture'); const ready = priming.promise; lab.setFastCapture(true); await ready; guard(); }
     async function subscribe() { const handles = guard(); await lab.action('subscribe', { handle: handles.notify.handle, mode: 'notify' }); guard(); }
     async function run(device, body) {
       if (running || lab.isActing()) throw new Error('Wait for the current Bluetooth operation to finish.');
       if (!device?.address) throw new Error(text.select);
-      running = true; failure = ''; target = '';
+      running = true; failure = ''; target = ''; targetConnection = '';
       try {
-        current = await connection.ensure(device); target = device.address.toLowerCase(); guard();
+        current = await connection.ensure(device); target = device.address.toLowerCase();
+        targetConnection = `${target}/${device.addressType}/${current.ble?.connectionAttempt}`; guard();
         if (poisoned) throw new Error(text.poisoned);
         return await body(target);
       } catch (error) { if (pending || priming) fail(error.message); throw error; }
-      finally { pending?.reject(new Error(`${name} read ended.`)); priming?.reject(new Error(`${name} read ended.`)); running = false; target = ''; lab.setFastCapture(false); }
+      finally { pending?.reject(new Error(`${name} read ended.`)); priming?.reject(new Error(`${name} read ended.`)); running = false; target = ''; targetConnection = ''; lab.setFastCapture(false); }
     }
-    return { run, prime, subscribe, request, fail, busy: () => running, close(message) { fail(message); offEvents?.(); offState?.(); } };
+    return { run, prime, subscribe, request, fail, busy: () => running, close(message) { fail(message); offEvents?.(); offState?.(); globalThis.removeEventListener?.('nanoscope:api-change', onApiChange); } };
   }
   return { create };
 })();

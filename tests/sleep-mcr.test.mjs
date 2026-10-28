@@ -8,7 +8,7 @@ const concat = (...parts) => Uint8Array.from(parts.flatMap(part => Array.from(pa
 function storage() { const values = new Map([[`nanoscope.mcr.clientId.${address}`, identifier]]); return { getItem: key => values.get(key) ?? null, setItem: (key, value) => values.set(key, value) }; }
 
 function fixture(onRequest = () => false, timeoutMs = 100) {
-  let state = { ble: { connected: true, address, mtu: 23 }, services: [{ uuid: p.SERVICE, characteristics: [{ uuid: p.WRITE, handle: 4, properties: ['write', 'write-no-response'] }, { uuid: p.NOTIFY, handle: 6, properties: ['notify'] }] }] };
+  let state = { ble: { connected: true, address, addressType: 0, connectionAttempt: 1, mtu: 23 }, services: [{ uuid: p.SERVICE, characteristics: [{ uuid: p.WRITE, handle: 4, properties: ['write', 'write-no-response'] }, { uuid: p.NOTIFY, handle: 6, properties: ['notify'] }] }] };
   let seq = 0, requestBytes = new Uint8Array(); const eventListeners = new Set(), stateListeners = new Set(), actions = [], requests = [], connects = [], saved = storage();
   const emit = (events = [], meta = {}) => { const batch = events.map(event => ({ address, handle: 6, kind: 'notification', success: true, ...event, seq: ++seq })); for (const listener of eventListeners) listener(batch, { bootId: 'boot-1', cursor: seq, nextSeq: seq, gaps: 0, ...meta }); };
   const notify = (hex, extra = {}) => { const data = p.bytes(hex); emit([{ hex: p.hex(data.slice(0, 1)), ...extra }, { hex: p.hex(data.slice(1, 9)), ...extra }, { hex: p.hex(data.slice(9)), ...extra }]); };

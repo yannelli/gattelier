@@ -13,7 +13,7 @@ const spectrumHeader = concat(u32(60), f32(0.5), f32(3), f32(0.25));
 const spectrumData = concat(spectrumHeader, u32(10), u32(30), u32(0));
 
 function fixture(onRequest = () => false, timeoutMs = 100) {
-  let state = { ble: { connected: true, address, mtu: 23 }, services: [{ uuid: 'private', characteristics: [{ uuid: p.WRITE, handle: 4, properties: ['write-no-response'] }, { uuid: p.NOTIFY, handle: 6, properties: ['notify'] }] }] };
+  let state = { ble: { connected: true, address, addressType: 0, connectionAttempt: 1, mtu: 23 }, services: [{ uuid: 'private', characteristics: [{ uuid: p.WRITE, handle: 4, properties: ['write-no-response'] }, { uuid: p.NOTIFY, handle: 6, properties: ['notify'] }] }] };
   let seq = 0, requestBytes = new Uint8Array(); const eventListeners = new Set(), stateListeners = new Set(), actions = [], requests = [], connects = [];
   const emit = (events = [], meta = {}) => { const batch = events.map(event => ({ address, handle: 6, kind: 'notification', success: true, ...event, seq: ++seq })); for (const listener of eventListeners) listener(batch, { bootId: 'boot-1', cursor: seq, nextSeq: seq, gaps: 0, ...meta }); };
   const notify = (request, data, extra = {}) => { const response = framed(request, data); emit([{ hex: p.hex(response.slice(0, 2)), ...extra }, { hex: p.hex(response.slice(2)), ...extra }]); };
