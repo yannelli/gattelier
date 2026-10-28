@@ -8,7 +8,7 @@ function userDescription(characteristic) {
 function identityFields(services) {
   const values = new Map(services.flatMap(service => service.characteristics).filter(item => item.valueHex).map(item => [shortUuid(item.uuid), item.valueHex]));
   return identityUuids.flatMap(key => {
-    const fields = values.has(key) ? NanoGattValues.decode(key, values.get(key)) : [];
+    const fields = values.has(key) && !(key === '2a01' && values.get(key) === '0000') ? NanoGattValues.decode(key, values.get(key)) : [];
     // Without the hosted appearance catalog the name is bare hex, so fall back to the category name.
     if (key === '2a01' && fields.length) return [{ label: 'Appearance', value: /^0x[\dA-F]{4}$/.test(fields[0].value) ? `${fields[1].value} (${fields[0].value})` : fields[0].value }];
     const vendor = key === '2a50' && /Bluetooth SIG/.test(fields[0]?.value) ? vendorDatabase?.company?.[String(parseInt(fields[0].value.slice(2, 6), 16))] : '';
@@ -73,7 +73,8 @@ function buildDeviceDetail(device, fullPage = false) {
   const detail = node('div', 'detail');
   const top = node('div', 'detail-top');
   const title = node('div');
-  if (!fullPage) title.append(node('h3', '', device.label || device.name || 'Unnamed device'));
+  const gattName = connected ? identityFields(state.services).find(field => field.label === 'Device name')?.value : '';
+  if (!fullPage) title.append(node('h3', '', device.label || device.name || gattName || 'Unnamed device'));
   title.append(node('p', '', device.address));
   top.append(title);
   const personal = node('div', 'device-personal');

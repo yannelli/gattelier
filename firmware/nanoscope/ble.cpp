@@ -19,7 +19,7 @@ static SemaphoreHandle_t cancellationMutex;
 static uint32_t lastCancellation = 0;
 static std::atomic<int> connectionOutcome{0};
 static std::atomic<uint32_t> startedAttempt{0};
-static std::atomic<bool> deferredCancellation{false}, connectionTimedOut{false};
+static std::atomic<bool> deferredCancellation{false}, connectionTimedOut{false}, peerChoseInterval{false};
 
 bool connectionCancellationRequested() { return connectionCancellation.requested(connectionCancellation.active()); }
 
@@ -91,6 +91,12 @@ class ScanCallbacks : public NimBLEScanCallbacks {
 class ClientCallbacks : public NimBLEClientCallbacks {
   void onConnect(NimBLEClient* peer) override { auto info = peer->getConnInfo(); securityConnected(info); connectionOutcome.store(1); }
   void onConnectFail(NimBLEClient*, int) override { connectionOutcome.store(-1); }
+  bool onConnParamsUpdateRequest(NimBLEClient* peer, const ble_gap_upd_params* params) override {
+    // NimBLE answers with the client's parameters, so adopt the peer's to grant what it asked for.
+    peer->setConnectionParams(params->itvl_min, params->itvl_max, params->latency, params->supervision_timeout);
+    peerChoseInterval.store(true);
+    return true;
+  }
   void onPassKeyEntry(NimBLEConnInfo& info) override { securityPasskeyInput(info); }
   void onConfirmPasskey(NimBLEConnInfo& info, uint32_t pin) override { securityNumericComparison(info, pin); }
   uint32_t onPassKeyDisplay(NimBLEConnInfo& info) override { return securityPasskeyDisplay(info); }
@@ -177,6 +183,9 @@ static void connectDevice(const Command& command) {
   connectionOutcome.store(0);
   connectionTimedOut.store(false);
   startedAttempt.store(command.connectionAttempt);
+  // 15 ms, the floor iOS accessories are built for, makes discovery about four times faster than NimBLE's 30-50 ms default.
+  client->setConnectionParams(12, 12, 0, BLE_GAP_INITIAL_SUPERVISION_TIMEOUT);
+  peerChoseInterval.store(false);
   const bool started = address.length() == 17 && client->connect(NimBLEAddress(address.c_str(), command.mode), true, true, true);
   if (!started) connectionOutcome.store(-1);
   const uint32_t began = millis();
@@ -201,6 +210,10 @@ static void connectDevice(const Command& command) {
   }
   recordTrace("connect", address, "", 0, nullptr, 0, "Connected");
   discoverGatt(client, recorderOnly, command.length & 2);
+  // Restore the default afterwards so notification streams pace as before, unless the peer already chose an interval.
+  if (peerChoseInterval.load() || !client->isConnected()) return;
+  client->setConnectionParams(BLE_GAP_INITIAL_CONN_ITVL_MIN, BLE_GAP_INITIAL_CONN_ITVL_MAX, 0, BLE_GAP_INITIAL_SUPERVISION_TIMEOUT);
+  client->updateConnParams(BLE_GAP_INITIAL_CONN_ITVL_MIN, BLE_GAP_INITIAL_CONN_ITVL_MAX, 0, BLE_GAP_INITIAL_SUPERVISION_TIMEOUT);
 }
 
 static void bleWorker(void*) {

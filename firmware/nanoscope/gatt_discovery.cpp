@@ -73,6 +73,8 @@ void discoverGatt(NimBLEClient* client, bool recorderOnly, bool identify) {
             if (!discoveryReady(client, error)) break;
             DescriptorInfo detail;
             detail.uuid = descriptor->getUUID().toString().c_str();
+            // NimBLE ends each descriptor search at the next characteristic's declaration, so drop it.
+            if (detail.uuid == "0x2803") continue;
             detail.handle = descriptor->getHandle();
             wantIdentity(detail.uuid, detail.handle);
             entry.descriptors.push_back(std::move(detail));
