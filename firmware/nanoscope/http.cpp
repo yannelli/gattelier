@@ -47,6 +47,16 @@ static void submit(Action action, const char* argument = nullptr) {
     value = static_cast<uint32_t>(number->valuedouble);
   }
   Command command{action, value};
+  if (action == Action::Read || action == Action::Write || action == Action::Subscribe) {
+    auto attempt = cJSON_GetObjectItemCaseSensitive(json, "connectionAttempt");
+    if (address || addressType || attempt) {
+      if (!validAddress(address) || !jsonInteger(addressType, 0, 3) || !jsonInteger(attempt, 1, 4294967295.0)) {
+        cJSON_Delete(json); sendError(400, "GATT commands require address, addressType (0-3), and connectionAttempt."); return;
+      }
+      String normalized = address->valuestring; normalized.toLowerCase();
+      command.expectedPeer = TracePeer(normalized.c_str(), uint8_t(addressType->valueint), uint32_t(attempt->valuedouble));
+    }
+  }
   if (direct) {
     String normalized = address->valuestring; normalized.toLowerCase();
     memcpy(command.data, normalized.c_str(), 18); command.mode = addressType->valueint;

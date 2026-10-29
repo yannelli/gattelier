@@ -6,24 +6,32 @@ import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
-test('characteristic reads report ATT results and bound long values without automatic pairing', () => {
+test('GATT operations enforce peer scope and reads report bounded ATT results without automatic pairing', () => {
   const source = readFileSync(new URL('../firmware/nanoscope/gatt_actions.cpp', import.meta.url), 'utf8');
-  const start = source.indexOf('static String readError('), end = source.indexOf('static void writeCharacteristic(');
-  const callbackStart = source.indexOf('static int onAttributeRead('), callbackEnd = source.indexOf('\nint readAttribute(');
-  assert.ok(start >= 0 && end > start && callbackStart >= 0 && callbackEnd > callbackStart);
+  const stateSource = readFileSync(new URL('../firmware/nanoscope/state.h', import.meta.url), 'utf8');
+  const start = source.indexOf('static CharacteristicInfo* findEntry(');
+  const readStart = source.indexOf('\nint readAttribute('), readEnd = source.indexOf('\nstatic void readDescriptor(');
+  assert.ok(start >= 0 && readStart > start && readEnd > readStart);
   const directory = mkdtempSync(join(tmpdir(), 'gatt-read-'));
   try {
     writeFileSync(join(directory, 'test.cpp'), `
 #include <cassert>
 #include <cstdint>
 #include <string>
+#include <vector>
+#include <algorithm>
 #include ${JSON.stringify(fileURLToPath(new URL('../firmware/nanoscope/trace_peer.h', import.meta.url)))}
+#include ${JSON.stringify(fileURLToPath(new URL('../firmware/nanoscope/gatt_properties.h', import.meta.url)))}
 class String : public std::string {
  public:
   using std::string::string;
+  String() = default;
   String(std::string value) : std::string(value) {}
   String(int value) : std::string(std::to_string(value)) {}
+  bool isEmpty() const { return empty(); }
 };
+${stateSource.slice(stateSource.indexOf('struct ServiceDataInfo'), stateSource.indexOf('extern AppState state;'))}
+${stateSource.slice(stateSource.indexOf('enum class Action'), stateSource.indexOf('\nvoid startBle();'))}
 #define BLE_HS_ATT_ERR(code) (0x100 + (code))
 #define BLE_ATT_ATTR_MAX_LEN 512
 #define BLE_ATT_ERR_INVALID_ATTR_VALUE_LEN 0x0d
@@ -42,35 +50,66 @@ struct NimBLEUtils {
   }
 };
 struct StateLock {};
-struct { String error; } state;
-struct NimBLEClient {};
-struct NimBLERemoteCharacteristic {
-  NimBLEClient client;
-  NimBLEClient* getClient() { return &client; }
-  uint16_t getHandle() { return 7; }
+AppState state;
+int result = 0, reads = 0, writes = 0, subscribes = 0, unsubscribes = 0, lookups = 0, descriptorLookups = 0;
+struct NimBLEUUID {
+  explicit NimBLEUUID(uint16_t = 0) {}
+  std::string toString() const { return "uuid"; }
 };
-int result = 0, reads = 0;
+struct NimBLERemoteCharacteristic;
+struct NimBLEClient {
+  NimBLERemoteCharacteristic* characteristic = nullptr;
+  bool isConnected() const { return true; }
+  NimBLERemoteCharacteristic* getCharacteristic(uint32_t handle) { ++lookups; return handle == 7 ? characteristic : nullptr; }
+  uint16_t getMTU() const { return 247; }
+  int getLastError() const { return 0; }
+};
+struct NimBLERemoteCharacteristic {
+  NimBLEClient* client;
+  NimBLEClient* getClient() { return client; }
+  uint16_t getHandle() { return 7; }
+  NimBLEUUID getUUID() const { return NimBLEUUID(); }
+  bool canRead() const { return true; }
+  bool canWrite() const { return true; }
+  bool canWriteNoResponse() const { return true; }
+  bool canNotify() const { return true; }
+  bool canIndicate() const { return true; }
+  void* getDescriptor(NimBLEUUID) { ++descriptorLookups; return this; }
+  bool writeValue(const uint8_t*, size_t, bool) { ++writes; return true; }
+  template<typename Callback> bool subscribe(bool, Callback, bool) { ++subscribes; return true; }
+  bool unsubscribe(bool) { ++unsubscribes; return true; }
+};
 bool success = false;
 size_t tracedBytes = 0;
-String reported;
+TracePeer tracedPeer;
 int readAttribute(NimBLEClient*, uint16_t handle, std::string& value) {
-  assert(handle == 7); ++reads; value = result ? "partial" : ""; return result;
+  assert(handle == 7 || handle == 8); ++reads; value = result ? "partial" : ""; return result;
 }
-void updateValue(uint16_t handle, const uint8_t*, size_t, const String& error, const TracePeer* peer) {
-  assert(handle == 7 && peer && peer->matches("AA:BB:CC:DD:EE:FF", 0, 7)); reported = error;
+void updateValue(uint16_t, const uint8_t*, size_t, const String& error = "", const TracePeer* peer = nullptr);
+String hexBytes(const uint8_t*, size_t) { return ""; }
+void resetCalls() {
+  reads = writes = subscribes = unsubscribes = lookups = descriptorLookups = 0;
+  state.error = ""; success = false; tracedPeer = TracePeer{};
 }
 void recordTrace(const char*, const String& address, const String&, uint16_t, const uint8_t*, size_t size, const String&, bool ok, const TraceProvenance& provenance) {
-  assert(address == "AA:BB:CC:DD:EE:FF" && provenance.hasAddressType && provenance.addressType == 0);
-  assert(provenance.hasConnectionAttempt && provenance.connectionAttempt == 7);
-  success = ok; tracedBytes = size;
+  success = ok; tracedBytes = size; tracedPeer = TracePeer(address.c_str(), provenance.addressType, provenance.connectionAttempt);
+  tracedPeer.provenance = provenance;
 }
-${source.slice(start, end)}
-${source.slice(callbackStart, callbackEnd)}
+${source.slice(start, readStart)}
+${source.slice(readEnd)}
 int main() {
-  NimBLERemoteCharacteristic characteristic;
+  NimBLEClient client;
+  NimBLERemoteCharacteristic characteristic{&client}; client.characteristic = &characteristic;
   const TracePeer peer("AA:BB:CC:DD:EE:FF", 0, 7);
+  state.connected = true; state.address = peer.address; state.connectionAttempt = 7;
+  CharacteristicInfo entry;
+  entry.handle = 7; entry.properties = GattRead | GattWrite | GattWriteNoResponse | GattNotify | GattIndicate;
+  entry.descriptors.push_back({"descriptor", "", 8, false});
+  state.services.push_back({"service", {entry}});
+  auto& reported = state.services.front().characteristics.front().readError;
   readCharacteristic(&characteristic, peer, "uuid");
   assert(reads == 1 && success && reported.empty());
+  assert(tracedPeer.matches(peer.address, 0, 7));
   for (const auto code : { 0x105, 0x108, 0x10c, 0x10f, 534 }) {
     result = code; readCharacteristic(&characteristic, peer, "uuid");
     assert(!success && tracedBytes == 0 && reported == state.error);
@@ -111,6 +150,44 @@ int main() {
     } else {
       assert(rc == BLE_HS_ATT_ERR(BLE_ATT_ERR_INVALID_ATTR_VALUE_LEN));
       assert(value.size() == 300 && releases == 1 && releasedCode == rc);
+    }
+  }
+  result = 0;
+  for (const uint8_t type : {0, 1}) {
+    const TracePeer workerPeer(peer.address, type, 7);
+    state.addressType = type;
+    for (const auto action : {Action::Read, Action::Write, Action::Subscribe}) {
+      for (const auto& expected : {TracePeer("11:22:33:44:55:66", type, 7), TracePeer(peer.address, uint8_t(type ^ 1), 7),
+                                  TracePeer(peer.address, type, 8), TracePeer(peer.address, type, 0)}) {
+        Command command{action, 7}; command.expectedPeer = expected; command.mode = 1;
+        resetCalls(); executeGatt(&client, command, workerPeer);
+        assert(reads == 0 && writes == 0 && subscribes == 0 && unsubscribes == 0);
+        assert(lookups == 0 && descriptorLookups == 0 && !success && tracedBytes == 0);
+        assert(state.error == "Bluetooth connection changed. Inspect again before retrying.");
+        assert(tracedPeer.matches(expected.address, expected.provenance.addressType, expected.provenance.connectionAttempt));
+        if (action == Action::Read) {
+          command.argument = 8; resetCalls(); executeGatt(&client, command, workerPeer);
+          assert(reads == 0 && lookups == 0 && !success);
+        } else if (action == Action::Subscribe) {
+          command.mode = 0; resetCalls(); executeGatt(&client, command, workerPeer);
+          assert(subscribes == 0 && unsubscribes == 0 && lookups == 0 && !success);
+        }
+      }
+      for (const bool scoped : {false, true}) {
+        Command command{action, 7}; command.mode = 1;
+        if (scoped) command.expectedPeer = TracePeer("aa:bb:cc:dd:ee:ff", type, 7);
+        resetCalls(); executeGatt(&client, command, workerPeer);
+        assert(reads == (action == Action::Read) && writes == (action == Action::Write));
+        assert(subscribes == (action == Action::Subscribe) && unsubscribes == 0 && lookups == 1 && success);
+        assert(tracedPeer.matches(workerPeer.address, type, 7));
+        if (action == Action::Read) {
+          command.argument = 8; resetCalls(); executeGatt(&client, command, workerPeer);
+          assert(reads == 1 && lookups == 0 && success);
+        } else if (action == Action::Subscribe) {
+          command.mode = 0; resetCalls(); executeGatt(&client, command, workerPeer);
+          assert(subscribes == 0 && unsubscribes == 1 && success);
+        }
+      }
     }
   }
 }

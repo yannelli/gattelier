@@ -300,7 +300,12 @@ bool queueCommand(Command& command, String& error) {
   if ((command.action == Action::Disconnect || command.action == Action::Read) && !state.connected) {
     error = "No device is connected."; return false;
   }
-  if ((command.action == Action::Read || command.action == Action::Write || command.action == Action::Subscribe) && !validateGatt(command, error)) return false;
+  if (command.action == Action::Read || command.action == Action::Write || command.action == Action::Subscribe) {
+    if (command.expectedPeer.provenance.hasConnectionAttempt && !command.expectedPeer.matches(state.address.c_str(), state.addressType, state.connectionAttempt)) {
+      error = "Bluetooth connection changed. Inspect again before retrying."; return false;
+    }
+    if (!validateGatt(command, error)) return false;
+  }
   state.busy = true;
   state.error = "";
   switch (command.action) {

@@ -4,6 +4,7 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/semphr.h>
 #include "gatt_properties.h"
+#include "trace_peer.h"
 
 struct ServiceDataInfo { String uuid, hex; };
 
@@ -69,6 +70,7 @@ struct Command {
   uint8_t data[512] = {};
   uint8_t mode = 0;
   uint32_t connectionAttempt = 0;
+  TracePeer expectedPeer;
 };
 
 void startBle();

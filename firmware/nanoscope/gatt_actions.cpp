@@ -206,6 +206,10 @@ static void readDescriptor(NimBLEClient* client, const TracePeer& peer, uint16_t
 }
 
 void executeGatt(NimBLEClient* client, const Command& command, const TracePeer& peer) {
+  if (command.expectedPeer.provenance.hasConnectionAttempt && !command.expectedPeer.matches(peer.address, peer.provenance.addressType, peer.provenance.connectionAttempt)) {
+    failOperation(command.expectedPeer, "", command.argument, "Bluetooth connection changed. Inspect again before retrying.");
+    return;
+  }
   if (!client->isConnected()) {
     failOperation(peer, "", command.argument, "Device disconnected before the GATT operation.");
     return;
