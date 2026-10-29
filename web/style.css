@@ -104,7 +104,7 @@ dd { margin: 0; font-size: 12px; overflow-wrap: anywhere; }
 .characteristic { padding: 15px; border-top: 1px solid var(--line); }
 .characteristic-top { display: flex; justify-content: space-between; gap: 12px; align-items: center; }
 .characteristic-top > div { min-width: 0; }
-.characteristic-name { font-size: 12px; font-weight: 600; }
+.characteristic-name { font-size: 12px; font-weight: 600; overflow-wrap: anywhere; }
 .properties { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 9px; }
 .properties .badge { font-size: 9px; }
 .value { background: var(--surface-secondary); border-radius: 8px; padding: 10px 12px; margin-top: 12px; }

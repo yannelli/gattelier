@@ -42,3 +42,6 @@
   .settings-nav button { flex-shrink: 0; min-height: 36px; padding: 6px 14px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); }
   .settings-nav svg { display: none; }
 }
+@media (max-width: 699px) {
+  .settings-nav { margin-inline: -12px; padding-inline: 12px; }
+}

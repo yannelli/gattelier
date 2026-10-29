@@ -28,7 +28,7 @@
 .app-catalog-filters label { display: grid; gap: 8px; min-width: 0; color: var(--muted); font-size: 12px; }
 .app-catalog-filters :is(input, select) { width: 100%; min-width: 0; }
 .app-catalog-filters input { min-height: 44px; padding: 10px 12px; color: var(--text); background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-small); }
-#apps-catalog > .hint { padding: 0; margin: 0 0 var(--section-gap); background: none; }
+#apps-catalog > .hint { padding: 0; margin: 0 0 var(--section-gap); background: none; overflow-wrap: anywhere; }
 @media (max-width: 600px) {
   .app-catalog-filters { grid-template-columns: minmax(0, 1fr); }
   .app-catalog-filters :is(input, select), .app-card select { font-size: 16px; }

@@ -16,6 +16,7 @@
 .pairing-body h3 { font-size:16px; }
 .pairing-heading { display:flex; align-items:center; justify-content:space-between; gap:12px; padding-top:var(--panel-inset); }
 .pairing-body p:empty { display:none; }
+#pairing-target { overflow-wrap:anywhere; }
 .pairing-facts { display:flex; flex-wrap:wrap; gap:8px; }
 .pairing-code { font:600 32px var(--mono); letter-spacing:5px; }
 .pairing-actions { display:flex; flex-wrap:wrap; gap:var(--control-gap); }
