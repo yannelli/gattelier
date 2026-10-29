@@ -58,7 +58,8 @@ const NanoWorkspace = (() => {
     if (mobile()) { drawer = !drawer; renderPane(); get(drawer ? 'pane-close' : 'pane-toggle')?.focus(); }
     else setPane(paneOpen ? 'closed' : 'open');
   }
-  function renderViews() {
+  function renderViews(focus = false) {
+    const focused = document.activeElement;
     tabs('[data-view]', active === 'device' ? 'discover' : active, 'view');
     for (const view of views) { const panel = get(`view-${view}`); if (panel) panel.hidden = active !== view; }
     get('apps-catalog').hidden = Boolean(activeModule); get('apps-heading').hidden = Boolean(activeModule);
@@ -70,6 +71,10 @@ const NanoWorkspace = (() => {
     get('view-device')?.setAttribute('aria-labelledby', current?.kind === 'device' ? current.id : 'device-page-title');
     renderPane(); tabView?.render(lastUpdate);
     document.dispatchEvent(new CustomEvent('nanoscope:workspace', { detail: { view: active, module: activeModule, tab: current?.id || '', target: current?.target || null } }));
+    const activeElement = document.activeElement;
+    const closed = activeElement?.closest?.('details:not([open])');
+    const concealed = activeElement?.closest?.('[hidden],[inert]') || closed && !closed.querySelector('summary')?.contains(activeElement);
+    if ((focus || focused && focused !== document.body) && (activeElement === document.body || concealed)) get(`view-${active}`)?.focus();
   }
   function changed() { preferences.setPreference?.('view', active); preferences.onChange?.(active); }
   function restoreTab(tab) {
@@ -95,12 +100,12 @@ const NanoWorkspace = (() => {
     if (view === 'apps' && catalog) activeModule = '';
     sessionTabs?.deactivate();
     if (layout.pane === 'open' && previous !== active) { layout.pane = 'auto'; saveLayout(); }
-    drawer = false; renderViews(); changed(); return true;
+    drawer = false; renderViews(true); changed(); return true;
   }
   function openDevice(device) {
     if (!device?.address) return false;
     lastDevice = device; active = 'device'; activeModule = '';
-    sessionTabs?.open('device', '', display(device)); drawer = false; renderViews(); changed(); return true;
+    sessionTabs?.open('device', '', display(device)); drawer = false; renderViews(true); changed(); return true;
   }
   function openModule(value, device) {
     if (!Object.hasOwn(modules, value)) return false;
@@ -109,7 +114,7 @@ const NanoWorkspace = (() => {
     sessionTabs?.open('app', value, display(device));
     restoring = true;
     try { if (device) preferences.selectModuleTarget?.(value, device); } finally { restoring = false; }
-    drawer = false; renderViews(); changed(); return true;
+    drawer = false; renderViews(true); changed(); return true;
   }
   function selectTarget(device) {
     lastDevice = device;

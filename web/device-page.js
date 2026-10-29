@@ -3,12 +3,14 @@
 const NanoDevicePage = (() => {
   let signature = '', headerSignature = '', lastDevice = '';
   function showTab(value, focus = false) {
+    const focused = document.activeElement;
     for (const key of ['overview', 'services', 'security']) {
       const button = $(`device-tab-${key}`), active = key === value;
       button.setAttribute('aria-selected', String(active)); button.tabIndex = active ? 0 : -1;
       $(`device-pane-${key}`).hidden = !active;
-      if (active && focus) button.focus();
     }
+    const activeElement = document.activeElement;
+    if (focus || focused && focused !== document.body && (activeElement === document.body || activeElement?.closest?.('[hidden],[inert]'))) $(`device-tab-${value}`).focus();
   }
   function mount() {
     $('device-content').innerHTML = '<div class="view-heading"><h1 id="device-page-title">Device</h1><div class="subnav" role="tablist" aria-label="Device tools"><button id="device-tab-overview" role="tab" aria-controls="device-pane-overview" aria-selected="true">Overview</button><button id="device-tab-services" role="tab" aria-controls="device-pane-services" aria-selected="false" tabindex="-1">Services</button><button id="device-tab-security" role="tab" aria-controls="device-pane-security" aria-selected="false" tabindex="-1">Security</button></div></div><section id="device-pane-overview" role="tabpanel" aria-labelledby="device-tab-overview" class="panel device-focused"><div id="device-summary"></div><details class="device-signal"><summary>Signal history</summary><div id="device-signal"></div></details></section><section id="device-pane-services" role="tabpanel" aria-labelledby="device-tab-services" hidden><div id="device-services" class="panel detail device-focused"></div></section><section id="device-pane-security" role="tabpanel" aria-labelledby="device-tab-security" hidden><div id="pairing-panel" class="panel device-focused"></div></section>';

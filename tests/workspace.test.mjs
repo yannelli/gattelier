@@ -8,7 +8,7 @@ const source = readFileSync(new URL('../web/workspace.js', import.meta.url), 'ut
 function setup(saved = 'discover', options = {}) {
   const events = [], elements = new Map(), viewNames = ['discover', 'apps', 'workbench', 'insights', 'settings'], tools = ['command', 'traffic', 'snapshots', 'recipes', 'guide'];
   function element(id, data = {}) {
-    if (!elements.has(id)) elements.set(id, { hidden: false, dataset: data, attributes: {}, listeners: {}, setAttribute(key, value) { this.attributes[key] = value; }, getAttribute(key) { return this.attributes[key]; }, addEventListener(key, action) { this.listeners[key] = action; }, focus() { this.focused = true; } });
+    if (!elements.has(id)) elements.set(id, { hidden: false, dataset: data, attributes: {}, listeners: {}, setAttribute(key, value) { this.attributes[key] = value; }, getAttribute(key) { return this.attributes[key]; }, addEventListener(key, action) { this.listeners[key] = action; }, focus() { this.focused = true; context.document.activeElement = this; } });
     return elements.get(id);
   }
   const buttons = viewNames.map(view => element(`tab-${view}`, { view }));
@@ -19,11 +19,12 @@ function setup(saved = 'discover', options = {}) {
   for (const module of ['plaud', 'pocket', 'sleep', 'tracker', 'medical', 'sensor']) element(`${module}-panel`);
   const listeners = {}, storage = options.storage || { getItem() {}, setItem() {} };
   const context = { CustomEvent: class { constructor(type, options) { this.type = type; this.detail = options.detail; } }, module: { exports: {} }, localStorage: storage, matchMedia: () => ({ matches: Boolean(options.mobile), addEventListener() {} }), window: { scrollTo() {} }, document: { addEventListener: (type, action) => { listeners[type] = action; }, dispatchEvent: event => events.push(event), getElementById: id => element(id), querySelectorAll: selector => selector === '[data-view]' ? buttons : toolButtons } };
+  context.document.body = element('body'); context.document.body.classList = { toggle() {} }; context.document.activeElement = context.document.body;
   if (options.tabs) context.NanoWorkspaceTabs = { ...tabAPI, create: value => tabAPI.create({ ...value, storage }), mount: () => ({ render() {} }) };
   vm.runInNewContext(source, context);
   const workspace = context.module.exports, prefs = {};
   workspace.init({ getPreference: key => key === 'view' ? saved : undefined, setPreference: (key, value) => { prefs[key] = value; }, ...options.hooks });
-  return { workspace, element, prefs, buttons, events, listeners };
+  return { workspace, element, prefs, buttons, events, listeners, document: context.document };
 }
 test('Apps opens the catalog and migrates the old Recordings preference', () => {
   const { workspace, element } = setup('recordings');
@@ -191,4 +192,30 @@ test('mobile pane shortcut returns focus to its toggle when closing', () => {
   listeners.keydown(event);
   assert.equal(element('workspace-pane').hidden, true);
   assert.equal(element('pane-toggle').focused, true);
+});
+
+
+test('navigation focuses its destination after losing the trigger and keeps visible tab focus', () => {
+  const { workspace, element, document } = setup();
+  assert.equal(document.activeElement, document.body);
+  workspace.openModule('standard', target);
+  assert.equal(document.activeElement, element('view-apps'));
+  element('tab-insights').focus(); workspace.show('insights');
+  assert.equal(document.activeElement, element('tab-insights'));
+  const trigger = {}; document.activeElement = trigger;
+  Object.defineProperty(element('view-insights'), 'hidden', {
+    set(hidden) { if (hidden && document.activeElement === trigger) document.activeElement = document.body; }
+  });
+  workspace.openDevice(target);
+  assert.equal(document.activeElement, element('view-device'));
+  document.activeElement = document.body; workspace.show('discover');
+  assert.equal(document.activeElement, element('view-discover'));
+  const summary = { contains: node => node === summary }, closed = { querySelector: () => summary };
+  const closest = selector => selector === 'details:not([open])' ? closed : null;
+  document.activeElement = { closest };
+  workspace.openModule('standard', target);
+  assert.equal(document.activeElement, element('view-apps'));
+  summary.closest = closest; document.activeElement = summary;
+  workspace.show('insights');
+  assert.equal(document.activeElement, summary);
 });
