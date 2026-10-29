@@ -256,3 +256,25 @@ test('a state listener starts fresh work without stale update or finally busy ev
   assert.equal(f.lab.isActing(), false);
   assert.deepEqual(f.events.slice(eventStart).filter(event => event.type === 'nanoscope:busy').map(event => event.detail), [true, false]);
 });
+
+for (const path of ['read', 'write', 'subscribe']) test(`${path} sends its captured typed peer with the GATT handle`, async () => {
+  for (const addressType of [0, 1]) {
+    const state = connected({ addressType, connectionAttempt: 0xffffffff });
+    const payload = path === 'write' ? { handle: 8, hex: 'ff'.repeat(512), response: true }
+      : path === 'subscribe' ? { handle: 8, mode: 'indicate' } : { handle: 8 };
+    const f = fixture(request => response(request === 'state' ? state : {}, request === path ? 202 : 200));
+    f.lab.update(state, true);
+    await f.lab.action(path, { ...payload, address: '11:22:33:44:55:66', addressType: 3, connectionAttempt: 1 });
+    const request = f.calls.find(call => call.path === path).options;
+    assert.deepEqual(JSON.parse(request.body), { ...payload, address: target.address.toLowerCase(), addressType, connectionAttempt: 0xffffffff });
+    assert.ok(Buffer.byteLength(request.body) < 1400);
+  }
+});
+
+test('GATT requests keep legacy payloads when the board has no connection attempt metadata', async () => {
+  const legacy = { ...ready, ble: { ...target, connected: true, busy: false } }, payload = { handle: 8 };
+  const f = fixture(request => response(request === 'state' ? legacy : {}, request === 'read' ? 202 : 200));
+  f.lab.update(legacy, true);
+  await f.lab.action('read', payload);
+  assert.deepEqual(JSON.parse(f.calls.find(call => call.path === 'read').options.body), payload);
+});

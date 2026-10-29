@@ -45,7 +45,12 @@ const NanoLab = (() => {
     if (path === 'cancel-connect') return cancelConnect(body);
     if (acting || latest.ble.busy) throw new Error('Wait for the current BLE operation to finish.');
     const token = generation;
-    const operation = currentAction = { scope: ['read', 'write', 'subscribe'].includes(path) ? connectionScope(latest) : null };
+    const gatt = ['read', 'write', 'subscribe'].includes(path), ble = latest.ble, address = String(ble.address || '').toLowerCase();
+    const peer = gatt && ble.connected && /^(?:[\da-f]{2}:){5}[\da-f]{2}$/.test(address) &&
+      Number.isInteger(ble.addressType) && ble.addressType >= 0 && ble.addressType <= 3 &&
+      Number.isInteger(ble.connectionAttempt) && ble.connectionAttempt >= 1 && ble.connectionAttempt <= 0xffffffff
+      ? { address, addressType: ble.addressType, connectionAttempt: ble.connectionAttempt } : null;
+    const operation = currentAction = { scope: gatt ? connectionScope(latest) : null };
     let connecting;
     if (path === 'connect') {
       const target = body.address ? body : latest.devices?.find(device => device.id === body.id);
@@ -57,7 +62,7 @@ const NanoLab = (() => {
     try {
       assertAction(operation);
       const deadline = Date.now() + 45000;
-      const result = await request(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }, 10000, token);
+      const result = await request(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(peer ? { ...body, ...peer } : body) }, 10000, token);
       assertCurrent(token); assertAction(operation);
       connecting?.resolve(result.body);
       while (Date.now() < deadline) {
