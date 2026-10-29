@@ -139,7 +139,7 @@ test('shared action waits for completion and propagates the resulting state', as
 });
 
 test('shared actions reject device errors and HTTP failures', async () => {
-  const failed = labWithResponses([{ status: 202, body: { ok: true } }, { status: 200, body: { ble: { busy: false, error: 'Write rejected' } } }]);
+  const failed = labWithResponses([{ status: 202, body: { ok: true } }, { status: 200, body: { ble: { connected: true, busy: false, error: 'Write rejected' } } }]);
   await assert.rejects(failed.lab.action('write', {}), /Write rejected/);
   assert.equal(failed.lab.isActing(), false);
   const http = labWithResponses([{ status: 409, body: { error: 'Already connected' } }]);
@@ -149,7 +149,7 @@ test('shared actions reject device errors and HTTP failures', async () => {
 test('shared action rejects overlapping commands', async () => {
   let release;
   const pending = new Promise(resolve => { release = resolve; });
-  const { lab } = labWithResponses([pending, { status: 200, body: { ble: { busy: false } } }]);
+  const { lab } = labWithResponses([pending, { status: 200, body: { ble: { connected: true, busy: false } } }]);
   const first = lab.action('write', {});
   await assert.rejects(lab.action('write', {}), /current BLE operation/);
   release({ status: 202, body: { ok: true } });

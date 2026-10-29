@@ -4,13 +4,16 @@ const NanoLab = (() => {
   let latest = { ble: {}, services: [], devices: [] }, online = false, initialized = false, acting = false, fast = false;
   let eventsTimer, eventsInFlight = false, capture = NanoPackets.createCapture();
   let background = false, eventFailures = 0;
-  let connectionAction = null;
+  let connectionAction = null, currentAction = null;
   let generation = 0;
   const eventListeners = new Set(), stateListeners = new Set();
   const sleep = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds));
   function assertCurrent(token) {
     if (token !== generation) throw Object.assign(new Error('Board connection changed.'), { name: 'AbortError' });
   }
+  const connectionScope = state => JSON.stringify([Boolean(state.ble?.connected), String(state.ble?.address || '').toLowerCase(), state.ble?.addressType ?? null, state.ble?.connectionAttempt ?? null]);
+  const connectionChanged = () => Object.assign(new Error('Bluetooth connection changed.'), { name: 'AbortError' });
+  function assertAction(operation) { if (currentAction !== operation) throw connectionChanged(); }
   async function request(path, options = {}, timeout = 10000, token = generation) {
     assertCurrent(token);
     const controller = new AbortController(); const timer = setTimeout(() => controller.abort(), timeout);
@@ -28,17 +31,21 @@ const NanoLab = (() => {
       try { listener(...args); } catch (error) { console.error('NanoScope listener failed:', error.message); }
     }
   }
-  function update(state, available) {
+  function update(state, available, source = null) {
     const changed = state !== latest || available !== online;
     latest = state; online = available;
+    const revoked = currentAction && currentAction !== source && currentAction.scope && (!available || currentAction.scope !== connectionScope(state));
+    if (revoked) { currentAction = null; acting = false; }
     if (initialized) NanoConsole.update(state, available);
     if (changed) emit(stateListeners, state, available);
+    if (revoked && !acting) document.dispatchEvent(new CustomEvent('nanoscope:busy', { detail: false }));
   }
   async function action(path, body = {}) {
     if (!online) throw new Error('The board is unavailable.');
     if (path === 'cancel-connect') return cancelConnect(body);
     if (acting || latest.ble.busy) throw new Error('Wait for the current BLE operation to finish.');
     const token = generation;
+    const operation = currentAction = { scope: ['read', 'write', 'subscribe'].includes(path) ? connectionScope(latest) : null };
     let connecting;
     if (path === 'connect') {
       const target = body.address ? body : latest.devices?.find(device => device.id === body.id);
@@ -48,15 +55,18 @@ const NanoLab = (() => {
     acting = true; NanoConsole.update(latest, online);
     document.dispatchEvent(new CustomEvent('nanoscope:busy', { detail: true }));
     try {
+      assertAction(operation);
       const deadline = Date.now() + 45000;
       const result = await request(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }, 10000, token);
-      assertCurrent(token);
+      assertCurrent(token); assertAction(operation);
       connecting?.resolve(result.body);
       while (Date.now() < deadline) {
         const { body: state } = await request('state', {}, Math.min(10000, deadline - Date.now()), token);
-        assertCurrent(token);
-        update(state, true);
+        assertCurrent(token); assertAction(operation);
+        update(state, true, operation);
         document.dispatchEvent(new CustomEvent('nanoscope:state', { detail: state }));
+        assertAction(operation);
+        if (operation.scope && operation.scope !== connectionScope(state)) throw connectionChanged();
         if (!state.ble.busy) {
           if (result.status === 202 && state.ble.error) throw new Error(state.ble.error);
           const characteristic = state.services?.flatMap(service => service.characteristics || []).find(item => item.handle === body.handle);
@@ -64,14 +74,14 @@ const NanoLab = (() => {
           return state;
         }
         await sleep(120);
-        assertCurrent(token);
+        assertCurrent(token); assertAction(operation);
       }
       throw new Error('BLE operation timed out after 45 seconds. Check board status before sending another command.');
-    } catch (error) { connecting?.reject(error); throw error; }
+    } catch (error) { if (token === generation && currentAction !== operation) error = connectionChanged(); connecting?.reject(error); throw error; }
     finally {
       if (connecting && connectionAction === connecting) connectionAction = null;
-      if (token === generation) {
-        acting = false; NanoConsole.update(latest, online);
+      if (token === generation && currentAction === operation) {
+        currentAction = null; acting = false; NanoConsole.update(latest, online);
         document.dispatchEvent(new CustomEvent('nanoscope:busy', { detail: false }));
       }
     }
@@ -138,7 +148,7 @@ const NanoLab = (() => {
     globalThis.addEventListener('nanoscope:api-change', () => {
       generation++; clearTimeout(eventsTimer); eventsInFlight = false; eventFailures = 0;
       connectionAction?.reject(Object.assign(new Error('Board connection changed.'), { name: 'AbortError' })); connectionAction = null;
-      latest = { ble: {}, services: [], devices: [] }; online = false; acting = false; capture = NanoPackets.createCapture();
+      latest = { ble: {}, services: [], devices: [] }; online = false; acting = false; currentAction = null; capture = NanoPackets.createCapture();
       emit(stateListeners, latest, false);
       document.dispatchEvent(new CustomEvent('nanoscope:busy', { detail: false }));
       pollEvents();
