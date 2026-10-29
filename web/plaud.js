@@ -65,6 +65,9 @@ const NanoPlaud = (() => {
       if (transfer) {
         get('meter').hidden = false; get('meter').max = transfer.size || 1; get('meter').value = transfer.received;
         get('progress').textContent = `${transfer.received.toLocaleString()} / ${transfer.size.toLocaleString()} bytes${transfer.error ? ` · ${transfer.error}` : verified ? ' · Ogg verified' : ''}`;
+      } else {
+        get('meter').hidden = true; get('meter').max = 1; get('meter').value = 0;
+        get('progress').textContent = '';
       }
     }
     function fail(message) {
@@ -75,6 +78,7 @@ const NanoPlaud = (() => {
       if (running || transfer?.active) lab.setFastCapture(false);
       generation++; running = null; authenticated = false; session = null; fail(message);
       if (transfer?.active) { transfer.active = false; transfer.buffer = null; }
+      if (!verified) transfer = null;
       tx = Promise.resolve(); rx = Promise.resolve();
       records = []; renderFiles(); get('status').textContent = message; sync();
     }

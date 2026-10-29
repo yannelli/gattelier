@@ -83,6 +83,9 @@ test('PLAUD UI authenticates and downloads through mocked transport replies', as
   f.update({ ...f.state(), ble: { ...f.state().ble, connectionAttempt: 2 } });
   assert.equal(f.get('authenticate').textContent, 'Authenticate'); assert.equal(f.get('list').disabled, true);
   assert.equal(f.get('save').hidden, false);
+  f.select(null); f.emit([], {}, { bootId: 'board-2' }); f.fire('nanoscope:api-change');
+  assert.equal(f.get('save').hidden, false);
+  f.get('save').click(); assert.deepEqual(f.downloads, ['01020304AABBCCDD_17.ogg']);
 });
 
 test('an idle PLAUD panel leaves another app capture setting alone', () => {
@@ -118,6 +121,35 @@ const changes = [
   ['address type', f => { f.select({ ...device, addressType: 1 }); f.update({ ...f.state(), ble: { ...f.state().ble, addressType: 1 } }); }],
   ['selection away and back', f => { f.select({ ...device, address: 'aa:bb:cc:dd:ee:02' }); f.select(device); }]
 ];
+
+test('PLAUD clears incomplete download progress when its context is invalidated', async () => {
+  for (const stopped of [false, true]) for (const [label, change] of [...changes,
+    ['offline', f => f.update(f.state(), false)],
+    ['restart', f => f.emit([], {}, { bootId: 'board-2' })]
+  ]) {
+    const entered = deferred(), f = fixture({ action: (kind, body, api) => {
+      if (kind === 'write' && packets.bytes(body.hex)[1] === 28) {
+        api.emit([Uint8Array.of(1, 28, 0, 17, 0, 0, 0, 0), Uint8Array.of(2, 17, 0, 0, 0, 0, 0, 0, 0, 1, 7)]);
+        entered.resolve(); return false;
+      }
+    } });
+    await f.auth(); await f.list();
+    const operation = f.download(); await entered.promise; await settle();
+    assert.equal(f.get('meter').hidden, false); assert.equal(f.get('meter').value, 1);
+    assert.equal(f.get('progress').textContent, '1 / 3 bytes');
+    if (stopped) {
+      f.get('stop').click(); await operation;
+      assert.match(f.get('status').textContent, /Download stopped/);
+      assert.match(f.get('progress').textContent, /1 \/ 3 bytes.*Download stopped/);
+    }
+    change(f); await operation; await settle();
+    assert.equal(f.get('meter').hidden, true, `${label}, stopped=${stopped}`);
+    assert.equal(f.get('meter').value, 0); assert.equal(f.get('meter').max, 1);
+    assert.equal(f.get('progress').textContent, '');
+    assert.equal(f.get('stop').hidden, true); assert.equal(f.get('save').hidden, true);
+  }
+});
+
 for (const stage of ['ensure', 'subscribe', 'signature', 'list', 'download']) for (const [label, change] of changes) {
   test(`PLAUD cancels stale ${stage} after ${label} and preserves a newer operation`, async () => {
     for (const reject of [false, true]) {
