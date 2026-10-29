@@ -11,7 +11,7 @@ const initial = () => ({ ble: { ...device, connected: true, connectionAttempt: 7
 ] }] });
 function deferred() { let resolve, reject; const promise = new Promise((done, fail) => { resolve = done; reject = fail; }); return { promise, resolve, reject }; }
 function harness(options = {}) {
-  let selected = device, state = initial(), online = true, pending = false, onState;
+  let selected = device, state = initial(), online = true, pending = false, onState, onEvents;
   let api = options.api || { origin: 'http://board-a.local', transport: 'http' };
   const calls = [], connections = [], events = {}, started = deferred();
   class Element {
@@ -25,6 +25,7 @@ function harness(options = {}) {
   }
   const container = new Element('section'), lab = {
     onState(callback) { onState = callback; callback(); },
+    onEvents(callback) { onEvents = callback; },
     async action(path, body) { calls.push({ path, ...body }); started.resolve(); return options.action?.() ?? state; }
   };
   const context = { NanoDeviceLibrary: library, NanoGattValues: values, NanoRecipeLibrary: { get: () => null },
@@ -41,6 +42,7 @@ function harness(options = {}) {
   return { container, read, status, calls, connections, events, started: started.promise, get state() { return state; },
     update(next = state) { state = next; onState(); }, select(next) { selected = next; app.render(); },
     board(next = api) { api = next; state = initial(); events['nanoscope:api-change']?.({ detail: api }); onState(); },
+    emit(meta) { onEvents?.([], meta); },
     online(value) { online = value; onState(); }, pending(value) { pending = value; events['nanoscope:busy'](); } };
 }
 test('metadata reads complete on the same connection and accept address casing', async () => {
@@ -58,7 +60,7 @@ test('metadata read stops after reconnect, offline transition or address-type ch
     const wait = deferred(), h = harness({ action: () => wait.promise }), operation = h.read.listeners.click();
     await h.started;
     assert.equal(h.calls.length, 1); change(h); wait.resolve(); await operation;
-    assert.equal(h.calls.length, 1); assert.match(h.container.textContent, /selected connection changed/);
+    assert.equal(h.calls.length, 1); assert.equal(h.status.textContent, '');
     assert.doesNotMatch(h.container.textContent, /Read \d+ metadata values/);
   }
 });
@@ -88,6 +90,10 @@ test('metadata reads reject a stale ensure result and replaced handles', async (
 test('metadata reads accept an explicitly established connection and reject overlapping clicks', async () => {
   const wait = deferred(), h = harness({ ensure: () => wait.promise }); h.update({ ...h.state, ble: { ...h.state.ble, connected: false } });
   const operation = h.read.listeners.click(); await h.read.listeners.click();
+  h.update({ ...h.state, ble: { ...device, connected: false, busy: true, operation: 'connecting', connectionAttempt: 8 } });
+  assert.equal(h.read.disabled, true); assert.match(h.status.textContent, /Connecting and reading/);
+  h.update({ ...h.state, ble: { ...h.state.ble, connected: true, operation: 'discovering' } });
+  assert.equal(h.read.disabled, true);
   const connected = initial(); connected.ble.connectionAttempt = 8; h.update(connected); wait.resolve(connected); await operation;
   assert.equal(h.connections.length, 1); assert.equal(h.calls.length, 2); assert.match(h.container.textContent, /Read 2 metadata values/);
 });
@@ -139,5 +145,52 @@ test('a new board can read metadata while an old request settles without releasi
     current.resolve(initial()); await latest;
     assert.equal(h.read.disabled, false); assert.equal(h.status.textContent, 'Read 2 metadata values.');
     assert.equal(h.calls.length, phase === 'read' ? 3 : 2);
+  }
+});
+
+
+for (const [name, invalidate, beforeReadOnly = false] of [
+  ['another target', h => { const target = { ...device, address: 'AA:BB:CC:DD:EE:02' }; h.select(target); h.update({ ...h.state, ble: { ...h.state.ble, ...target } }); }],
+  ['another address type', h => { const target = { ...device, addressType: 1 }; h.select(target); h.update({ ...h.state, ble: { ...h.state.ble, ...target } }); }],
+  ['selecting away and back', h => { h.select({ ...device, addressType: 1 }); h.select(device); }],
+  ['going offline', h => { h.online(false); h.online(true); }],
+  ['a different connection attempt', h => h.update({ ...h.state, ble: { ...h.state.ble, connectionAttempt: 8 } }), true],
+  ['disconnecting and reconnecting', h => { h.update({ ...h.state, ble: { ...h.state.ble, connected: false } }); h.update({ ...h.state, ble: { ...h.state.ble, connected: true } }); }, true],
+  ['a reboot event', h => { h.emit({ reboot: true }); assert.equal(h.read.disabled, true); h.update(); }],
+  ['a changed boot ID', h => { h.emit({ bootId: 'old' }); h.emit({ bootId: 'new' }); assert.equal(h.read.disabled, true); h.update(); }]
+]) {
+  test(`metadata ownership is released after ${name} and late replies leave a fresh read intact`, async () => {
+    for (const phase of beforeReadOnly ? ['read'] : ['ensure', 'read']) for (const outcome of ['resolve', 'reject']) {
+      const previous = deferred(), fresh = deferred(), entered = deferred(); let ensures = 0, reads = 0;
+      const h = harness({
+        ensure: () => ++ensures === 1 && phase === 'ensure' ? previous.promise : h.state,
+        action: () => {
+          reads++;
+          if (phase === 'read' && reads === 1) return previous.promise;
+          if (reads === (phase === 'read' ? 2 : 1)) { entered.resolve(); return fresh.promise; }
+        }
+      });
+      const oldState = h.state, old = h.read.listeners.click();
+      if (phase === 'read') await h.started;
+      invalidate(h); assert.equal(h.read.disabled, false); assert.equal(h.status.textContent, '');
+      const current = h.read.listeners.click(); await entered.promise;
+      const calls = h.calls.length;
+      previous[outcome](outcome === 'reject' ? new Error('Old metadata failed.') : oldState); await old;
+      assert.equal(h.calls.length, calls);
+      assert.equal(h.read.disabled, true); assert.equal(h.status.textContent, 'Connecting and reading available metadata…');
+      fresh.resolve(h.state); await current;
+      assert.equal(h.calls.length, phase === 'read' ? 3 : 2);
+      assert.equal(h.read.disabled, false); assert.equal(h.status.textContent, 'Read 2 metadata values.');
+    }
+  });
+}
+
+test('current metadata failures remain visible and release their controls', async () => {
+  for (const phase of ['ensure', 'read']) {
+    const fail = () => Promise.reject(new Error('Encryption required.'));
+    const h = harness({ ensure: phase === 'ensure' ? fail : undefined, action: fail });
+    await h.read.listeners.click();
+    assert.equal(h.status.textContent, 'Encryption required.'); assert.equal(h.read.disabled, false);
+    assert.equal(h.calls.length, phase === 'ensure' ? 0 : 1);
   }
 });
