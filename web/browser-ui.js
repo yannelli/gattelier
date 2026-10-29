@@ -5,6 +5,7 @@ const NanoBrowserUI = (() => {
   const defaults = { query: '', sort: 'strength', signal: 'all', lastSeen: 'all', kind: 'all', connectable: 'all', favorites: false, source: 'live' };
   function mount(store, hooks) {
     const get = id => document.getElementById(id), filters = {};
+    let importGeneration = 0;
     for (const [key, id] of Object.entries(controls)) {
       const control = get(id); filters[key] = store.getPreference(key, defaults[key]);
       if (control.type === 'checkbox') control.checked = Boolean(filters[key]); else control.value = filters[key];
@@ -28,16 +29,23 @@ const NanoBrowserUI = (() => {
       const url = URL.createObjectURL(new Blob([JSON.stringify(store.exportData(), null, 2)], { type: 'application/json' }));
       const link = document.createElement('a'); link.href = url; link.download = `nanoscope-discoveries-${new Date().toISOString().slice(0, 10)}.json`; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
     });
-    get('clear-history').addEventListener('click', async () => { store.clearHistory(); await store.flush(); hooks.change(); });
+    get('clear-history').addEventListener('click', async () => {
+      importGeneration++; get('history-import-status').textContent = ''; get('import-history').value = '';
+      store.clearHistory(); await store.flush(); hooks.change();
+    });
     get('import-history').addEventListener('change', async event => {
+      const generation = ++importGeneration;
       const file = event.target.files[0]; if (!file) return;
       try {
         if (file.size > 16 * 1024 * 1024) throw new Error('History imports must be under 16 MB.');
-        const result = store.importData(JSON.parse(await file.text()));
+        const contents = await file.text();
+        if (generation !== importGeneration) return;
+        const result = store.importData(JSON.parse(contents));
         await store.flush(); hooks.change();
+        if (generation !== importGeneration) return;
         get('history-import-status').textContent = `Imported ${result.imported} devices. ${result.count} retained.`;
-      } catch (error) { get('history-import-status').textContent = error.message; }
-      finally { event.target.value = ''; }
+      } catch (error) { if (generation === importGeneration) get('history-import-status').textContent = error.message; }
+      finally { if (generation === importGeneration) event.target.value = ''; }
     });
     function update() {
       const status = store.status(), stream = status.stream, text = status.persistent ? 'Saved in this browser' : 'In-memory session';
