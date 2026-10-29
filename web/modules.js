@@ -98,7 +98,8 @@ const NanoModules = (() => {
     const fragment = document.createDocumentFragment(); fragment.append(document.createTextNode('Device'), select); replacePreservingFocus(root, fragment);
   }
   function render(device, devices) {
-    const active = NanoWorkspace.module(), match = matches(device);
+    const matched = new Map(), matchFor = item => { if (!matched.has(item)) matched.set(item, matches(item)); return matched.get(item); };
+    const active = NanoWorkspace.module(), match = matchFor(device);
     renderPicker(active, devices);
     document.getElementById('module-connection').hidden = active === 'medical' || Boolean(deviceApps.get(active));
     if (readers.has(active)) {
@@ -111,7 +112,7 @@ const NanoModules = (() => {
       connectionSignature = connectionKey;
       replacePreservingFocus(document.getElementById('module-connection'), NanoConnection.controls(target, 'module-connect'));
     }
-    const next = JSON.stringify([appQuery, appScope, device && [device.address, device.addressType, device.name, device.label, device.gattName, match], devices.map(item => [item.address, item.addressType, item.name, item.label, item.gattName, matches(item), item.liveId != null || item.streamLive === true])]);
+    const next = JSON.stringify([appQuery, appScope, device && [device.address, device.addressType, device.name, device.label, device.gattName, match], devices.map(item => [item.address, item.addressType, item.name, item.label, item.gattName, matchFor(item), item.liveId != null || item.streamLive === true])]);
     if (next !== signature) {
     signature = next;
     const root = document.getElementById('apps-catalog'), intro = document.createElement('p'); intro.className = 'hint';
@@ -127,13 +128,13 @@ const NanoModules = (() => {
     scope.addEventListener('change', () => { appScope = scope.value; render(hooks.selected(), hooks.devices()); });
     const grid = document.createElement('div'); grid.className = 'apps-grid';
     const nearby = devices.filter(item => item.streamLive === true || item.liveId != null);
-    const observed = new Set(nearby.flatMap(item => matches(item)));
+    const observed = new Set(nearby.flatMap(item => matchFor(item)));
     const visible = catalog.filter(app => (appScope !== 'observed' || observed.has(app.id)) && `${app.title} ${app.description} ${app.category}`.toLowerCase().includes(appQuery.trim().toLowerCase()));
     for (const app of [...visible].sort((a, b) => Number(match.includes(b.id)) - Number(match.includes(a.id)) || Number(observed.has(b.id)) - Number(observed.has(a.id)))) {
       const card = document.createElement('article'); card.className = `app-card${match.includes(app.id) ? ' matched' : ''}`;
       const heading = document.createElement('h3'); heading.textContent = app.title;
       const description = document.createElement('p'); description.textContent = app.description;
-      const found = (appScope === 'observed' ? nearby : devices).filter(item => matches(item).includes(app.id)), nearbyCount = nearby.filter(item => matches(item).includes(app.id)).length, status = document.createElement('span'); status.className = 'badge'; status.textContent = match.includes(app.id) ? 'Matches selection' : nearbyCount ? `${nearbyCount} nearby` : found.length ? `${found.length} saved` : '';
+      const found = (appScope === 'observed' ? nearby : devices).filter(item => matchFor(item).includes(app.id)), nearbyCount = nearby.filter(item => matchFor(item).includes(app.id)).length, status = document.createElement('span'); status.className = 'badge'; status.textContent = match.includes(app.id) ? 'Matches selection' : nearbyCount ? `${nearbyCount} nearby` : found.length ? `${found.length} saved` : '';
       const open = document.createElement('button'); open.className = 'app-card-open'; open.dataset.focus = `app-card-open-${app.id}`; open.type = 'button'; open.setAttribute('aria-label', `Open ${app.title}`);
       open.addEventListener('click', () => { if (!match.includes(app.id) && found.length === 1) selectAppDevice(app.id, found[0]); NanoWorkspace.openModule(app.id); render(hooks.selected(), hooks.devices()); });
       open.append(heading, description, ...status.textContent ? [status] : []); card.append(open);
