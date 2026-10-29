@@ -28,12 +28,13 @@ const NanoStandardApp = (() => {
     const body = el('div', 'protocol-body'), context = el('p', 'vendor-note'), profileList = el('ul', 'protocol-sources');
     const controls = el('div', 'protocol-actions'), message = el('p', 'protocol-message'), readings = el('div', 'protocol-evidence');
     message.setAttribute('role', 'status'); body.append(context, profileList, controls, message, readings); container.append(heading, body);
-    let online = false, running = false, destroyed = false, targetKey = '', scopeKey = '', selectionVersion = 0, connectionVersion = 0, bootId = '', notice = '';
+    let online = false, running = null, destroyed = false, targetKey = '', scopeKey = '', selectionVersion = 0, connectionVersion = 0, bootId = '', notice = '';
     function sync() {
       const device = selected?.(), state = lab.getState(), nextTarget = key(device);
       const nextScope = JSON.stringify([online, Boolean(state.ble?.connected), key(state.ble), state.ble?.connectionAttempt ?? null]);
       if (targetKey !== nextTarget) { targetKey = nextTarget; selectionVersion++; notice = ''; }
       if (scopeKey !== nextScope) { scopeKey = nextScope; connectionVersion++; }
+      if (running && (running.target !== targetKey || running.selection !== selectionVersion || !online || !running.connect && running.connection !== connectionVersion)) { running = null; notice = ''; }
       return { device, state };
     }
     function guard(token, requireConnection = true) {
@@ -53,32 +54,33 @@ const NanoStandardApp = (() => {
       node.addEventListener('click', callback); return node;
     }
     async function act(token, target, action, mode) {
-      let started = false;
+      let operation;
       try {
         const { state } = guard(token), item = characteristic(state, target), properties = item.properties || [];
         if (running || lab.isActing() || state.ble?.busy) throw new Error('Wait for the current BLE operation to finish.');
         if (!Number.isInteger(item.handle) || item.handle < 1 || item.handle > 65535) throw new Error('This characteristic has no usable handle.');
         if (action === 'read' ? !properties.includes('read') : mode === 'off' ? !['notify', 'indicate'].includes(item.subscription) : !properties.includes(mode) || ['notify', 'indicate'].includes(item.subscription)) throw new Error('This action is no longer available.');
-        started = running = true; notice = action === 'read' ? 'Reading...' : mode === 'off' ? 'Stopping subscription...' : 'Subscribing...'; render();
+        operation = running = { ...token }; notice = action === 'read' ? 'Reading...' : mode === 'off' ? 'Stopping subscription...' : 'Subscribing...'; render();
         await lab.action(action, { handle: target.handle, ...(action === 'subscribe' ? { mode } : {}) });
         const current = guard(token); characteristic(current.state, target);
         notice = action === 'read' ? 'Read complete.' : mode === 'off' ? 'Subscription stopped.' : 'Subscription active.';
-      } catch (error) { sync(); if (token.target === targetKey && token.selection === selectionVersion) notice = error.message; }
-      finally { if (started) running = false; if (!destroyed) render(); }
+      } catch (error) { sync(); if (operation ? running === operation : !destroyed && !running && token.target === targetKey && token.selection === selectionVersion && token.connection === connectionVersion) notice = error.message; }
+      finally { if (operation && running === operation) running = null; if (!destroyed) render(); }
     }
     async function connect(token) {
-      let started = false;
+      let operation;
       try {
         const { device, state } = guard(token, false);
         if (running || lab.isActing() || state.ble?.busy) throw new Error('Wait for the current BLE operation to finish.');
         if (device.connectable === false || state.usb?.mode === 'hci') throw new Error('This device is unavailable for a BLE connection.');
-        started = running = true; notice = 'Connecting...'; render();
+        operation = running = { ...token, connect: true }; notice = 'Connecting...'; render();
         await NanoConnection.ensure(device);
         const current = sync();
+        if (running !== operation) return;
         if (destroyed || !online || token.target !== targetKey || token.selection !== selectionVersion || !connected(current.device, current.state)) throw new Error('The selected device or connection changed.');
         notice = 'Connected.';
-      } catch (error) { sync(); if (token.target === targetKey && token.selection === selectionVersion) notice = error.message; }
-      finally { if (started) running = false; if (!destroyed) render(); }
+      } catch (error) { sync(); if (operation ? running === operation : !destroyed && !running && token.target === targetKey && token.selection === selectionVersion && token.connection === connectionVersion) notice = error.message; }
+      finally { if (operation && running === operation) running = null; if (!destroyed) render(); }
     }
     function fields(item) {
       const list = el('dl', 'protocol-values'), values = NanoGattValues.decode(item.uuid, item.valueHex || '');
@@ -99,7 +101,7 @@ const NanoStandardApp = (() => {
     function render() {
       if (destroyed) return;
       const { device, state } = sync(), active = online && connected(device, state), ids = supported(device, online ? state : {});
-      const busy = running || lab.isActing() || Boolean(state.ble?.busy), token = { target: targetKey, selection: selectionVersion, connection: connectionVersion };
+      const busy = Boolean(running) || lab.isActing() || Boolean(state.ble?.busy), token = { target: targetKey, selection: selectionVersion, connection: connectionVersion };
       const nextControls = document.createDocumentFragment(), nextReadings = document.createDocumentFragment();
       const update = () => {
         for (const [root, content] of [[controls, nextControls], [readings, nextReadings]]) {
@@ -151,12 +153,12 @@ const NanoStandardApp = (() => {
     }
     const offState = lab.onState((state, available = true) => { online = available; render(); });
     const offEvents = lab.onEvents?.((events, meta = {}) => {
-      if (meta.reboot || bootId && meta.bootId && bootId !== meta.bootId) { connectionVersion++; online = false; notice = 'Board restarted. Waiting for connection state.'; render(); }
+      if (meta.reboot || bootId && meta.bootId && bootId !== meta.bootId) { connectionVersion++; online = false; running = null; notice = 'Board restarted. Waiting for connection state.'; render(); }
       if (meta.bootId) bootId = meta.bootId;
     });
     document.addEventListener('nanoscope:selection', render); document.addEventListener('nanoscope:busy', render);
     render();
-    return { render, destroy() { destroyed = true; offState?.(); offEvents?.(); document.removeEventListener('nanoscope:selection', render); document.removeEventListener('nanoscope:busy', render); } };
+    return { render, destroy() { destroyed = true; running = null; offState?.(); offEvents?.(); document.removeEventListener('nanoscope:selection', render); document.removeEventListener('nanoscope:busy', render); } };
   }
   return { matches: (device, state = {}) => supported(device, state).map(id => ({ uuid: id, title: profiles[id] })), mount };
 })();

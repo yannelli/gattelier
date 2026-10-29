@@ -174,12 +174,87 @@ test('pending actions keep controls busy and discard results after a target chan
   assert.equal(h.calls.length, 1); assert.doesNotMatch(h.container.textContent, /Read complete|72 bpm|83%/);
 });
 
-test('read failures surface and stale completions fail on a new connection scope', async () => {
-  const failure = harness({ action: () => Promise.reject(new Error('Encryption required.')) }); await failure.button('Read').click();
-  assert.match(failure.container.textContent, /Encryption required/); assert.equal(failure.button('Read').disabled, false);
+for (const [name, invalidate, invalidatesConnect = true] of [
+  ['selecting another address', h => { const target = { ...device, address: 'AA:BB:CC:DD:EE:02' }; h.select(target); h.update({ ...h.state, ble: { ...h.state.ble, ...target } }); }],
+  ['selecting another address type', h => { const target = { ...device, addressType: 1 }; h.select(target); h.update({ ...h.state, ble: { ...h.state.ble, ...target } }); }],
+  ['selecting away and back', h => { h.select({ ...device, addressType: 1 }); h.select(device); }],
+  ['going offline', h => { h.update(h.state, false); h.update(h.state, true); }],
+  ['an API reset', h => { h.update({ ble: {}, services: [], devices: [] }, false); h.update(initial(), true); }],
+  ['a changed boot ID', h => { h.events({ bootId: 'old' }); h.events({ bootId: 'new' }); h.update(h.state); }],
+  ['a reboot event', h => { h.events({ reboot: true }); h.update(h.state); }],
+  ['a different connection attempt', h => h.update({ ...h.state, ble: { ...h.state.ble, connectionAttempt: 8 } }), false],
+  ['disconnecting and reconnecting', h => { h.update({ ...h.state, ble: { ...h.state.ble, connected: false } }); h.update({ ...h.state, ble: { ...h.state.ble, connected: true } }); }, false]
+]) {
+  test(`pending actions release ownership after ${name}`, async () => {
+    for (const label of ['Read', 'Subscribe', 'Stop', ...(invalidatesConnect ? ['Connect'] : [])]) {
+      for (const outcome of ['resolve', 'reject']) {
+        const previous = deferred(), next = deferred(), state = initial(); let actions = 0;
+        state.ble.connected = label !== 'Connect';
+        if (label === 'Stop') state.services[0].characteristics[0].subscription = 'notify';
+        const h = harness({ state, action: () => actions++ === 0 && label !== 'Connect' ? previous.promise : next.promise, ensure: () => previous.promise });
+        const oldOperation = h.button(label).click(); invalidate(h);
+        if (label === 'Connect') h.update({ ...h.state, ble: { ...h.state.ble, connected: true } });
+        assert.equal(h.button('Read').disabled, false, `${label}/${outcome}`);
+        const freshOperation = h.button('Read').click();
+        assert.equal(h.calls.length, label === 'Connect' ? 1 : 2);
+        previous[outcome](outcome === 'reject' ? new Error('Old operation failed.') : h.state); await oldOperation;
+        assert.match(h.container.textContent, /Reading\.\.\./);
+        assert.doesNotMatch(h.container.textContent, /Old operation failed|connection changed/);
+        assert.ok(h.all().filter(node => node.tag === 'button').every(node => node.disabled));
+        next.resolve(h.state); await freshOperation;
+        assert.match(h.container.textContent, /Read complete\./); assert.equal(h.button('Read').disabled, false);
+      }
+    }
+  });
+}
+
+test('Connect retains ownership through its own disconnect, attempt and discovery transitions', async () => {
+  for (const switching of [false, true]) {
+    const pending = deferred(), state = initial(), target = switching ? { ...device, addressType: 1 } : device;
+    state.ble.connected = switching;
+    const h = harness({ state, target, ensure: () => pending.promise }), operation = h.button(switching ? 'Switch and connect' : 'Connect').click();
+    h.select({ ...target });
+    for (const ble of [
+      { ...state.ble, connected: false },
+      { ...target, connected: false, busy: true, operation: 'connecting', connectionAttempt: 8 },
+      { ...target, connected: true, busy: true, operation: 'discovering', connectionAttempt: 8 },
+      { ...target, connected: true, busy: false, connectionAttempt: 8 }
+    ]) {
+      h.update({ ...state, ble }); assert.match(h.container.textContent, /Connecting\.\.\./);
+      assert.ok(h.all().filter(node => node.tag === 'button').every(node => node.disabled));
+    }
+    pending.resolve(h.state); await operation;
+    assert.match(h.container.textContent, /Connected\./); assert.equal(h.button('Read').disabled, false);
+    assert.equal(h.connections.length, 1); assert.deepEqual(h.calls, []);
+  }
+});
+
+test('late reads cannot replace or release a fresh pending Connect', async () => {
+  for (const outcome of ['resolve', 'reject']) {
+    const previous = deferred(), next = deferred(), h = harness({ action: () => previous.promise, ensure: () => next.promise });
+    const oldOperation = h.button('Read').click(); h.update({ ble: {}, services: [], devices: [] }, false);
+    const state = initial(); state.ble.connected = false; h.update(state, true);
+    assert.equal(h.button('Connect').disabled, false);
+    const freshOperation = h.button('Connect').click();
+    previous[outcome](outcome === 'reject' ? new Error('Old read failed.') : state); await oldOperation;
+    assert.match(h.container.textContent, /Connecting\.\.\./); assert.equal(h.button('Connect').disabled, true);
+    assert.doesNotMatch(h.container.textContent, /Old read failed|connection changed/);
+    h.update(initial()); next.resolve(h.state); await freshOperation;
+    assert.match(h.container.textContent, /Connected\./); assert.equal(h.button('Read').disabled, false);
+  }
+});
+
+test('current failures surface and stale completions stay silent on a new connection scope', async () => {
+  for (const label of ['Read', 'Subscribe', 'Stop', 'Connect']) {
+    const state = initial(); state.ble.connected = label !== 'Connect';
+    if (label === 'Stop') state.services[0].characteristics[0].subscription = 'notify';
+    const fail = () => Promise.reject(new Error('Encryption required.')), failure = harness({ state, action: fail, ensure: fail });
+    await failure.button(label).click();
+    assert.match(failure.container.textContent, /Encryption required/); assert.equal(failure.button(label).disabled, false);
+  }
   const pending = deferred(), h = harness({ action: () => pending.promise }), operation = h.button('Read').click();
   h.update({ ...h.state, ble: { ...h.state.ble, connectionAttempt: 8 } }); pending.resolve(h.state); await operation;
-  assert.match(h.container.textContent, /selected device or connection changed/); assert.doesNotMatch(h.container.textContent, /Read complete/);
+  assert.doesNotMatch(h.container.textContent, /selected device or connection changed|Read complete|Reading/);
 });
 
 test('destroy removes listeners and blocks retained handlers', async () => {
