@@ -285,8 +285,8 @@ async function mutate(action, data = {}) {
     if (generation !== apiGeneration) return;
     await poll();
   } catch (error) {
-    if (generation === apiGeneration) notice = error.name === 'AbortError' ? 'The request timed out. Refresh the board status before trying again.' : error.message;
-  } finally { if (generation === apiGeneration) { pending = false; render(); } }
+    if (generation === apiGeneration && (error.code !== 'BLE_CONNECTION_CHANGED' || !NanoLab.isActing())) notice = error.name === 'AbortError' && error.code !== 'BLE_CONNECTION_CHANGED' ? 'The request timed out. Refresh the board status before trying again.' : error.message;
+  } finally { if (generation === apiGeneration) { pending = NanoLab.isActing(); render(); } }
 }
 async function tick() {
   clearTimeout(timer);

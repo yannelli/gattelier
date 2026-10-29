@@ -104,7 +104,7 @@ test('old event response cannot enter the new capture or release its pending req
 });
 
 const connected = (ble = {}) => ({ ...ready, ble: { ...target, connected: true, busy: false, connectionAttempt: 42, ...ble } });
-const connectionAbort = { name: 'AbortError', message: 'Bluetooth connection changed.' };
+const connectionAbort = { name: 'AbortError', message: 'Bluetooth connection changed.', code: 'BLE_CONNECTION_CHANGED' };
 
 for (const [path, boundary, change, available, settlement] of [
   ['read', 'state', { address: '11:22:33:44:55:66' }, true, 'resolve'],

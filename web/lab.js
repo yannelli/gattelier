@@ -12,7 +12,7 @@ const NanoLab = (() => {
     if (token !== generation) throw Object.assign(new Error('Board connection changed.'), { name: 'AbortError' });
   }
   const connectionScope = state => JSON.stringify([Boolean(state.ble?.connected), String(state.ble?.address || '').toLowerCase(), state.ble?.addressType ?? null, state.ble?.connectionAttempt ?? null]);
-  const connectionChanged = () => Object.assign(new Error('Bluetooth connection changed.'), { name: 'AbortError' });
+  const connectionChanged = () => Object.assign(new Error('Bluetooth connection changed.'), { name: 'AbortError', code: 'BLE_CONNECTION_CHANGED' });
   function assertAction(operation) { if (currentAction !== operation) throw connectionChanged(); }
   async function request(path, options = {}, timeout = 10000, token = generation) {
     assertCurrent(token);

@@ -11,7 +11,7 @@ const deferred = () => { let resolve, reject; const promise = new Promise((yes, 
 function fixture() {
   const actions = [], requests = [];
   const context = vm.createContext({ module: { exports: {} }, require,
-    NanoLab: { action(action, data) { const result = deferred(); actions.push({ action, data, ...result }); return result.promise; } },
+    NanoLab: { isActing: () => false, action(action, data) { const result = deferred(); actions.push({ action, data, ...result }); return result.promise; } },
     refresh: () => requests.push('state')
   });
   vm.runInContext(source, context);
@@ -64,4 +64,23 @@ test('current board errors stay visible and release the operation', async () => 
     assert.equal(f.state().pending, false);
     assert.match(f.state().notice, timeout ? /request timed out/ : /Current read failed/);
   }
+});
+
+test('connection cancellation keeps its own message instead of a timeout notice', async () => {
+  const f = fixture(), operation = f.start(3);
+  f.actions[0].reject(Object.assign(new Error('Bluetooth connection changed.'), { name: 'AbortError', code: 'BLE_CONNECTION_CHANGED' }));
+  await operation;
+  assert.equal(f.state().notice, 'Bluetooth connection changed.');
+  assert.equal(f.state().pending, false); assert.deepEqual(f.requests, []);
+});
+
+test('cancelled connection cleanup preserves a fresh action busy state and notice', async () => {
+  const f = fixture(), old = f.start(3);
+  f.run('pending=false; NanoLab.isActing=()=>true;');
+  const current = f.start(5);
+  f.actions[0].reject(Object.assign(new Error('Bluetooth connection changed.'), { name: 'AbortError', code: 'BLE_CONNECTION_CHANGED' }));
+  await old;
+  assert.equal(f.state().pending, true); assert.equal(f.state().notice, ''); assert.deepEqual(f.requests, []);
+  f.run('NanoLab.isActing=()=>false;'); f.actions[1].resolve(); await current;
+  assert.equal(f.state().pending, false); assert.equal(f.state().notice, ''); assert.deepEqual(f.requests, ['state']);
 });
