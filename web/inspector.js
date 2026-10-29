@@ -24,7 +24,7 @@ function retainGattResults() {
   const generation = typeof apiGeneration === 'undefined' ? 0 : apiGeneration;
   if (retainedGeneration !== generation) {
     retainedGatt.clear(); changedValues.clear(); readResult = null;
-    if (readSession) readSession.stopped = true;
+    if (readSession && readSession.generation !== generation) { readSession.stopped = true; readSession = null; }
     retainedGeneration = generation;
   }
   if (!online || !state.ble.connected || !state.services.length) return;
@@ -58,8 +58,10 @@ async function readAllValues() {
     }
     if (!current()) session.stopped = true;
   } finally {
-    if ((typeof apiGeneration === 'undefined' ? 0 : apiGeneration) === session.generation) readResult = { ...session };
-    readSession = null; render();
+    if (readSession === session) {
+      if ((typeof apiGeneration === 'undefined' ? 0 : apiGeneration) === session.generation) readResult = { ...session };
+      readSession = null; render();
+    }
   }
 }
 function renderCharacteristic(characteristic, serviceUuid = '', readOnly = false, target = { address: state.ble.address, addressType: state.ble.addressType }) {

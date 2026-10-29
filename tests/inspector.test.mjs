@@ -94,13 +94,20 @@ test('bulk reads stop when address type changes and do not initiate pairing', as
 
 test('bulk read Stop finishes the current request and sends no later reads', async () => {
   const h = harness(); let finish;
+  h.context.render = () => h.run('retainGattResults()');
   h.context.state.services[0].characteristics.push({ uuid: '2a00', handle: 7, properties: ['read'] });
   h.context.NanoLab = { action(action, body) { h.calls.push({ action, ...body }); return new Promise(resolve => { finish = resolve; }); } };
   const reading = h.run('readAllValues()');
+  const session = h.run('readSession');
   const tree = h.run('appendDeviceServices(node("div"), true)');
   const stop = all(tree).find(item => item.tag === 'button' && item.textContent === 'Stop');
   assert.ok(stop); assert.match(tree.textContent, /Reading 1 of 2/);
-  await stop.click(); finish(); await reading;
+  await stop.click();
+  assert.equal(h.run('readSession'), session);
+  assert.equal(h.run('readResult'), null);
+  await h.run('readAllValues()');
+  assert.equal(h.calls.length, 1);
+  finish(); await reading;
   assert.deepEqual(h.calls, [{ action: 'read', handle: 3 }]);
   assert.equal(h.run('readResult.stopped'), true);
   assert.equal(h.run('readSession'), null);
@@ -123,6 +130,67 @@ test('bulk reads stop on selection, connection attempt, or board changes', async
     if (change === 'board') assert.equal(h.run('readResult'), null);
   }
 });
+
+for (const outcome of ['resolve', 'reject']) {
+  test(`stale API read can ${outcome} while a fresh bulk read stays active`, async () => {
+    const h = harness(), requests = [];
+    h.context.apiGeneration = 1;
+    h.context.state.ble.connectionAttempt = 9;
+    h.context.state.services[0].characteristics.push({ uuid: '2a00', handle: 7, properties: ['read'] });
+    h.context.render = () => h.run('retainGattResults()');
+    h.context.render();
+    h.context.NanoLab = { action(action, body) {
+      h.calls.push({ action, ...body });
+      return new Promise((resolve, reject) => { requests.push({ resolve, reject }); });
+    } };
+    const oldRead = h.run('readAllValues()'), oldSession = h.run('readSession');
+    assert.deepEqual(h.calls, [{ action: 'read', handle: 3 }]);
+    h.context.apiGeneration++;
+    h.context.state = { wifi: {}, ble: {}, devices: [], services: [] };
+    h.context.online = false;
+    h.context.render();
+    assert.equal(h.run('readSession'), null);
+    assert.equal(oldSession.stopped, true);
+    assert.equal(h.run('retainedGatt.size'), 0);
+    h.context.state = {
+      devices: [target], ble: { ...target, connected: true, connectionAttempt: 9 },
+      services: [{ uuid: '180f', characteristics: [{ ...characteristic, handle: 11 }, { uuid: '2a00', handle: 15, properties: ['read'] }] }]
+    };
+    h.context.online = true;
+    h.context.render();
+    const tree = h.run('appendDeviceServices(node("div"), true)');
+    const read = all(tree).find(item => item.tag === 'button' && item.textContent === 'Read all values');
+    assert.ok(read);
+    assert.equal(read.disabled, false);
+    const freshRead = read.click(), freshSession = h.run('readSession');
+    assert.notEqual(freshSession, oldSession);
+    assert.equal(freshSession.generation, 2);
+    assert.deepEqual(h.calls, [{ action: 'read', handle: 3 }, { action: 'read', handle: 11 }]);
+    if (outcome === 'reject') requests[0].reject(new Error('Insufficient authentication.'));
+    else requests[0].resolve();
+    await oldRead;
+    assert.equal(h.run('readSession'), freshSession);
+    assert.equal(h.run('readResult'), null);
+    assert.equal(freshSession.completed, 0);
+    assert.equal(freshSession.failed, 0);
+    assert.equal(freshSession.pairing, 0);
+    assert.equal(freshSession.stopped, false);
+    assert.deepEqual(h.calls, [{ action: 'read', handle: 3 }, { action: 'read', handle: 11 }]);
+    assert.match(h.run('appendDeviceServices(node("div"), true)').textContent, /Reading 1 of 2/);
+    requests[1].resolve();
+    await new Promise(setImmediate);
+    assert.deepEqual(h.calls, [{ action: 'read', handle: 3 }, { action: 'read', handle: 11 }, { action: 'read', handle: 15 }]);
+    assert.equal(freshSession.completed, 1);
+    requests[2].resolve();
+    await freshRead;
+    assert.equal(h.run('readSession'), null);
+    assert.equal(h.run('readResult.generation'), 2);
+    assert.equal(h.run('readResult.completed'), 2);
+    assert.equal(h.run('readResult.failed'), 0);
+    assert.equal(h.run('readResult.pairing'), 0);
+    assert.equal(h.run('readResult.stopped'), false);
+  });
+}
 
 test('bulk result distinguishes authentication from other errors without pairing', async () => {
   const h = harness();
